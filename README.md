@@ -1,60 +1,131 @@
-# Orbitz - Widgets for GNOME
+# Orbitz — Widgets for GNOME
 
-Widgets de desktop para GNOME Shell, com scripts Python e uma versão personalizada da extensão **Desktop Clock (azclock)**.
+**Linux desktop widgets for system monitoring, network diagnostics, hardware temperatures, storage and weather — powered by GNOME Shell and Python.**
+
+Orbitz combines seven standalone Python scripts with a customized version of [Desktop Clock (azclock)](https://gitlab.com/AndrewZaech/azclock). Display system information directly on your GNOME desktop and open a network panel to inspect TCP connections, listening ports or run an optional internet speed test.
+
+[Download ZIP](https://github.com/orbitzone/orbitz-widgets-for-gnome/archive/refs/heads/main.zip) · [Report an issue](https://github.com/orbitzone/orbitz-widgets-for-gnome/issues) · [Source code](https://github.com/orbitzone/orbitz-widgets-for-gnome)
 
 ## Widgets
 
-- CPU, RAM e espaço em disco.
-- Processos com maior consumo de CPU.
-- Tráfego de rede.
-- Conexões TCP e portas, com modal atualizada ao abrir ou pelo ícone de refresh.
-- Temperaturas de CPU/GPU, conforme os sensores disponíveis.
-- Volumes externos e espaço livre.
-- Clima de Brasília, atualizado a cada cinco minutos.
-- Teste de velocidade opcional pela CLI oficial da Ookla.
+| Widget / script | What it does |
+|---|---|
+| **CPU, RAM and storage** — `cpu-ram-widget.py` | Shows CPU utilization, RAM usage and storage usage for the filesystem containing your home directory, with text progress bars. |
+| **Top processes** — `processos-widget.py` | Lists up to seven processes ranked by CPU consumption over a one-second sample. Process usage may exceed 100% on multicore systems. |
+| **Network traffic** — `rede-widget.py` | Shows current receive/transmit rates for the interface selected from the IPv4 default route. This measures traffic, not your connection's maximum speed. |
+| **TCP connections and ports** — `seguranca-widget.py` | Counts non-loopback TCP connections and listening ports. Click the widget to open a panel with local ports and remote destinations; click a hostname to copy its full name. Counts do not indicate whether a connection is malicious. |
+| **Hardware temperatures** — `temperaturas-widget.py` | Reads available CPU/GPU sensors from Linux sysfs, with an optional `sensors` fallback. Intel coretemp and AMDGPU are handled directly; unavailable readings display `N/D`. |
+| **External volumes** — `volumes-widget.py` | Shows usage and free space for detected removable/external volumes and desktop mount locations. System mounts are filtered out. |
+| **Weather** — `clima-widget.py` | Shows current conditions, temperature, feels-like temperature, humidity, daily low/high and precipitation probability through Open-Meteo. Defaults to Brasília, Brazil. |
 
-O layout é configurado nas preferências do Desktop Clock. Este repositório não inclui configurações pessoais, caches, histórico de conexões ou o executável proprietário da Ookla.
+The network panel also includes an optional **Ookla Speedtest CLI** integration for download/upload speed in Mbps, latency in ms and the last test time. Results appear after a successful test. Speed tests run only when requested.
 
-## Compatibilidade e dependências
+**Language:** this README is in English. Widget labels and panel messages currently remain in Portuguese. Script filenames are preserved for compatibility.
 
-Base: Desktop Clock versão 7, com metadata para GNOME Shell 42, 43 e 44. As personalizações foram usadas no GNOME 42; outras versões precisam de validação. GNOME 45 ou posterior não é suportado por esta base de imports legados.
+## Stack and compatibility
 
-Requer Python 3, `bash`, `setsid` e `kill` do util-linux, `ss` do iproute2, `getent`, `lsblk` e `glib-compile-schemas`. `sensors` (lm-sensors) e libpsl são opcionais. Scripts de temperaturas/estatísticas usam `/proc` e `/sys` no Linux.
+| Component | Technology / version |
+|---|---|
+| Desktop integration | GNOME Shell extension written in JavaScript using GJS |
+| UI and async operations | St, Clutter, Pango, Gio and GLib; GTK/libadwaita for preferences |
+| Extension base | Desktop Clock / azclock **version 7** |
+| GNOME versions | Metadata declares **42, 43 and 44**; development and use were on **GNOME 42**. Versions 43/44 require validation. |
+| Widget scripts | **Python 3.10.12** was used for development checks; Python **3.10** is the reference runtime. Newer releases need validation. |
+| Python dependencies | Standard library only — no pip packages required |
+| System data | Linux `/proc`, `/sys`, filesystem statistics and command-line utilities |
+| Weather provider | Open-Meteo HTTPS API; no API key configured in the script |
+| Optional speed testing | Official Ookla Speedtest CLI, installed separately |
 
-## Instalação manual
+**GNOME 45+ is not supported by this extension's legacy import architecture.** This is a Linux/GNOME project; other desktop environments are not supported by the extension. Standalone scripts can still be run in a Linux terminal.
 
-Faça backup da extensão e das suas configurações se já utiliza azclock: esta versão usa o mesmo UUID e substitui a instalação existente.
+### Required system utilities
+
+Install Python 3, Bash, `setsid`, `/usr/bin/kill`, `ss`, `getent`, `lsblk` and `glib-compile-schemas` using your distribution's package manager. These are commonly provided by util-linux, iproute2, libc utilities and GLib packages. The extension currently expects `setsid` and `kill` at `/usr/bin`.
+
+Optional: `sensors` from lm-sensors, `libpsl.so.5` for shortened hostname display, and the official Ookla CLI. Missing temperature sensors or optional tools can limit the corresponding feature.
+
+## Download and install
+
+Clone the repository, or download and extract the ZIP linked above:
+
+```bash
+git clone https://github.com/orbitzone/orbitz-widgets-for-gnome.git
+cd orbitz-widgets-for-gnome
+```
+
+**Existing Desktop Clock users:** back up your extension directory and export your settings first. Orbitz keeps the UUID `azclock@azclock.gitlab.com` and replaces that installation; it is not a separate extension that can run alongside the original.
+
+From the repository root:
 
 ```bash
 mkdir -p "$HOME/.local/share/gnome-shell/extensions/azclock@azclock.gitlab.com"
 cp -a extension/. "$HOME/.local/share/gnome-shell/extensions/azclock@azclock.gitlab.com/"
 glib-compile-schemas "$HOME/.local/share/gnome-shell/extensions/azclock@azclock.gitlab.com/schemas"
+
 mkdir -p "$HOME/.local/share/orbitz-widgets"
 cp widgets/*.py "$HOME/.local/share/orbitz-widgets/"
 ```
 
-Saia e entre novamente na sessão, habilite a extensão e adicione elementos de comando nas preferências. Use caminhos absolutos, substituindo `SEU_USUARIO`:
+Log out and back in, then enable **Desktop Clock** through the GNOME Extensions app. Open its preferences to add widgets and configure command elements, fonts, colors, positions and alignment. Personal layout settings are not bundled: copying the files does not automatically create the seven widgets.
+
+### Configure each widget
+
+Add a command element for each script you want. Use an absolute path, replacing `YOUR_USER` with your Linux username:
 
 ```text
-python3 /home/SEU_USUARIO/.local/share/orbitz-widgets/cpu-ram-widget.py
+python3 /home/YOUR_USER/.local/share/orbitz-widgets/cpu-ram-widget.py
 ```
 
-Repita com os outros scripts. Os intervalos das preferências são em **milissegundos**: 6000 significa 6 segundos. O clima usa cinco minutos na extensão, independentemente do valor exibido no editor atual. Os caches ficam em `$XDG_CACHE_HOME/orbitz-widgets` ou `~/.cache/orbitz-widgets`.
+Change the filename for the other entries in the widget table. Use the actual path to your home directory if it is not under `/home`.
 
-Para alterar a cidade do clima, edite `PARAMS` no script. O script CPU/RAM mede o espaço do filesystem da pasta pessoal.
+Polling intervals are in **milliseconds**: `6000` means 6 seconds, `12000` means 12 seconds and `20000` means 20 seconds. The weather command is explicitly scheduled every **five minutes**, regardless of the value currently shown in the interval editor.
 
-### Teste de velocidade opcional
+The network panel refreshes **when opened** or when its bottom-left refresh icon is clicked. It does not periodically refresh its contents. Closing it cancels an active refresh or speed test.
 
-Instale/baixe o [Speedtest CLI oficial da Ookla](https://www.speedtest.net/apps/cli) e coloque o executável Linux compatível com sua arquitetura com nome `speedtest` na pasta da extensão, com permissão de execução. Esse binário não é distribuído neste repositório e tem termos próprios de uso pessoal/não comercial. Ao clicar em testar, a integração usa as opções de aceite da licença e privacidade; leia os termos da Ookla antes de habilitar esse recurso.
+### Change the weather location
 
-## Segurança e desempenho
+Edit `PARAMS` in your installed `clima-widget.py`: set `latitude`, `longitude` and `timezone`, and update the Brasília display text and cache filename if needed. The script keeps the last valid forecast when a request fails.
 
-Comandos personalizados executam com as permissões da conta: importe apenas configurações confiáveis. Execuções periódicas não se sobrepõem; comandos comuns têm timeout de 30 segundos e stdout/stderr limitados a 256 KiB. A coleta manual tem timeout de 15 segundos e o Speedtest, de 120 segundos.
+Caches are stored under `$XDG_CACHE_HOME/orbitz-widgets`, falling back to `~/.cache/orbitz-widgets`. They are not tracked in this repository.
 
-O cancelamento encerra o grupo do comando; não é uma sandbox e não cobre processos que criem deliberadamente outra sessão. A modal não tem refresh periódico. A abertura usa detecção adaptativa do ponteiro para compatibilidade com a camada do desktop. Não há promessa de consumo zero ou redução percentual de CPU.
+### Enable optional speed testing
 
-## Créditos e licença
+Download/install the [official Ookla Speedtest CLI](https://www.speedtest.net/apps/cli) for your Linux architecture. Place the executable as `speedtest` inside the installed extension directory and give it execute permission:
 
-Base criada por Andrew Zaech: [Desktop Clock / azclock](https://gitlab.com/AndrewZaech/azclock). Créditos e avisos originais foram preservados. Personalizações e widgets: orbitzone / Orbitz.
+```bash
+chmod +x "$HOME/.local/share/gnome-shell/extensions/azclock@azclock.gitlab.com/speedtest"
+```
 
-Distribuição deste código sob GPL-3.0, conforme o arquivo LICENSE incluído. Dependências e Speedtest CLI possuem licenças próprias.
+The proprietary binary is **not bundled**. It has separate terms for personal, non-commercial use. Review the [EULA](https://www.speedtest.net/about/eula), [terms](https://www.speedtest.net/about/terms) and [privacy policy](https://www.speedtest.net/about/privacy) before enabling it: the integration invokes the CLI with license/privacy acceptance flags and has no additional acceptance dialog. A test transfers data over your internet connection.
+
+## Reliability, security and performance
+
+- One periodic command runs at a time per element; canceled executions cannot publish stale results.
+- Combined stdout/stderr is limited to **256 KiB** per execution.
+- Timeouts are **30 seconds** for periodic commands, **15 seconds** for panel refresh and **120 seconds** for speed tests.
+- Command groups are terminated on cancellation; this is not a sandbox and does not cover descendants that deliberately create a separate session.
+- Weather and DNS caches are validated and written atomically with restricted file permissions.
+- Identical command text is not reapplied to the UI. Panel details are collected on demand.
+
+Custom commands run with your account's permissions. Only import configuration files you trust. The panel's opening detector uses adaptive pointer checks for compatibility with the desktop layer; the project does not claim zero idle CPU or a measured percentage reduction.
+
+## Troubleshooting
+
+- **No widgets appear:** enable the extension and add command elements in its preferences.
+- **A widget shows an error:** run its configured command in a terminal; check the path, required utilities and permissions.
+- **No temperatures:** verify that your hardware exposes supported sensors; unsupported readings can remain unavailable.
+- **Speed test unavailable:** check the binary's name, architecture and execute permission.
+- **Changes do not load:** disable/re-enable the extension; if necessary, log out and back in.
+- **Unsupported GNOME version:** check `gnome-shell --version` against the compatibility section.
+
+## Contributing
+
+Bug reports and pull requests are welcome. Include your distribution, GNOME/Python versions, affected widget and reproduction steps. Remove personal IP addresses, hostnames and credentials from logs before posting. Preserve the existing UI behavior and measurement semantics when proposing performance changes.
+
+## Credits and licenses
+
+Desktop Clock / azclock was created by **Andrew Zaech**. Original notices and asset credits are preserved in [`extension/README.md`](extension/README.md). Some upstream visual assets have their own Creative Commons attribution/share-alike terms; consult those credits.
+
+Orbitz customizations and Python widgets: **orbitzone / Orbitz**. See [`LICENSE`](LICENSE) for the included GNU GPL v3 license text. System dependencies and Ookla Speedtest CLI retain their own licenses.
+
+**Project topics:** GNOME Shell extension, Linux desktop widgets, Python system monitor, CPU monitor, RAM monitor, network monitoring, TCP connections, hardware temperatures, disk usage, weather widget and internet speed test.
