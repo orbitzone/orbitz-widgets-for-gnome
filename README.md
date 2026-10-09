@@ -22,6 +22,12 @@ Local TCP ports, remote connections and the optional speed-test button. The bott
 
 ![Network panel with TCP ports, remote destinations and internet speed-test controls](docs/images/network-panel.png)
 
+### Speed-test results
+
+Download and upload speeds in Mbps, latency in milliseconds and the time of the last completed Ookla test.
+
+![Speed-test results showing download and upload speeds, ping and last test time](docs/images/speedtest-results.png)
+
 ### Now Playing
 
 Media title displayed through the optional Playerctl/MPRIS command widget.
