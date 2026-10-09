@@ -8,6 +8,30 @@ Orbitz combines seven standalone Python scripts with a customized version of [De
 
 [Download ZIP](https://github.com/orbitzone/orbitz-widgets-for-gnome/archive/refs/heads/main.zip) · [Report an issue](https://github.com/orbitzone/orbitz-widgets-for-gnome/issues) · [Source code](https://github.com/orbitzone/orbitz-widgets-for-gnome)
 
+## Table of contents
+
+- [Screenshots](#screenshots)
+- [Desktop overview](#desktop-overview)
+- [Network panel](#network-panel)
+- [Speed-test results](#speed-test-results)
+- [Now Playing](#now-playing)
+- [Widgets](#widgets)
+- [Stack and compatibility](#stack-and-compatibility)
+- [Ubuntu 22.04: install dependencies first](#ubuntu-2204-install-dependencies-first)
+- [Required packages](#required-packages)
+- [Optional packages](#optional-packages)
+- [Download and install](#download-and-install)
+- [Configure each widget](#configure-each-widget)
+- [Change the weather location](#change-the-weather-location)
+- [Enable optional speed testing](#enable-optional-speed-testing)
+- [Optional Now Playing widget: Spotify and Chrome/Chromium](#optional-now-playing-widget-spotify-and-chromechromium)
+- [How it works](#how-it-works)
+- [Per-widget requirements checklist](#per-widget-requirements-checklist)
+- [Reliability, security and performance](#reliability-security-and-performance)
+- [Troubleshooting](#troubleshooting)
+- [Contributing](#contributing)
+- [Credits and licenses](#credits-and-licenses)
+
 ## Screenshots
 
 ### Desktop overview
