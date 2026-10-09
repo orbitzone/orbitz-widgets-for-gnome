@@ -30,7 +30,7 @@ Download and upload speeds in Mbps, latency in milliseconds and the time of the 
 
 ### Now Playing
 
-Media title displayed through the optional Playerctl/MPRIS command widget.
+Shows what is playing in **Spotify or Chromium**: playback status, artist and track title, when the application provides them. The optional command widget reads this information through Playerctl/MPRIS.
 
 ![Now Playing widget displaying Eminem — Evil Deeds](docs/images/now-playing.png)
 
@@ -225,6 +225,19 @@ The proprietary binary is **not bundled**. It has separate terms for personal, n
 ## Optional Now Playing widget: Spotify and Chrome/Chromium
 
 The extra component is [**playerctl**](https://github.com/altdesktop/playerctl), a command-line client for the **MPRIS** media interface on your session D-Bus. No additional GNOME media extension or Python package is required for this command widget.
+
+### How it works
+
+**Now Playing works with both the Spotify desktop app and Chromium browser playback.** Google Chrome can also work when it exposes an MPRIS player in your desktop session.
+
+The application publishes playback metadata through **MPRIS**, a standard media-player interface on Linux. Playerctl reads that metadata over your session D-Bus; Desktop Clock runs the configured command at the polling interval and displays its output on the desktop. The widget does not capture audio, identify songs by listening, or require a Spotify API key.
+
+The example below displays **Playing/Paused/Stopped**, **artist** and **title**. Chromium can expose media from websites such as a music or video player, but the available fields depend on the website: a video may provide a title without an artist. Only applications listed by `playerctl --list-all` can be queried.
+
+When both Spotify and Chromium are open, the supplied command prefers the player selection beginning with Spotify; it does not merge tracks from different applications or guarantee selection of whichever is currently audible. To show Chromium specifically, use `-p chromium`; for Spotify, use `-p spotify`. Match the actual player names reported on your system. You can create separate command elements for each application if you want both displayed.
+
+This is a **metadata display**, not a playback-control panel. It stays blank when no matching player is available and updates at the configured interval, so a track change may take a few seconds to appear.
+
 
 ```bash
 sudo apt install playerctl
