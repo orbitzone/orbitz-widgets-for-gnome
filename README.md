@@ -8,6 +8,26 @@ Orbitz combines seven standalone Python scripts with a customized version of [De
 
 [Download ZIP](https://github.com/orbitzone/orbitz-widgets-for-gnome/archive/refs/heads/main.zip) · [Report an issue](https://github.com/orbitzone/orbitz-widgets-for-gnome/issues) · [Source code](https://github.com/orbitzone/orbitz-widgets-for-gnome)
 
+## Screenshots
+
+### Desktop overview
+
+Clock, weather, top processes, CPU/RAM/storage usage, hardware temperatures and network monitoring. This is an example layout; appearance and positions are configured manually.
+
+![Orbitz desktop widgets showing clock, weather, system usage and network activity](docs/images/desktop-widgets.png)
+
+### Network panel
+
+Local TCP ports, remote connections and the optional speed-test button. The bottom-left icon refreshes the panel on demand.
+
+![Network panel with TCP ports, remote destinations and internet speed-test controls](docs/images/network-panel.png)
+
+### Now Playing
+
+Media title displayed through the optional Playerctl/MPRIS command widget.
+
+![Now Playing widget displaying Eminem — Evil Deeds](docs/images/now-playing.png)
+
 ## Widgets
 
 | Widget / script | What it does |
