@@ -915,7 +915,7 @@ class AzClockCommandLabel extends Label {
         const run = {generation: this._networkGeneration, cancellable: new Gio.Cancellable(), proc: null};
         this._networkRefreshRun = run;
         this._networkRefreshButton.reactive = false;
-        this._networkRefreshButton.accessible_name = 'Atualizando conexões e portas';
+        this._networkRefreshButton.accessible_name = this._firewallRows ? 'Atualizando eventos do firewall' : 'Atualizando conexões e portas';
         this._networkRefreshStatus.text = '';
         let proc;
         try {
@@ -932,6 +932,16 @@ class AzClockCommandLabel extends Label {
             const [stdout] = await readCommandOutput(run);
             if (this._networkDestroyed || run.cancelled || run.generation !== this._networkGeneration || !this._networkDialog.visible)
                 return;
+            if (command.includes('/firewall-widget.py')) {
+                if (!proc.get_successful() || !stdout.startsWith('AZCLOCK_FIREWALL:'))
+                    throw new Error('Sem acesso aos logs ou falha na coleta.');
+                const data = JSON.parse(stdout.slice('AZCLOCK_FIREWALL:'.length));
+                this._renderFirewall(data);
+                this.text = data.text;
+                this.clutter_text.set_markup(GLib.markup_escape_text(data.text, -1));
+                this._networkRefreshStatus.text = 'Atualizado: ' + data.updated;
+                return;
+            }
             if (!proc.get_successful() || !stdout.startsWith('AZCLOCK_NETWORK:'))
                 throw new Error('Não foi possível atualizar. Tente novamente.');
             const payload = JSON.parse(stdout.slice('AZCLOCK_NETWORK:'.length));
@@ -945,7 +955,7 @@ class AzClockCommandLabel extends Label {
             this._networkRefreshStatus.text = 'Atualizado às ' + GLib.DateTime.new_now_local().format('%H:%M');
         } catch (error) {
             if (!this._networkDestroyed && run.generation === this._networkGeneration && this._networkDialog?.visible)
-                this._networkRefreshStatus.text = 'Não foi possível atualizar. Tente novamente.';
+                this._networkRefreshStatus.text = error.message || 'Não foi possível atualizar. Tente novamente.';
         } finally {
             if (this._networkRefreshTimeout) {
                 GLib.source_remove(this._networkRefreshTimeout);
@@ -957,10 +967,64 @@ class AzClockCommandLabel extends Label {
             this._networkRefreshPending = false;
             if (!this._networkDestroyed) {
                 this._networkRefreshButton.reactive = true;
-                this._networkRefreshButton.accessible_name = 'Atualizar conexões e portas';
+                this._networkRefreshButton.accessible_name = this._firewallRows ? 'Atualizar eventos do firewall' : 'Atualizar conexões e portas';
                 if (pending && this._networkDialog?.visible)
                     this._refreshNetworkDialog();
             }
+        }
+    }
+
+    _buildFirewallDialog() {
+        this._networkBackdrop = new St.Widget({reactive: true, visible: false});
+        this._networkBackdrop.add_constraint(new Clutter.BindConstraint({source: global.stage, coordinate: Clutter.BindCoordinate.ALL}));
+        this._networkBackdrop.connect('button-press-event', () => {
+            this._closeNetworkDialog();
+            return Clutter.EVENT_STOP;
+        });
+        Main.uiGroup.add_child(this._networkBackdrop);
+        this._networkDialog = new St.BoxLayout({vertical: true, reactive: true,
+            style: 'background-color: #202020; color: white; border: 1px solid #606060; border-radius: 8px; padding: 12px; spacing: 10px;'});
+        this._firewallHeading = new St.Label({text: 'Firewall · eventos bloqueados', style: 'font-weight: bold; font-size: 18px;'});
+        this._networkDialog.add_child(this._firewallHeading);
+        const note = new St.Label({text: 'Pacote bloqueado não comprova invasão. Repetições são agrupadas por origem, destino e protocolo.', style: 'font-size: 12px; color: #c8c8c8;'});
+        note.clutter_text.set_line_wrap(true);
+        this._networkDialog.add_child(note);
+        const scroll = new St.ScrollView({style: 'width: 720px; height: 300px;', reactive: true});
+        scroll.set_policy(St.PolicyType.NEVER, St.PolicyType.AUTOMATIC);
+        this._firewallRows = new St.BoxLayout({vertical: true, style: 'spacing: 8px;'});
+        scroll.add_actor(this._firewallRows);
+        this._networkDialog.add_child(scroll);
+        const footer = new St.BoxLayout({style: 'spacing: 8px;'});
+        this._networkRefreshButton = new St.Button({reactive: true, can_focus: true, accessible_name: 'Atualizar eventos do firewall', style: 'background-color: transparent; color: white; padding: 6px;'});
+        this._networkRefreshButton.set_child(new St.Icon({icon_name: 'view-refresh-symbolic', icon_size: 18, style: 'color: white;'}));
+        this._networkRefreshButton.connect('clicked', () => this._refreshNetworkDialog());
+        footer.add_child(this._networkRefreshButton);
+        this._networkRefreshStatus = new St.Label({text: '', style: 'font-size: 12px; color: #c8c8c8;'});
+        footer.add_child(this._networkRefreshStatus);
+        this._networkDialog.add_child(footer);
+        Main.uiGroup.add_child(this._networkDialog);
+    }
+
+    _renderFirewall(data) {
+        if (typeof data.text !== 'string' || typeof data.scope !== 'string' || typeof data.updated !== 'string' || !Array.isArray(data.groups) || data.groups.length > 50)
+            throw new Error('Resposta do firewall inválida.');
+        for (const row of data.groups) {
+            if (!row || !['source', 'destination', 'protocol', 'ports', 'last', 'kind', 'interface'].every(key => typeof row[key] === 'string') || !Number.isInteger(row.count) || row.count < 1)
+                throw new Error('Evento do firewall inválido.');
+        }
+        this._firewallHeading.text = data.text + ' · Firewall';
+        this._firewallRows.destroy_all_children();
+        const scope = new St.Label({text: data.scope, style: 'font-size: 11px; color: #c8c8c8;'});
+        this._firewallRows.add_child(scope);
+        if (!data.groups.length)
+            this._firewallRows.add_child(new St.Label({text: 'Nenhum evento bloqueado encontrado na amostra.', style: 'color: #8bd5a1; padding: 8px;'}));
+        for (const item of data.groups) {
+            const box = new St.BoxLayout({vertical: true, style: 'padding: 8px; spacing: 4px; border-bottom: 1px solid #444;'});
+            const color = item.kind === 'Descoberta / multicast' ? '#82cfff' : (item.count >= 10 ? '#ffd479' : '#ededed');
+            box.add_child(new St.Label({text: `${item.source} → ${item.destination}   ·   ${item.count} eventos`, style: `font-family: monospace; color: ${color};`}));
+            box.add_child(new St.Label({text: `${item.kind} · ${item.protocol} · portas: ${item.ports} · interface: ${item.interface || '—'}`, style: 'color: #c8c8c8; font-size: 12px;'}));
+            box.add_child(new St.Label({text: `Último registro: ${item.last}`, style: 'color: #aaa; font-size: 11px;'}));
+            this._firewallRows.add_child(box);
         }
     }
 
@@ -971,6 +1035,9 @@ class AzClockCommandLabel extends Label {
             this._closeNetworkDialog();
             return;
         }
+        const firewall = getData(this.widgetIndex, this.elementIndex, 'Text_Command').includes('/firewall-widget.py');
+        if (firewall && !this._networkDialog)
+            this._buildFirewallDialog();
         if (!this._networkDialog) {
             this._networkBackdrop = new St.Widget({reactive: true, visible: false});
             this._networkBackdrop.add_constraint(new Clutter.BindConstraint({source: global.stage, coordinate: Clutter.BindCoordinate.ALL}));
@@ -1179,6 +1246,8 @@ class AzClockCommandLabel extends Label {
 
     _startPollingInterval() {
         const command = getData(this.widgetIndex, this.elementIndex, 'Text_Command');
+        if (command.includes('/firewall-widget.py'))
+            return;
         const interval = command.includes('/clima-widget.py')
             ? 300000
             : Math.max(getData(this.widgetIndex, this.elementIndex, 'Text_PollingInterval'), 250);
@@ -1277,6 +1346,11 @@ class AzClockCommandLabel extends Label {
             }
 
             let displayText = response;
+            if (command.includes('/firewall-widget.py') && response.startsWith('AZCLOCK_FIREWALL:')) {
+                const payload = JSON.parse(response.slice('AZCLOCK_FIREWALL:'.length));
+                displayText = payload.text;
+                this._scheduleNetworkClick();
+            }
             if (command.includes('/seguranca-widget.py') && response.startsWith('AZCLOCK_NETWORK:')) {
                 const payload = JSON.parse(response.slice('AZCLOCK_NETWORK:'.length));
                 displayText = payload.text;

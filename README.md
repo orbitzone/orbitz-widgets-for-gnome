@@ -4,7 +4,7 @@
 
 **Target platform: Ubuntu 22.04 LTS Desktop (Jammy), with GNOME Shell 42 and Python 3.10.** Ubuntu Server without a GNOME desktop and Ubuntu flavors using KDE/Xfce are not covered. Ubuntu 24.04 and later are not supported by this legacy extension.
 
-Orbitz combines seven standalone Python scripts with a customized version of [Desktop Clock (azclock)](https://gitlab.com/AndrewZaech/azclock). Display system information directly on your GNOME desktop and open a network panel to inspect TCP connections, listening ports or run an optional internet speed test.
+Orbitz combines eight standalone Python scripts with a customized version of [Desktop Clock (azclock)](https://gitlab.com/AndrewZaech/azclock). Display system information directly on your GNOME desktop and open a network panel to inspect TCP connections, listening ports or run an optional internet speed test.
 
 **Looking for azclock / Desktop Clock custom commands?** This project contains a customized copy of Andrew Zaech's **azclock v7** extension and ready-to-use Python command widgets for **Ubuntu 22.04 / GNOME 42**. It keeps the original `azclock@azclock.gitlab.com` UUID and is a community customization, not an official upstream release. See [installation](#download-and-install), [widget commands](#configure-each-widget) and [upstream azclock](https://gitlab.com/AndrewZaech/azclock).
 
@@ -29,6 +29,7 @@ Orbitz combines seven standalone Python scripts with a customized version of [De
 - [Optional Now Playing widget: Spotify and Chrome/Chromium](#optional-now-playing-widget-spotify-and-chromechromium)
 - [How it works](#how-it-works)
 - [Per-widget requirements checklist](#per-widget-requirements-checklist)
+- [Firewall event widget](#firewall-event-widget)
 - [Reliability, security and performance](#reliability-security-and-performance)
 - [Troubleshooting](#troubleshooting)
 - [Contributing](#contributing)
@@ -70,6 +71,7 @@ Shows what is playing in **Spotify or Chromium**: playback status, artist and tr
 | **TCP connections and ports** — `seguranca-widget.py` | Counts non-loopback TCP connections and listening ports. Click the widget to open a panel with local ports and remote destinations; click a hostname to copy its full name. Counts do not indicate whether a connection is malicious. |
 | **Hardware temperatures** — `temperaturas-widget.py` | Reads available CPU/GPU sensors from Linux sysfs, with an optional `sensors` fallback. Intel coretemp and AMDGPU are handled directly; unavailable readings display `N/D`. |
 | **External volumes** — `volumes-widget.py` | Shows usage and free space for detected removable/external volumes and desktop mount locations. System mounts are filtered out. |
+| **Firewall** — `firewall-widget.py` | Shows the last refreshed UFW blocked/rejected-event count. Click to group records by source, destination and protocol, with ports, interface, repetition count and last timestamp. |
 | **Weather** — `clima-widget.py` | Shows current conditions, temperature, feels-like temperature, humidity, daily low/high and precipitation probability through Open-Meteo. Defaults to Brasília, Brazil. |
 
 The network panel also includes an optional **Ookla Speedtest CLI** integration for download/upload speed in Mbps, latency in ms and the last test time. Results appear after a successful test. Speed tests run only when requested.
@@ -123,7 +125,7 @@ sudo apt install git python3 bash util-linux procps iproute2 libc-bin \
 
 | Packages | Used for |
 |---|---|
-| `python3` | All seven scripts; no pip packages required |
+| `python3` | All eight scripts; no pip packages required |
 | `bash`, `util-linux`, `procps`, `coreutils` | Command execution, isolated process groups (`setsid`), cancellation (`/usr/bin/kill`), volumes (`lsblk`) and file installation |
 | `iproute2`, `libc-bin` | TCP socket information (`ss`) and hostname lookup (`getent`) |
 | `gjs`, `gir1.2-gtk-4.0`, `gir1.2-adw-1` | JavaScript runtime and preferences UI bindings |
@@ -183,7 +185,7 @@ gnome-extensions enable azclock@azclock.gitlab.com
 gnome-extensions prefs azclock@azclock.gitlab.com
 ```
 
-Open its preferences to add widgets and configure command elements, fonts, colors, positions and alignment. Personal layout settings are not bundled: copying the files does not automatically create the seven widgets.
+Open its preferences to add widgets and configure command elements, fonts, colors, positions and alignment. Personal layout settings are not bundled: copying the files does not automatically create the eight widgets.
 
 ### Configure each widget
 
@@ -195,11 +197,11 @@ python3 /home/YOUR_USER/.local/share/orbitz-widgets/cpu-ram-widget.py
 
 In the preferences, add a widget, add a **command** element, paste its command and set its polling interval. Repeat for each script. Fonts, colors, orientation and positioning are manual preferences; no personal layout is automatically imported.
 
-To generate the seven absolute command paths for your account:
+To generate the eight absolute command paths for your account:
 
 ```bash
 for script in cpu-ram-widget.py processos-widget.py rede-widget.py \
-  seguranca-widget.py temperaturas-widget.py volumes-widget.py clima-widget.py; do
+  seguranca-widget.py temperaturas-widget.py volumes-widget.py clima-widget.py firewall-widget.py; do
   printf 'python3 "%s/.local/share/orbitz-widgets/%s"\n' "$HOME" "$script"
 done
 ```
@@ -310,6 +312,16 @@ Browser playback must expose MPRIS/media metadata. Not every site provides artis
 | Now Playing | Separate Playerctl package and an application exposing MPRIS in your session |
 
 Package names were checked against Ubuntu 22.04 sources and the development machine. **A full clean-VM installation test has not yet been performed**, so this guide does not claim that all hardware/app combinations have been validated.
+
+## Firewall event widget
+
+Configure a command element with `python3 /home/YOUR_USER/.local/share/orbitz-widgets/firewall-widget.py`. This element has **no periodic command timer**: startup reads a cached count, and kernel logs are queried only when the panel opens or its refresh icon is clicked. Before the first refresh, the count displays `—`.
+
+Requires UFW logging and permission to read kernel journal entries in your session. The widget never invokes sudo or changes firewall rules. If access is unavailable, the panel reports a collection error instead of presenting zero as a verified count. Use `sudo ufw logging low` to select low-volume logging on an already configured firewall; enabling/changing firewall policy is a separate administrator task.
+
+The snapshot covers the last 24 hours, capped at 2000 matching kernel log records and 50 displayed groups. UFW logging is rate-limited, so the count is **logged events in the sample**, not a complete count of all blocked packets. Blue highlights multicast/discovery traffic; yellow highlights repeated groups. These are descriptive hints, not an intrusion diagnosis.
+
+The refresh shares the network panel's timeout, bounded output, cancellation and stale-response protections. The cache is private and atomic. Adaptive pointer detection is still used for opening the panel; there is no background log watcher.
 
 ## Reliability, security and performance
 
