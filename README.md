@@ -319,7 +319,7 @@ Configure a command element with `python3 /home/YOUR_USER/.local/share/orbitz-wi
 
 Requires UFW logging and permission to read kernel journal entries in your session. The widget never invokes sudo or changes firewall rules. If access is unavailable, the panel reports a collection error instead of presenting zero as a verified count. Use `sudo ufw logging low` to select low-volume logging on an already configured firewall; enabling/changing firewall policy is a separate administrator task.
 
-The snapshot covers the last 24 hours, capped at 2000 matching kernel log records and 50 displayed groups. UFW logging is rate-limited, so the count is **logged events in the sample**, not a complete count of all blocked packets. Blue highlights multicast/discovery traffic; yellow highlights repeated groups. These are descriptive hints, not an intrusion diagnosis.
+The snapshot covers the last 24 hours, capped at 2000 matching kernel log records and 50 displayed groups. UFW logging is rate-limited, so the count is **logged events in the sample**, not a complete count of all blocked packets. Orange highlights external source IPs, blue highlights local/destination addresses, and yellow highlights ports. These are descriptive hints, not an intrusion diagnosis.
 
 The refresh shares the network panel's timeout, bounded output, cancellation and stale-response protections. The cache is private and atomic. Adaptive pointer detection is still used for opening the panel; there is no background log watcher.
 

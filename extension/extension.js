@@ -1020,9 +1020,14 @@ class AzClockCommandLabel extends Label {
             this._firewallRows.add_child(new St.Label({text: 'Nenhum evento bloqueado encontrado na amostra.', style: 'color: #8bd5a1; padding: 8px;'}));
         for (const item of data.groups) {
             const box = new St.BoxLayout({vertical: true, style: 'padding: 8px; spacing: 4px; border-bottom: 1px solid #444;'});
-            const color = item.kind === 'Descoberta / multicast' ? '#82cfff' : (item.count >= 10 ? '#ffd479' : '#ededed');
-            box.add_child(new St.Label({text: `${item.source} → ${item.destination}   ·   ${item.count} eventos`, style: `font-family: monospace; color: ${color};`}));
-            box.add_child(new St.Label({text: `${item.kind} · ${item.protocol} · portas: ${item.ports} · interface: ${item.interface || '—'}`, style: 'color: #c8c8c8; font-size: 12px;'}));
+            const escape = value => GLib.markup_escape_text(String(value), -1);
+            const sourceColor = item.source_remote === true || item.kind === 'Origem externa' ? '#ff9e64' : '#82cfff';
+            const title = new St.Label({style: 'font-family: monospace;'});
+            title.clutter_text.set_markup(`<span foreground="${sourceColor}">${escape(item.source)}</span> → <span foreground="#82cfff">${escape(item.destination)}</span>   ·   ${escape(item.count)} eventos`);
+            box.add_child(title);
+            const details = new St.Label({style: 'color: #c8c8c8; font-size: 12px;'});
+            details.clutter_text.set_markup(`${escape(item.kind)} · ${escape(item.protocol)} · portas: <span foreground="#ffd479">${escape(item.ports)}</span> · interface: ${escape(item.interface || '—')}`);
+            box.add_child(details);
             box.add_child(new St.Label({text: `Último registro: ${item.last}`, style: 'color: #aaa; font-size: 11px;'}));
             this._firewallRows.add_child(box);
         }

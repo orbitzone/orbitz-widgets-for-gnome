@@ -32,7 +32,7 @@ def parse(lines):
             proto = {'2': 'IGMP', '1': 'ICMP', '58': 'ICMPv6'}.get(proto, proto)
             port = fields.get('DPT', '—')[:8]
             key = (source, str(dest), proto)
-            g = groups.setdefault(key, {'source': source, 'destination': str(dest), 'protocol': proto, 'ports': set(), 'count': 0, 'last': stamp, 'interface': fields.get('IN', '')[:32], 'kind': 'Descoberta / multicast' if dest.is_multicast else ('Rede local' if source_ip.is_private else 'Origem externa')})
+            g = groups.setdefault(key, {'source': source, 'source_remote': not (source_ip.is_private or source_ip.is_loopback or source_ip.is_link_local), 'destination': str(dest), 'protocol': proto, 'ports': set(), 'count': 0, 'last': stamp, 'interface': fields.get('IN', '')[:32], 'kind': 'Descoberta / multicast' if dest.is_multicast else ('Rede local' if source_ip.is_private else 'Origem externa')})
             g['ports'].add(port)
             g['count'] += 1
             g['last'] = stamp
