@@ -25,6 +25,9 @@ class AzClockWidgetClockSubPage extends SubPage {
         const boxAnchorPoint = this.createComboRow(_('Anchor Point'), 'Box_AnchorPoint');
         generalGroup.add(boxAnchorPoint);
 
+        const boxWidthRow = this.createSpinRow('Widget width (px; 0 = default)', 'Box_Width', 0, 2000);
+        generalGroup.add(boxWidthRow);
+
         const boxSpacingRow = this.createSpinRow(_('Widget Spacing'), 'Box_Spacing', 0, 500);
         generalGroup.add(boxSpacingRow);
 

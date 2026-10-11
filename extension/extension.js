@@ -299,49 +299,41 @@ class AzClockDesktopWidget extends St.Widget {
         this.updateClocks(true);
     }
 
+    _getStableWidth() {
+        const configured = Number(getData(this._widgetIndex, WIDGET_DATA_INDEX, 'Box_Width'));
+        if (Number.isFinite(configured) && configured >= 80 && configured <= 2000)
+            return configured;
+        const elements = WIDGETDATA[this._widgetIndex].slice(1);
+        if (elements.some(element => element.Element_Type === DIGITAL_CLOCK))
+            return 440;
+        if (elements.some(element => (element.Text_Command || '').includes('/clima-widget.py')))
+            return 440;
+        return null;
+    }
+
+    vfunc_get_preferred_width(forHeight) {
+        const width = this._getStableWidth();
+        return width === null ? super.vfunc_get_preferred_width(forHeight) : [width, width];
+    }
+
+    vfunc_get_preferred_height(forWidth) {
+        return super.vfunc_get_preferred_height(this._getStableWidth() ?? forWidth);
+    }
+
     vfunc_allocate(box) {
         if (this._isDragging) {
             super.vfunc_allocate(box);
             return;
         }
-
+        const [, width] = this.get_preferred_width(-1);
+        const [, height] = this.get_preferred_height(width);
+        box.set_size(width, height);
         const x = getData(this._widgetIndex, WIDGET_DATA_INDEX, 'Location_X', 'int');
         const y = getData(this._widgetIndex, WIDGET_DATA_INDEX, 'Location_Y', 'int');
-
-        const width = box.get_width();
-        const height = box.get_height();
-        const newX = x - width;
-        const newY = y - height;
-
-        const anchorPoint = getData(this._widgetIndex, WIDGET_DATA_INDEX, 'Box_AnchorPoint', 'int');
-        if (anchorPoint === AnchorPoint.TOP_LEFT)
-            box.set_origin(x, y);
-        else if (anchorPoint === AnchorPoint.BOTTOM_LEFT)
-            box.set_origin(x, newY);
-        else if (anchorPoint === AnchorPoint.TOP_RIGHT)
-            box.set_origin(newX, y);
-        else if (anchorPoint === AnchorPoint.BOTTOM_RIGHT)
-            box.set_origin(newX, newY);
-
-        const childBox = new Clutter.ActorBox();
-        childBox.x1 = 0;
-        childBox.y1 = 0;
-
-        for (const child of this.get_children()) {
-            const [childWidth] = child.get_preferred_width(-1);
-            const [childHeight] = child.get_preferred_height(-1);
-
-            let adjustedWidth = width;
-            let adjustedHeight = height;
-
-            if (childWidth >= width)
-                adjustedWidth = childWidth;
-            if (childHeight >= height)
-                adjustedHeight = childHeight;
-
-            box.set_size(adjustedWidth, adjustedHeight);
-        }
-
+        const anchor = getData(this._widgetIndex, WIDGET_DATA_INDEX, 'Box_AnchorPoint', 'int');
+        const right = anchor === AnchorPoint.TOP_RIGHT || anchor === AnchorPoint.BOTTOM_RIGHT;
+        const bottom = anchor === AnchorPoint.BOTTOM_LEFT || anchor === AnchorPoint.BOTTOM_RIGHT;
+        box.set_origin(right ? x - width : x, bottom ? y - height : y);
         super.vfunc_allocate(box);
     }
 
@@ -429,7 +421,7 @@ class AzClockDesktopWidget extends St.Widget {
         if (delay !== 300)
             priority = GLib.PRIORITY_DEFAULT;
 
-        if (this._updateClockId || !WIDGETDATA.some(widget => widget.some(element => [DIGITAL_CLOCK, ANALOG_CLOCK].includes(element.Element_Type))))
+        if (this._updateClockId)
             return;
         this._updateClockId = GLib.timeout_add(priority, delay, () => {
             this.setStyle();
@@ -814,11 +806,20 @@ class AzClockLabel extends St.Label {
 
         this.clutter_text.set({
             ellipsize: Pango.EllipsizeMode.NONE,
+            line_wrap: false,
+            line_wrap_mode: Pango.WrapMode.WORD_CHAR,
         });
     }
 
     setStyle() {
         const index = this.elementIndex;
+        const configuredWidth = Number(getData(this.widgetIndex, WIDGET_DATA_INDEX, 'Box_Width'));
+        const elements = WIDGETDATA[this.widgetIndex].slice(1);
+        const wrap = (Number.isFinite(configuredWidth) && configuredWidth >= 80 && configuredWidth <= 2000) ||
+            elements.some(element => element.Element_Type === DIGITAL_CLOCK ||
+                (element.Text_Command || '').includes('/clima-widget.py'));
+        this.clutter_text.set_line_wrap(wrap);
+
 
         const shadowEnabled = getData(this.widgetIndex, index, 'Text_ShadowEnabled', 'bool');
         const shadowX = getData(this.widgetIndex, index, 'Text_ShadowX');

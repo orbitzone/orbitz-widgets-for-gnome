@@ -74,12 +74,11 @@ Playback status, artist and title, followed by a small Spotify or Chrome icon id
 
 | Widget / script | What it does |
 |---|---|
-| **CPU, RAM and storage** — `cpu-ram-widget.py` | Shows CPU utilization, RAM usage and storage usage for the filesystem containing your home directory, with text progress bars. |
+| **CPU, RAM and storage** — `cpu-ram-widget.py` | Shows CPU utilization, RAM usage and SSD usage for the filesystem containing your home directory, with text progress bars. An **EXT** row appears when external storage is mounted; its percentage combines used space and capacity across the detected filesystems, counting each filesystem once. The widget does not mount devices. |
 | **Top processes** — `processos-widget.py` | Lists up to seven processes ranked by CPU consumption over a one-second sample. Process usage may exceed 100% on multicore systems. |
 | **Network traffic** — `rede-widget.py` | Shows current receive/transmit rates for the interface selected from the default route (IPv4, with IPv6 fallback). This measures traffic, not your connection's maximum speed. |
 | **TCP connections and ports** — `seguranca-widget.py` | Counts non-loopback TCP connections and listening ports. Click the widget to open a panel with local ports and remote destinations; click a hostname to copy its full name. Counts do not indicate whether a connection is malicious. |
 | **Hardware temperatures** — `temperaturas-widget.py` | Reads available CPU/GPU sensors from Linux sysfs, with an optional `sensors` fallback. Intel coretemp and AMDGPU are handled directly; unavailable readings display `N/D`. |
-| **External volumes** — `volumes-widget.py` | Shows usage and free space for detected removable/external volumes and desktop mount locations. System mounts are filtered out. |
 | **Firewall** — `firewall-widget.py` | Shows the last refreshed UFW blocked/rejected-event count. Click to group records by source, destination and protocol, with ports, interface, repetition count and last timestamp. |
 | **Weather** — `clima-widget.py` | Shows current conditions, temperature, feels-like temperature, humidity, daily low/high and precipitation probability through Open-Meteo. Defaults to Brasília, Brazil. |
 | **Docker** — `docker-widget.py` | Counts running containers; opens a panel with names, published ports and browser links for web services. |
@@ -208,11 +207,11 @@ python3 /home/YOUR_USER/.local/share/orbitz-widgets/cpu-ram-widget.py
 
 In the preferences, add a widget, add a **command** element, paste its command and set its polling interval. Repeat for each script. Fonts, colors, orientation and positioning are manual preferences; no personal layout is automatically imported.
 
-To generate the nine absolute command paths for your account:
+To generate the eight absolute command paths for your account:
 
 ```bash
 for script in cpu-ram-widget.py processos-widget.py rede-widget.py \
-  seguranca-widget.py temperaturas-widget.py volumes-widget.py clima-widget.py firewall-widget.py docker-widget.py; do
+  seguranca-widget.py temperaturas-widget.py clima-widget.py firewall-widget.py docker-widget.py; do
   printf 'python3 "%s/.local/share/orbitz-widgets/%s"\n' "$HOME" "$script"
 done
 ```
@@ -284,7 +283,6 @@ This display does not capture audio, require a Spotify API key or control playba
 | Traffic | Active default route (IPv4, with IPv6 fallback); the selected interface may be a VPN |
 | TCP panel | `ss`/`getent`; hostname lookup can be absent or time out |
 | Temperatures | Supported hardware sensors/drivers; optional lm-sensors |
-| External volumes | Mounted removable/external volumes; an empty widget can be normal |
 | Weather | Internet access and correct coordinates/time zone; default is Brasília |
 | Speed test | Separate official Ookla executable, correct architecture and accepted terms |
 | Docker | Docker CLI and permission to query the configured daemon |
@@ -358,3 +356,5 @@ Desktop Clock / azclock was created by **Andrew Zaech**. Original notices and as
 Orbitz customizations and Python widgets: **orbitzone / Orbitz**. See [`LICENSE`](LICENSE) for the included GNU GPL v3 license text. System dependencies and Ookla Speedtest CLI retain their own licenses.
 
 **Project topics:** azclock, Desktop Clock, azclock custom commands, Desktop Clock widgets, Ubuntu 22.04, GNOME Shell extension, Linux desktop widgets, Python system monitor, CPU monitor, RAM monitor, network monitoring, TCP connections, hardware temperatures, disk usage, weather widget, Spotify now playing, MPRIS, Docker containers and internet speed test.
+
+Clock/weather widgets keep a default width of 440 px and wrap long text onto additional lines. Other widgets use their natural width. Set **Widget width (px; 0 = default)** to override the width and enable wrapping for a particular widget; anchors use the final width and height.

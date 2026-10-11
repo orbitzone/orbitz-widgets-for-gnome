@@ -3,6 +3,8 @@ import time
 import shutil
 from widget_runtime import load, save
 from pathlib import Path
+from external_storage import external_usage
+import subprocess
 
 def cpu():
     fields = list(map(int, Path('/proc/stat').read_text().splitlines()[0].split()[1:]))
@@ -35,4 +37,11 @@ if type(ssd) not in (int, float) or not 0 <= ssd <= 100:
     save('disk-usage.json', ssd)
 print()
 print(f'SSD  {bar(ssd)}  {ssd:3.0f}%')
+try:
+    external = external_usage()
+except (OSError, ValueError, KeyError, subprocess.SubprocessError):
+    external = None
+if external is not None:
+    print()
+    print(f'EXT  {bar(external)}  {external:3.0f}%')
 print('</span>')

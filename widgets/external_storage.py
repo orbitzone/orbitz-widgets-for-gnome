@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-import html
 from pathlib import Path
 from widget_runtime import load, save
 import json
@@ -42,7 +41,7 @@ def walk(devices, external=False):
                 yield device, point
         yield from walk(device.get('children', []), external_here)
 
-try:
+def external_usage():
     signature = Path('/proc/self/mountinfo').read_text()
     cached = load('volumes-inventory.json', 60)
     if isinstance(cached, dict) and cached.get('mounts') == signature and valid_devices(cached.get('devices')):
@@ -55,24 +54,17 @@ try:
         if not valid_devices(devices):
             raise ValueError('Inventário inválido')
         save('volumes-inventory.json', {'mounts': signature, 'devices': devices})
-    volumes = []
+    total = used = 0
     seen = set()
     for device, point in walk(devices):
-        if point in seen:
-            continue
-        seen.add(point)
         try:
-            usage = shutil.disk_usage(point)
-            if not usage.total:
+            identity = Path(point).stat().st_dev
+            if identity in seen:
                 continue
-            name = device.get('label') or point.rstrip('/').split('/')[-1] or device['name']
-            percent = usage.used / usage.total * 100
-            volumes.append(f'{html.escape(name)}  {bar(percent)} {percent:3.0f}%\n{usage.free / (1024 ** 3):.1f} GiB Livres')
+            seen.add(identity)
+            usage = shutil.disk_usage(point)
+            total += usage.total
+            used += usage.used
         except OSError:
             continue
-    if volumes:
-        print('<span font_family="monospace">' + '\n\n'.join(volumes) + '</span>')
-    else:
-        print('\u200b')
-except (OSError, ValueError, KeyError, subprocess.SubprocessError):
-    print('Volumes indisponíveis')
+    return 100 * used / total if total else None
