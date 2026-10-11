@@ -321,6 +321,12 @@ Requires UFW logging and permission to read kernel journal entries in your sessi
 
 The snapshot covers the last 24 hours, capped at 2000 matching kernel log records and 50 displayed groups. UFW logging is rate-limited, so the count is **logged events in the sample**, not a complete count of all blocked packets. Orange highlights external source IPs, blue highlights local/destination addresses, and yellow highlights ports. These are descriptive hints, not an intrusion diagnosis.
 
+Click an IP address or destination port to inspect it. Details include first/last records, source counts, destinations, source/destination ports, protocols, interfaces and the last 50 original records from the selected sample. Port inspection also queries current local listeners; process names are visible only when your user has permission. Common service names are hints, not proof of the service running there.
+
+Use the copy button to copy the selected address/port and Back to return to the grouped overview. Inspection runs only on click, with a timeout, output cap and cancellation on close, refresh or a new selection.
+
+Reverse DNS is a separate opt-in button. Public IPs additionally offer an external WHOIS/RDAP link through [RDAP.org](https://about.rdap.org/), opening registry information in the browser. These actions may disclose the queried address to the resolver/provider and are never performed automatically. No WHOIS package, API key or background lookup service is required.
+
 The refresh shares the network panel's timeout, bounded output, cancellation and stale-response protections. The cache is private and atomic. Adaptive pointer detection is still used for opening the panel; there is no background log watcher.
 
 ## Reliability, security and performance

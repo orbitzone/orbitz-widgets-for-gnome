@@ -32,7 +32,7 @@ def parse(lines):
             proto = {'2': 'IGMP', '1': 'ICMP', '58': 'ICMPv6'}.get(proto, proto)
             port = fields.get('DPT', '—')[:8]
             key = (source, str(dest), proto)
-            g = groups.setdefault(key, {'source': source, 'source_remote': not (source_ip.is_private or source_ip.is_loopback or source_ip.is_link_local), 'destination': str(dest), 'protocol': proto, 'ports': set(), 'count': 0, 'last': stamp, 'interface': fields.get('IN', '')[:32], 'kind': 'Descoberta / multicast' if dest.is_multicast else ('Rede local' if source_ip.is_private else 'Origem externa')})
+            g = groups.setdefault(key, {'source': source, 'source_remote': not (source_ip.is_private or source_ip.is_loopback or source_ip.is_link_local), 'destination': str(dest), 'protocol': proto, 'ports': set(), 'count': 0, 'first': stamp, 'last': stamp, 'interface': fields.get('IN', '')[:32], 'kind': 'Descoberta / multicast' if dest.is_multicast else ('Rede local' if source_ip.is_private else 'Origem externa')})
             g['ports'].add(port)
             g['count'] += 1
             g['last'] = stamp
@@ -41,7 +41,8 @@ def parse(lines):
             continue
     ordered = sorted(groups.values(), key=lambda g: -g['count'])
     for g in ordered:
-        g['ports'] = ', '.join(sorted(g['ports']))[:160]
+        g['port_values'] = sorted(g['ports'])[:30]
+        g['ports'] = ', '.join(g['port_values'])[:160]
     return {'text': f'Eventos bloqueados: {count}', 'count': count, 'groups': ordered[:50], 'scope': 'Últimas 24 h · até 2000 bloqueios registrados · máximo 50 grupos', 'updated': datetime.datetime.now().astimezone().strftime('%d/%m %H:%M')}
 
 def save(data):
@@ -72,14 +73,69 @@ def cached():
     except (OSError, ValueError, TypeError):
         return {'text': 'Eventos bloqueados: —'}
 
+def read_logs():
+    result = subprocess.run(['journalctl', '-k', '--since', '24 hours ago', '-n', '2000', r'--grep=\[UFW (BLOCK|REJECT)\]', '-o', 'json', '--no-pager', '-q'], capture_output=True, text=True, timeout=10)
+    if result.returncode != 0 or 'not seeing messages' in result.stderr.lower() or 'permission denied' in result.stderr.lower():
+        raise RuntimeError('Sem acesso aos logs do kernel.')
+    return result.stdout.splitlines()
+
+def inspect_target(kind, target):
+    if kind == 'ip':
+        target = str(ipaddress.ip_address(target))
+    elif not target.isdecimal() or not 1 <= int(target) <= 65535:
+        raise ValueError('Porta inválida')
+    matches = []
+    for line in read_logs():
+        try:
+            entry = json.loads(line)
+            message = entry.get('MESSAGE', '')
+            fields = dict(re.findall(r'\b([A-Z]+)=([^\s]*)', message))
+            if (kind == 'ip' and target in (fields.get('SRC'), fields.get('DST'))) or (kind == 'port' and fields.get('DPT') == target):
+                # Reuse the validated parser before accepting the record.
+                if parse([line])['count']:
+                    matches.append((entry, fields))
+        except (ValueError, TypeError):
+            continue
+    counts = collections.Counter(f.get('SRC', '?') for _, f in matches)
+    def values(key):
+        return ', '.join(sorted({f.get(key, '—') for _, f in matches})[:40])
+    def date(entry):
+        return datetime.datetime.fromtimestamp(int(entry['__REALTIME_TIMESTAMP']) / 1e6).astimezone().strftime('%d/%m %H:%M:%S')
+    remote = False
+    title = 'IP: ' + target if kind == 'ip' else 'Porta: ' + target
+    text = [title, f'{len(matches)} registros na amostra das últimas 24 h']
+    if kind == 'ip':
+        address = ipaddress.ip_address(target)
+        remote = address.is_global and not address.is_multicast
+        category = 'Multicast' if address.is_multicast else ('Loopback' if address.is_loopback else ('Link-local' if address.is_link_local else ('IP público' if remote else 'IP local / reservado')))
+        text.append('Tipo: ' + category)
+    if matches:
+        text.extend(['Primeiro: ' + date(matches[0][0]), 'Último: ' + date(matches[-1][0]), 'Origens: ' + ', '.join(f'{ip} ({n})' for ip, n in counts.most_common(30)), 'Destinos: ' + values('DST'), 'Protocolos: ' + values('PROTO'), 'Portas destino: ' + values('DPT'), 'Portas origem: ' + values('SPT'), 'Interfaces: ' + values('IN')])
+    if kind == 'port':
+        services = {'22': 'SSH', '53': 'DNS', '80': 'HTTP', '443': 'HTTPS', '3000': 'Servidor de desenvolvimento (uso frequente)', '5432': 'PostgreSQL', '3306': 'MySQL', '6379': 'Redis', '9443': 'HTTPS / Portainer (uso frequente)'}
+        text.append('Serviço usual: ' + services.get(target, 'Não identificado') + ' — a porta não comprova o serviço.')
+        result = subprocess.run(['ss', '-H', '-ltnup'], capture_output=True, text=True, timeout=3)
+        listeners = []
+        for line in result.stdout.splitlines():
+            fields = line.split()
+            if len(fields) >= 5 and fields[4].rsplit(':', 1)[-1] == target:
+                listeners.append(line[:1024])
+        text.extend(['Escuta local atual (processo apenas quando permitido):', ('Falha ao consultar sockets locais.' if result.returncode != 0 else ('\n'.join(listeners[:20]) or 'Nenhuma escuta visível nesta porta.'))])
+    text.extend(['', 'Registros originais — últimos 50 da seleção:', '\n'.join(date(e) + ' ' + e['MESSAGE'][:1024] for e, _ in matches[-50:]) or 'Nenhum registro na amostra.'])
+    return {'inspect': '\n'.join(text), 'remote': remote}
+
 def main():
-    if '--details' not in sys.argv:
+    if '--inspect-ip' in sys.argv or '--inspect-port' in sys.argv:
+        flag = '--inspect-ip' if '--inspect-ip' in sys.argv else '--inspect-port'
+        data = inspect_target('ip' if flag == '--inspect-ip' else 'port', sys.argv[sys.argv.index(flag) + 1])
+    elif '--dns' in sys.argv:
+        target = str(ipaddress.ip_address(sys.argv[sys.argv.index('--dns') + 1]))
+        result = subprocess.run(['getent', 'hosts', target], capture_output=True, text=True, timeout=5)
+        data = {'inspect': 'DNS reverso: ' + target + '\n' + (result.stdout[:4096].strip() or 'Sem nome retornado pelo resolvedor.') + '\nUm nome DNS não comprova a identidade da origem.'}
+    elif '--details' not in sys.argv:
         data = cached()
     else:
-        result = subprocess.run(['journalctl', '-k', '--since', '24 hours ago', '-n', '2000', r'--grep=\[UFW (BLOCK|REJECT)\]', '-o', 'json', '--no-pager', '-q'], capture_output=True, text=True, timeout=10)
-        if result.returncode != 0 or 'not seeing messages' in result.stderr.lower() or 'permission denied' in result.stderr.lower():
-            raise RuntimeError('Sem acesso aos logs do kernel. Configure uma fonte de logs com acesso de leitura.')
-        data = parse(result.stdout.splitlines())
+        data = parse(read_logs())
         try:
             save(data)
         except OSError:
@@ -89,6 +145,6 @@ def main():
 if __name__ == '__main__':
     try:
         main()
-    except (OSError, subprocess.SubprocessError, RuntimeError) as error:
+    except (OSError, subprocess.SubprocessError, RuntimeError, ValueError, IndexError) as error:
         print(str(error), file=sys.stderr)
         sys.exit(1)

@@ -887,6 +887,7 @@ class AzClockCommandLabel extends Label {
     }
 
     _closeNetworkDialog() {
+        this._cancelFirewallInspection();
         this._networkGeneration++;
         this._networkRefreshPending = false;
         this._networkDialog?.hide();
@@ -1006,12 +1007,14 @@ class AzClockCommandLabel extends Label {
     }
 
     _renderFirewall(data) {
+        this._cancelFirewallInspection();
         if (typeof data.text !== 'string' || typeof data.scope !== 'string' || typeof data.updated !== 'string' || !Array.isArray(data.groups) || data.groups.length > 50)
             throw new Error('Resposta do firewall inválida.');
         for (const row of data.groups) {
             if (!row || !['source', 'destination', 'protocol', 'ports', 'last', 'kind', 'interface'].every(key => typeof row[key] === 'string') || !Number.isInteger(row.count) || row.count < 1)
                 throw new Error('Evento do firewall inválido.');
         }
+        this._firewallData = data;
         this._firewallHeading.text = data.text + ' · Firewall';
         this._firewallRows.destroy_all_children();
         const scope = new St.Label({text: data.scope, style: 'font-size: 11px; color: #c8c8c8;'});
@@ -1022,14 +1025,117 @@ class AzClockCommandLabel extends Label {
             const box = new St.BoxLayout({vertical: true, style: 'padding: 8px; spacing: 4px; border-bottom: 1px solid #444;'});
             const escape = value => GLib.markup_escape_text(String(value), -1);
             const sourceColor = item.source_remote === true || item.kind === 'Origem externa' ? '#ff9e64' : '#82cfff';
-            const title = new St.Label({style: 'font-family: monospace;'});
-            title.clutter_text.set_markup(`<span foreground="${sourceColor}">${escape(item.source)}</span> → <span foreground="#82cfff">${escape(item.destination)}</span>   ·   ${escape(item.count)} eventos`);
+            const title = new St.BoxLayout({style: 'spacing: 8px;'});
+            const source = new St.Button({label: item.source, reactive: true, can_focus: true, style: `color: ${sourceColor}; padding: 0px; font-family: monospace;`});
+            source.connect('clicked', () => this._inspectFirewall('ip', item.source));
+            title.add_child(source);
+            title.add_child(new St.Label({text: '→'}));
+            const destination = new St.Button({label: item.destination, reactive: true, can_focus: true, style: 'color: #82cfff; padding: 0px; font-family: monospace;'});
+            destination.connect('clicked', () => this._inspectFirewall('ip', item.destination));
+            title.add_child(destination);
+            title.add_child(new St.Label({text: `${item.count} eventos`}));
             box.add_child(title);
-            const details = new St.Label({style: 'color: #c8c8c8; font-size: 12px;'});
-            details.clutter_text.set_markup(`${escape(item.kind)} · ${escape(item.protocol)} · portas: <span foreground="#ffd479">${escape(item.ports)}</span> · interface: ${escape(item.interface || '—')}`);
-            box.add_child(details);
-            box.add_child(new St.Label({text: `Último registro: ${item.last}`, style: 'color: #aaa; font-size: 11px;'}));
+            box.add_child(new St.Label({text: `${item.kind} · ${item.protocol} · ${item.interface || '—'}`, style: 'color: #c8c8c8; font-size: 12px;'}));
+            let ports = new St.BoxLayout({style: 'spacing: 8px;'});
+            ports.add_child(new St.Label({text: 'Portas destino:', style: 'font-size: 12px;'}));
+            const portValues = item.ports.split(', ').slice(0, 30);
+            for (let i = 0; i < portValues.length; i++) {
+                const value = portValues[i];
+                if (i > 0 && i % 8 === 0) {
+                    box.add_child(ports);
+                    ports = new St.BoxLayout({style: 'spacing: 8px;'});
+                }
+                if (/^\d+$/.test(value) && Number(value) > 0 && Number(value) <= 65535) {
+                    const port = new St.Button({label: value, reactive: true, can_focus: true, style: 'color: #ffd479; padding: 0px;'});
+                    port.connect('clicked', () => this._inspectFirewall('port', value));
+                    ports.add_child(port);
+                } else {
+                    ports.add_child(new St.Label({text: value, style: 'color: #ffd479;'}));
+                }
+            }
+            box.add_child(ports);
+            box.add_child(new St.Label({text: `Primeiro: ${item.first || item.last} · Último: ${item.last}`, style: 'color: #aaa; font-size: 11px;'}));
             this._firewallRows.add_child(box);
+        }
+    }
+
+    _cancelFirewallInspection() {
+        const run = this._firewallInspection;
+        if (!run)
+            return;
+        if (run.timeout) {
+            GLib.source_remove(run.timeout);
+            run.timeout = null;
+        }
+        stopCommandRun(run);
+        this._firewallInspection = null;
+    }
+
+    async _inspectFirewall(kind, target) {
+        if (this._networkDestroyed || !this._networkDialog?.visible)
+            return;
+        this._cancelFirewallInspection();
+        const run = {proc: null, cancellable: new Gio.Cancellable(), generation: this._networkGeneration, timeout: null};
+        this._firewallInspection = run;
+        this._firewallRows.destroy_all_children();
+        const toolbar = new St.BoxLayout({style: 'spacing: 12px;'});
+        const button = (text, action) => {
+            const actor = new St.Button({label: text, reactive: true, can_focus: true, style: 'color: #82cfff; padding: 6px;'});
+            actor.connect('clicked', action);
+            toolbar.add_child(actor);
+        };
+        button('← Voltar', () => this._renderFirewall(this._firewallData));
+        button('Copiar endereço / porta', () => St.Clipboard.get_default().set_text(St.ClipboardType.CLIPBOARD, target));
+        this._firewallRows.add_child(toolbar);
+        const label = new St.Label({text: 'Consultando…', style: 'width: 680px; font-family: monospace; font-size: 12px; padding: 8px;'});
+        label.clutter_text.set_line_wrap(true);
+        label.clutter_text.set_ellipsize(Pango.EllipsizeMode.NONE);
+        this._firewallRows.add_child(label);
+        try {
+            const command = getData(this.widgetIndex, this.elementIndex, 'Text_Command');
+            const [, argv] = GLib.shell_parse_argv(command);
+            const flag = kind === 'dns' ? '--dns' : (kind === 'port' ? '--inspect-port' : '--inspect-ip');
+            run.proc = Gio.Subprocess.new(['/usr/bin/setsid', ...argv, flag, target], Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE);
+            run.timeout = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 15000, () => {
+                run.timeout = null;
+                run.timedOut = true;
+                stopCommandRun(run);
+                return GLib.SOURCE_REMOVE;
+            });
+            const [stdout, stderr] = await readCommandOutput(run);
+            if (this._firewallInspection !== run || run.cancelled || this._networkDestroyed || run.generation !== this._networkGeneration)
+                return;
+            if (!run.proc.get_successful() || !stdout.startsWith('AZCLOCK_FIREWALL:'))
+                throw new Error(stderr.trim().slice(0, 300) || 'Falha ao inspecionar.');
+            const data = JSON.parse(stdout.slice('AZCLOCK_FIREWALL:'.length));
+            if (typeof data.inspect !== 'string')
+                throw new Error('Resposta inválida.');
+            const escaped = GLib.markup_escape_text(data.inspect, -1);
+            const selected = GLib.markup_escape_text(target, -1);
+            const color = kind === 'port' ? '#ffd479' : (data.remote === true ? '#ff9e64' : '#82cfff');
+            label.clutter_text.set_markup(escaped.split(selected).join(`<span foreground="${color}">${selected}</span>`));
+            if (kind === 'ip') {
+                const notice = new St.Label({text: 'Consultas abaixo usam a rede e revelam o IP consultado ao provedor.', style: 'font-size: 12px; color: #ffd479;'});
+                notice.clutter_text.set_line_wrap(true);
+                this._firewallRows.add_child(notice);
+                button('Consultar DNS (rede)', () => this._inspectFirewall('dns', target));
+                if (data.remote === true)
+                    button('WHOIS / RDAP (externo)', () => {
+                        try {
+                            Gio.AppInfo.launch_default_for_uri(`https://rdap.org/ip/${encodeURIComponent(target)}`, null);
+                        } catch (error) {
+                            label.text = 'Não foi possível abrir a consulta externa.';
+                        }
+                    });
+            }
+        } catch (error) {
+            if (this._firewallInspection === run && !this._networkDestroyed && run.generation === this._networkGeneration)
+                label.text = run.timedOut ? 'Consulta demorou demais. Tente novamente.' : error.message;
+        } finally {
+            if (run.timeout)
+                GLib.source_remove(run.timeout);
+            if (this._firewallInspection === run)
+                this._firewallInspection = null;
         }
     }
 
