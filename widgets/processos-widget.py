@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import html
+import heapq
 import os
 import time
 from pathlib import Path
@@ -32,7 +33,7 @@ for pid, (name, ticks, birth) in second.items():
         continue
     cpu = max(0, ticks - first[pid][1]) / TICKS / elapsed * 100
     rows.append((cpu, pid, name))
-rows.sort(key=lambda row: (-row[0], row[1]))
+rows = heapq.nsmallest(7, rows, key=lambda row: (-row[0], row[1]))
 print('<span font_family="monospace">', end='')
 print('PROCESSO             CPU')
 for index, (cpu, pid, name) in enumerate(rows[:7]):

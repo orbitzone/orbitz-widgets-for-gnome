@@ -9,6 +9,15 @@ def interface():
         fields = line.split()
         if fields[1] == '00000000' and int(fields[3], 16) & 1:
             candidates.append((int(fields[6]), fields[0]))
+    if candidates:
+        return min(candidates)[1]
+    try:
+        for line in Path('/proc/net/ipv6_route').read_text().splitlines():
+            fields = line.split()
+            if len(fields) >= 10 and fields[0] == '0' * 32 and fields[1] == '00' and int(fields[8], 16) & 1 and fields[9] != 'lo':
+                candidates.append((int(fields[5], 16), fields[9]))
+    except OSError:
+        pass
     return min(candidates)[1] if candidates else None
 
 def counters(name):

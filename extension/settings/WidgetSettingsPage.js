@@ -123,7 +123,7 @@ var WidgetSettingsPage = GObject.registerClass({
         });
         deleteWidgetButton.connect('clicked', () => {
             const dialog = new Gtk.MessageDialog({
-                text: `<b>${_('Delete %s?').format(widgetData[0]['Name'])}</b>`,
+                text: `<b>${GLib.markup_escape_text(_('Delete %s?').format(widgetData[0]['Name']), -1)}</b>`,
                 secondary_text: _('Please confirm you wish to delete %s?').format(widgetData[0]['Name']),
                 use_markup: true,
                 buttons: Gtk.ButtonsType.YES_NO,
@@ -164,7 +164,7 @@ var WidgetSettingsPage = GObject.registerClass({
 
             const name = WidgetsData.data[this.widget_index][elementIndex]['Name'];
             const dialog = new Gtk.MessageDialog({
-                text: `<b>${_('Delete %s?').format(name)}</b>`,
+                text: `<b>${GLib.markup_escape_text(_('Delete %s?').format(name), -1)}</b>`,
                 secondary_text: _('Please confirm you wish to delete this element from %s.').format(name),
                 use_markup: true,
                 buttons: Gtk.ButtonsType.YES_NO,
@@ -341,7 +341,7 @@ class AzClockAddElementsDialog extends DialogWindow {
 
         for (let i = 0; i < data.length; i++) {
             for (let j = 1; j < data[i].length; j++)
-                this.cloneGroup.add(this.addPresetElement(`${data[i][j]['Name']} <span font-size='small'><i>(${data[i][0]['Name']})</i></span>`, data[i][j]));
+                this.cloneGroup.add(this.addPresetElement(`${GLib.markup_escape_text(data[i][j]['Name'], -1)} <span font-size='small'><i>(${GLib.markup_escape_text(data[i][0]['Name'], -1)})</i></span>`, data[i][j]));
         }
     }
 

@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import re
 import subprocess
+from widget_runtime import run as bounded_run
 import sys
 import tempfile
 
@@ -20,6 +21,8 @@ def parse(lines):
     for line in lines:
         try:
             item = json.loads(line)
+            if not isinstance(item, dict):
+                continue
             message = item.get('MESSAGE', '')
             if not isinstance(message, str) or not re.search(r'\[UFW (?:BLOCK|REJECT)\]', message):
                 continue
@@ -69,12 +72,12 @@ def cached():
         data = json.loads(raw)
         if not isinstance(data, dict) or type(data.get('count')) is not int or data['count'] < 0:
             raise ValueError()
-        return {'text': f"Eventos bloqueados: {data['count']}"}
+        return {'text': f"Eventos bloqueados: {data['count']}", 'updated': str(data.get('updated', 'Atualização manual pendente'))[:80]}
     except (OSError, ValueError, TypeError):
         return {'text': 'Eventos bloqueados: —'}
 
 def read_logs():
-    result = subprocess.run(['journalctl', '-k', '--since', '24 hours ago', '-n', '2000', r'--grep=\[UFW (BLOCK|REJECT)\]', '-o', 'json', '--no-pager', '-q'], capture_output=True, text=True, timeout=10)
+    result = bounded_run(['journalctl', '-k', '--since', '24 hours ago', '-n', '2000', r'--grep=\[UFW (BLOCK|REJECT)\]', '-o', 'json', '--no-pager', '-q'], capture_output=True, text=True, timeout=10, limit=2097152)
     if result.returncode != 0 or 'not seeing messages' in result.stderr.lower() or 'permission denied' in result.stderr.lower():
         raise RuntimeError('Sem acesso aos logs do kernel.')
     return result.stdout.splitlines()
@@ -88,6 +91,8 @@ def inspect_target(kind, target):
     for line in read_logs():
         try:
             entry = json.loads(line)
+            if not isinstance(entry, dict):
+                continue
             message = entry.get('MESSAGE', '')
             fields = dict(re.findall(r'\b([A-Z]+)=([^\s]*)', message))
             if (kind == 'ip' and target in (fields.get('SRC'), fields.get('DST'))) or (kind == 'port' and fields.get('DPT') == target):
@@ -114,7 +119,7 @@ def inspect_target(kind, target):
     if kind == 'port':
         services = {'22': 'SSH', '53': 'DNS', '80': 'HTTP', '443': 'HTTPS', '3000': 'Servidor de desenvolvimento (uso frequente)', '5432': 'PostgreSQL', '3306': 'MySQL', '6379': 'Redis', '9443': 'HTTPS / Portainer (uso frequente)'}
         text.append('Serviço usual: ' + services.get(target, 'Não identificado') + ' — a porta não comprova o serviço.')
-        result = subprocess.run(['ss', '-H', '-ltnup'], capture_output=True, text=True, timeout=3)
+        result = bounded_run(['ss', '-H', '-ltnup'], capture_output=True, text=True, timeout=3)
         listeners = []
         for line in result.stdout.splitlines():
             fields = line.split()
@@ -130,7 +135,7 @@ def main():
         data = inspect_target('ip' if flag == '--inspect-ip' else 'port', sys.argv[sys.argv.index(flag) + 1])
     elif '--dns' in sys.argv:
         target = str(ipaddress.ip_address(sys.argv[sys.argv.index('--dns') + 1]))
-        result = subprocess.run(['getent', 'hosts', target], capture_output=True, text=True, timeout=5)
+        result = bounded_run(['getent', 'hosts', target], capture_output=True, text=True, timeout=5)
         data = {'inspect': 'DNS reverso: ' + target + '\n' + (result.stdout[:4096].strip() or 'Sem nome retornado pelo resolvedor.') + '\nUm nome DNS não comprova a identidade da origem.'}
     elif '--details' not in sys.argv:
         data = cached()

@@ -8,7 +8,7 @@ const _ = Gettext.gettext;
 const PAYPAL_LINK = `https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=53CWA7NR743WC&item_name=Support+${Me.metadata.name}&source=url`;
 const PROJECT_DESCRIPTION = _('Add a clock to the desktop!');
 const PROJECT_IMAGE = 'azclock-logo';
-const SCHEMA_PATH = '/org/gnome/shell/extensions/azclock/';
+const SettingsImport = Me.imports.settings.SettingsImport;
 
 var AboutPage = GObject.registerClass(
 class AzClockAboutPage extends Adw.PreferencesPage {
@@ -131,25 +131,9 @@ class AzClockAboutPage extends Adw.PreferencesPage {
                 {action: Gtk.FileChooserAction.OPEN},
                 '_Open',
                 filename => {
-                    if (filename && GLib.file_test(filename, GLib.FileTest.EXISTS)) {
-                        const settingsFile = Gio.File.new_for_path(filename);
-                        // eslint-disable-next-line prefer-const
-                        let [success_, pid_, stdin, stdout, stderr] =
-                            GLib.spawn_async_with_pipes(
-                                null,
-                                ['dconf', 'load', SCHEMA_PATH],
-                                null,
-                                GLib.SpawnFlags.SEARCH_PATH | GLib.SpawnFlags.DO_NOT_REAP_CHILD,
-                                null
-                            );
+                    if (filename)
+                        this._importSettings(filename);
 
-                        stdin = new Gio.UnixOutputStream({fd: stdin, close_fd: true});
-                        GLib.close(stdout);
-                        GLib.close(stderr);
-
-                        stdin.splice(settingsFile.read(null),
-                            Gio.OutputStreamSpliceFlags.CLOSE_SOURCE | Gio.OutputStreamSpliceFlags.CLOSE_TARGET, null);
-                    }
                 }
             );
         });
@@ -163,12 +147,17 @@ class AzClockAboutPage extends Adw.PreferencesPage {
                 {action: Gtk.FileChooserAction.SAVE},
                 '_Save',
                 filename => {
-                    const file = Gio.file_new_for_path(filename);
-                    const raw = file.replace(null, false, Gio.FileCreateFlags.NONE, null);
-                    const out = Gio.BufferedOutputStream.new_sized(raw, 4096);
+                    if (!filename)
+                        return;
+                    const settings = ExtensionUtils.getSettings();
+                    const values = {};
+                    for (const key of settings.settings_schema.list_keys())
+                        if (key !== 'changed-data')
+                            values[key] = settings.get_value(key).print(true);
+                    const content = JSON.stringify({format: 'orbitz-settings-v1', values}, null, 2);
+                    Gio.File.new_for_path(filename).replace_contents(new TextEncoder().encode(content), null, false,
+                        Gio.FileCreateFlags.PRIVATE, null);
 
-                    out.write_all(GLib.spawn_command_line_sync(`dconf dump ${SCHEMA_PATH}`)[1], null);
-                    out.close(null);
                 }
             );
         });
@@ -192,6 +181,47 @@ class AzClockAboutPage extends Adw.PreferencesPage {
         gnuSofwareLabelBox.append(gnuSofwareLabel);
         gnuSoftwareGroup.add(gnuSofwareLabelBox);
         this.add(gnuSoftwareGroup);
+    }
+
+    _showError(message) {
+        const dialog = new Gtk.MessageDialog({transient_for: this.get_root(), modal: true,
+            message_type: Gtk.MessageType.ERROR, buttons: Gtk.ButtonsType.CLOSE,
+            text: 'Não foi possível concluir a operação.', secondary_text: String(message).slice(0, 2048)});
+        dialog.connect('response', () => dialog.destroy());
+        dialog.present();
+    }
+
+    _importSettings(filename) {
+        try {
+            const settings = ExtensionUtils.getSettings();
+            const prepared = SettingsImport.parse(SettingsImport.read(filename), settings);
+            const dialog = new Gtk.MessageDialog({transient_for: this.get_root(), modal: true,
+                message_type: Gtk.MessageType.QUESTION, buttons: Gtk.ButtonsType.NONE,
+                text: 'Importar widgets e ativar estes comandos?'});
+            dialog.add_button('Cancelar', Gtk.ResponseType.CANCEL);
+            dialog.add_button('Importar', Gtk.ResponseType.ACCEPT);
+            const scroll = new Gtk.ScrolledWindow({min_content_width: 550, min_content_height: 220});
+            const label = new Gtk.Label({label: prepared.commands.join('\n\n') || 'Nenhum comando.',
+                wrap: true, selectable: true, xalign: 0});
+            scroll.set_child(label);
+            dialog.get_message_area().append(scroll);
+            dialog.connect('response', (_dialog, response) => {
+                if (response === Gtk.ResponseType.ACCEPT) {
+                    try {
+                        const transaction = new Gio.Settings({settings_schema: settings.settings_schema});
+                        transaction.delay();
+                        for (const [key, value] of Object.entries(prepared.values))
+                            if (!transaction.set_value(key, value))
+                                throw new Error('Falha de gravação: ' + key);
+                        transaction.set_value('changed-data', new GLib.Variant('a{ss}', {}));
+                        transaction.apply();
+                        Gio.Settings.sync();
+                    } catch (error) { this._showError(error.message); }
+                }
+                dialog.destroy();
+            });
+            dialog.present();
+        } catch (error) { this._showError(error.message); }
     }
 
     _createLinkRow(title, uri) {
@@ -226,7 +256,7 @@ class AzClockAboutPage extends Adw.PreferencesPage {
                 try {
                     acceptHandler(dialog.get_file().get_path());
                 } catch (e) {
-                    log(`DesktopClock - Filechooser error: ${e}`);
+                    this._showError(e.message);
                 }
             }
             dialog.destroy();

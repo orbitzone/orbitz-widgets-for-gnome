@@ -9,7 +9,7 @@ from pathlib import Path
 from urllib.parse import urlencode
 from urllib.request import urlopen
 
-CACHE = Path(os.environ.get('XDG_CACHE_HOME', Path.home() / '.cache')) / 'orbitz-widgets' / 'clima-brasilia.json'
+CACHE = Path(__file__).resolve().parent.parent / 'work' / 'clima-brasilia.json'
 PARAMS = {
     'latitude': -15.7939, 'longitude': -47.8828,
     'current': 'temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,is_day',

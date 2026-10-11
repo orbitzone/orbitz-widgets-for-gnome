@@ -40,7 +40,15 @@ class AzClockCommandLabelSubPage extends TextLabelSubPage {
         commandExpanderRow.add_row(commandRow);
         this.textGroupAdd(commandExpanderRow);
 
-        const pollingIntervalRow = this.createSpinRow(_('Polling Interval (ms)'), 'Text_PollingInterval', 250, 20000);
+        const pollingIntervalRow = this.createSpinRow(_('Polling Interval (ms)'), 'Text_PollingInterval', 250, 3600000);
         this.textGroupAdd(pollingIntervalRow);
+        const command = this.getClockElementData('Text_Command') || '';
+        if (command.startsWith('playerctl -p spotify,chromium metadata')) {
+            pollingIntervalRow.sensitive = false;
+            pollingIntervalRow.subtitle = 'Atualização por eventos de mídia';
+        } else if (command.includes('/firewall-widget.py')) {
+            pollingIntervalRow.sensitive = false;
+            pollingIntervalRow.subtitle = 'Atualização manual na modal';
+        }
     }
 });

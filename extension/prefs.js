@@ -101,7 +101,7 @@ class azClockHomePage extends Adw.PreferencesPage {
         const widgetSettings = widgetData[0];
         // Data for the widget is always the first element in array.
         const widgetRow = new WidgetRow(this, {
-            title: `<b>${widgetSettings['Name']}</b>`,
+            title: `<b>${GLib.markup_escape_text(widgetSettings['Name'], -1)}</b>`,
             widget_index: widgetIndex,
         });
         widgetRow.use_markup = true;
@@ -236,7 +236,7 @@ var WidgetRow = GObject.registerClass({
                 default_width: 900,
                 default_height: 700,
             });
-            widgetSettingsWindow.connect('notify::title', () => (this.title = `<b>${widgetSettingsWindow.title}</b>`));
+            widgetSettingsWindow.connect('notify::title', () => (this.title = `<b>${GLib.markup_escape_text(widgetSettingsWindow.title, -1)}</b>`));
             widgetSettingsWindow.present();
         });
 
@@ -293,7 +293,7 @@ class AzClockAddWidgetsDialog extends DialogWindow {
         this.page.add(this.cloneGroup);
 
         for (let i = 0; i < data.length; i++)
-            this.cloneGroup.add(this.addPresetWidget(`${data[i][0]['Name']}`, data[i]));
+            this.cloneGroup.add(this.addPresetWidget(GLib.markup_escape_text(data[i][0]['Name'], -1), data[i]));
     }
 
     addPresetWidget(title, widgetType, subtitle) {

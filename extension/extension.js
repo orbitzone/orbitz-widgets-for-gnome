@@ -18,25 +18,35 @@ Gio._promisify(Gio.Subprocess.prototype, 'communicate_utf8_async');
 Gio._promisify(Gio.Subprocess.prototype, 'wait_async');
 Gio._promisify(Gio.InputStream.prototype, 'read_bytes_async');
 Gio._promisify(Gio.OutputStream.prototype, 'write_all_async');
+Gio._promisify(Gio.DataInputStream.prototype, 'read_line_async');
 
 function stopCommandRun(run) {
     if (!run)
         return;
     run.cancelled = true;
-    if (run.proc) {
-        const pid = run.proc.get_identifier();
-        if (pid && /^\d+$/.test(pid)) {
-            try {
-                GLib.spawn_sync(null, ['/usr/bin/kill', '-KILL', '--', `-${pid}`],
-                    null, GLib.SpawnFlags.DEFAULT, null);
-            } catch (error) {
-                logError(error, 'Desktop Clock process group cleanup');
-            }
-        }
-        run.proc.force_exit();
-    }
     run.cancellable.cancel();
+    const proc = run.proc;
+    if (!proc)
+        return;
+    const pid = proc.get_identifier();
+    if (pid && /^\d+$/.test(pid)) {
+        try {
+            // Keep the parent alive until the group signal has been dispatched.
+            const killer = Gio.Subprocess.new(['/usr/bin/kill', '-KILL', '--', `-${pid}`],
+                Gio.SubprocessFlags.STDOUT_SILENCE | Gio.SubprocessFlags.STDERR_SILENCE);
+            killer.wait_async(null, (process, result) => {
+                try { process.wait_finish(result); }
+                catch (error) { logError(error, 'Desktop Clock process group cleanup'); }
+                proc.force_exit();
+            });
+            return;
+        } catch (error) {
+            logError(error, 'Desktop Clock process group cleanup');
+        }
+    }
+    proc.force_exit();
 }
+
 
 async function readCommandOutput(run, input = null) {
     let total = 0;
@@ -89,6 +99,129 @@ const COMMAND_LABEL = 'Command_Label';
 const WIDGET_DATA_INDEX = 0;
 
 let WIDGETDATA;
+const metricLabels = new Set();
+let metricProc = null;
+let metricCancellable = null;
+let metricGeneration = 0;
+let metricRestart = null;
+let metricWatchdog = null;
+let metricLastOutput = 0;
+function metricMode(command) {
+    try {
+        const [, args] = GLib.shell_parse_argv(command);
+        if (args.length !== 2 || !['python3', '/usr/bin/python3'].includes(args[0]))
+            return null;
+        return {'cpu-ram-widget.py': 'cpu', 'processos-widget.py': 'processes', 'rede-widget.py': 'network'}[GLib.path_get_basename(args[1])] || null;
+    } catch (error) { return null; }
+}
+function stopMetrics() {
+    metricGeneration++;
+    if (metricProc) {
+        stopCommandRun({proc: metricProc, cancellable: metricCancellable});
+        metricProc = null;
+        metricCancellable = null;
+    }
+    if (metricWatchdog) {
+        GLib.source_remove(metricWatchdog);
+        metricWatchdog = null;
+    }
+}
+function scheduleMetrics() {
+    if (metricRestart)
+        return;
+    metricRestart = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 100, () => {
+        metricRestart = null;
+        startMetrics();
+        return GLib.SOURCE_REMOVE;
+    });
+}
+async function startMetrics() {
+    stopMetrics();
+    if (!metricLabels.size)
+        return;
+    const generation = metricGeneration;
+    const jobs = new Map();
+    let path;
+    for (const label of metricLabels) {
+        const command = getData(label.widgetIndex, label.elementIndex, 'Text_Command');
+        const mode = metricMode(command);
+        if (!mode)
+            continue;
+        const [, args] = GLib.shell_parse_argv(command);
+        path = path || GLib.build_filenamev([GLib.path_get_dirname(args[1]), 'metrics-worker.py']);
+        const interval = Math.max(2000, Math.min(3600000, Number(getData(label.widgetIndex, label.elementIndex, 'Text_PollingInterval')) || 12000)) / 1000;
+        jobs.set(mode, Math.min(jobs.get(mode) || interval, interval));
+    }
+    if (!jobs.size)
+        return;
+    try {
+        metricCancellable = new Gio.Cancellable();
+        metricProc = Gio.Subprocess.new(['/usr/bin/setsid', 'python3', path, ...Array.from(jobs, ([mode, interval]) => `${mode}:${interval}`)],
+            Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_SILENCE);
+        const proc = metricProc;
+        const cancellable = metricCancellable;
+        const stream = new Gio.DataInputStream({base_stream: proc.get_stdout_pipe()});
+        metricLastOutput = GLib.get_monotonic_time();
+        metricWatchdog = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 5000, () => {
+            const longest = 35;
+            if ((GLib.get_monotonic_time() - metricLastOutput) / 1000000 > longest) {
+                stopMetrics();
+                scheduleMetrics();
+                return GLib.SOURCE_REMOVE;
+            }
+            return GLib.SOURCE_CONTINUE;
+        });
+        while (generation === metricGeneration) {
+            const [bytes] = await stream.read_line_async(GLib.PRIORITY_DEFAULT, cancellable);
+            if (!bytes)
+                throw new Error('Coletor de métricas encerrou.');
+            if (bytes.length > 16384)
+                throw new Error('Resposta de métricas excedida.');
+            const data = JSON.parse(new TextDecoder().decode(bytes));
+            if (!['cpu', 'processes', 'network', 'heartbeat'].includes(data.mode) || typeof data.text !== 'string' || data.text.length > 8192)
+                throw new Error('Resposta de métricas inválida.');
+            metricLastOutput = GLib.get_monotonic_time();
+            if (generation !== metricGeneration)
+                break;
+            for (const label of metricLabels) {
+                if (!label._networkDestroyed && metricMode(getData(label.widgetIndex, label.elementIndex, 'Text_Command')) === data.mode && label.text !== data.text) {
+                    label.text = data.text;
+                    label.clutter_text.set_markup(data.text);
+                }
+            }
+        }
+    } catch (error) {
+        if (generation === metricGeneration) {
+            stopMetrics();
+            for (const label of metricLabels)
+                if (!label._networkDestroyed)
+                    label._setErrorState();
+            if (metricLabels.size && !metricRestart)
+                metricRestart = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 5000, () => {
+                    metricRestart = null;
+                    startMetrics();
+                    return GLib.SOURCE_REMOVE;
+                });
+        }
+    }
+}
+
+const networkClickLabels = new Set();
+let networkClickTimer = null;
+function scheduleNetworkClicks(delay = 250) {
+    if (networkClickTimer || !networkClickLabels.size)
+        return;
+    networkClickTimer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, delay, () => {
+        networkClickTimer = null;
+        let active = false;
+        const pointer = global.get_pointer();
+        for (const label of networkClickLabels)
+            active = label._checkNetworkClick(pointer) || active;
+        scheduleNetworkClicks(active ? 25 : 250);
+        return GLib.SOURCE_REMOVE;
+    });
+}
+
 
 const AnchorPoint = {
     TOP_LEFT: 0,
@@ -296,6 +429,8 @@ class AzClockDesktopWidget extends St.Widget {
         if (delay !== 300)
             priority = GLib.PRIORITY_DEFAULT;
 
+        if (this._updateClockId || !WIDGETDATA.some(widget => widget.some(element => [DIGITAL_CLOCK, ANALOG_CLOCK].includes(element.Element_Type))))
+            return;
         this._updateClockId = GLib.timeout_add(priority, delay, () => {
             this.setStyle();
             this.setElementsStyle();
@@ -771,7 +906,10 @@ class AzClockDigitalClock extends Label {
         const elementDate = getClockDate(this.widgetIndex, this.elementIndex, date);
 
         if (dateFormat) {
-            this.text = elementDate.toLocaleFormat(dateFormat);
+            const next = elementDate.toLocaleFormat(dateFormat);
+            if (this.text === next)
+                return;
+            this.text = next;
             this.clutter_text.set_markup(this.text);
         }
 
@@ -825,6 +963,20 @@ class AzClockCommandLabel extends Label {
         this._networkClickStart = null;
         this.connect('destroy', () => {
             this._networkDestroyed = true;
+            metricLabels.delete(this);
+            if (!metricLabels.size) {
+                stopMetrics();
+                if (metricRestart) {
+                    GLib.source_remove(metricRestart);
+                    metricRestart = null;
+                }
+            } else { scheduleMetrics(); }
+            networkClickLabels.delete(this);
+            if (!networkClickLabels.size && networkClickTimer) {
+                GLib.source_remove(networkClickTimer);
+                networkClickTimer = null;
+            }
+            this._stopMedia();
             this._pendingCommand = null;
             this._cancelCommand();
             if (this._speedtestTimeout) {
@@ -853,37 +1005,37 @@ class AzClockCommandLabel extends Label {
         });
     }
 
-    _scheduleNetworkClick(delay = 250) {
-        if (this._networkDestroyed || this._networkClickTimer)
+    _scheduleNetworkClick() {
+        if (this._networkDestroyed)
             return;
-        this._networkClickTimer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, delay, () => {
-            this._networkClickTimer = null;
-            if (this._networkDestroyed)
-                return GLib.SOURCE_REMOVE;
-            const [px, py, modifiers] = global.get_pointer();
-            const [x, y] = this.get_transformed_position();
-            const [w, h] = this.get_transformed_size();
-            const inside = px >= x && px < x + w && py >= y && py < y + h;
-            const down = !!(modifiers & Clutter.ModifierType.BUTTON1_MASK);
-            if (down && !this._networkClickHeld)
-                this._networkClickStart = inside && !this._networkDialog?.visible ? [px, py] : null;
-            if (!down && this._networkClickHeld && inside && this._networkClickStart) {
-                const [sx, sy] = this._networkClickStart;
-                if (Math.abs(px - sx) < 8 && Math.abs(py - sy) < 8) {
-                    try {
-                        this._openNetworkDialog();
-                    } catch (error) {
-                        logError(error, 'Desktop Clock network click');
-                    }
+        networkClickLabels.add(this);
+        scheduleNetworkClicks();
+    }
+
+    _checkNetworkClick(pointer) {
+        if (this._networkDestroyed)
+            return false;
+        const [px, py, modifiers] = pointer;
+        const [x, y] = this.get_transformed_position();
+        const [w, h] = this.get_transformed_size();
+        const inside = px >= x && px < x + w && py >= y && py < y + h;
+        const down = !!(modifiers & Clutter.ModifierType.BUTTON1_MASK);
+        if (down && !this._networkClickHeld)
+            this._networkClickStart = inside && !this._networkDialog?.visible ? [px, py] : null;
+        if (!down && this._networkClickHeld && inside && this._networkClickStart) {
+            const [sx, sy] = this._networkClickStart;
+            if (Math.abs(px - sx) < 8 && Math.abs(py - sy) < 8) {
+                try {
+                this._openNetworkDialog();
+                } catch (error) {
+                logError(error, 'Desktop Clock network click');
                 }
             }
-            this._networkClickHeld = down;
-            if (!down)
-                this._networkClickStart = null;
-            // Only detect the widget click; never collect or render modal data here.
-            this._scheduleNetworkClick(inside && !this._networkDialog?.visible ? 25 : 250);
-            return GLib.SOURCE_REMOVE;
-        });
+        }
+        this._networkClickHeld = down;
+        if (!down)
+            this._networkClickStart = null;
+        return inside && !this._networkDialog?.visible;
     }
 
     _closeNetworkDialog() {
@@ -916,7 +1068,7 @@ class AzClockCommandLabel extends Label {
         const run = {generation: this._networkGeneration, cancellable: new Gio.Cancellable(), proc: null};
         this._networkRefreshRun = run;
         this._networkRefreshButton.reactive = false;
-        this._networkRefreshButton.accessible_name = this._firewallRows ? 'Atualizando eventos do firewall' : 'Atualizando conexões e portas';
+        this._networkRefreshButton.accessible_name = this._dockerRows ? 'Atualizando serviços Docker' : this._firewallRows ? 'Atualizando eventos do firewall' : 'Atualizando conexões e portas';
         this._networkRefreshStatus.text = '';
         let proc;
         try {
@@ -933,6 +1085,16 @@ class AzClockCommandLabel extends Label {
             const [stdout] = await readCommandOutput(run);
             if (this._networkDestroyed || run.cancelled || run.generation !== this._networkGeneration || !this._networkDialog.visible)
                 return;
+            if (command.includes('/docker-widget.py')) {
+                if (!proc.get_successful() || !stdout.startsWith('AZCLOCK_DOCKER:'))
+                    throw new Error('Não foi possível consultar o Docker.');
+                const data = JSON.parse(stdout.slice('AZCLOCK_DOCKER:'.length));
+                this._renderDocker(data);
+                this.text = data.text;
+                this.clutter_text.set_markup(GLib.markup_escape_text(data.text, -1));
+                this._networkRefreshStatus.text = data.error || ('Atualizado às ' + GLib.DateTime.new_now_local().format('%H:%M'));
+                return;
+            }
             if (command.includes('/firewall-widget.py')) {
                 if (!proc.get_successful() || !stdout.startsWith('AZCLOCK_FIREWALL:'))
                     throw new Error('Sem acesso aos logs ou falha na coleta.');
@@ -946,12 +1108,14 @@ class AzClockCommandLabel extends Label {
             if (!proc.get_successful() || !stdout.startsWith('AZCLOCK_NETWORK:'))
                 throw new Error('Não foi possível atualizar. Tente novamente.');
             const payload = JSON.parse(stdout.slice('AZCLOCK_NETWORK:'.length));
-            if (typeof payload.tooltip !== 'string' || !Array.isArray(payload.connection_items) ||
+            if (typeof payload.tooltip !== 'string' || payload.tooltip.length > 8192 || !Array.isArray(payload.connection_items) || payload.connection_items.length > 200 ||
                 payload.connection_items.some(item => !item || typeof item.ip !== 'string' || typeof item.port !== 'string' ||
-                    typeof item.hostname !== 'string' || typeof item.display !== 'string'))
+                    typeof item.hostname !== 'string' || typeof item.display !== 'string' || item.hostname.length > 253 || item.display.length > 253 ||
+                    item.ip.length > 64 || !/^\d{1,5}$/.test(item.port) || Number(item.port) < 1 || Number(item.port) > 65535))
                 throw new Error('Resposta inválida.');
             this._networkTooltipText = payload.tooltip || 'Nenhuma porta escutando';
             this._networkConnectionItems = payload.connection_items || [];
+            this._networkConnectionOmitted = Number.isInteger(payload.omitted) && payload.omitted > 0 ? payload.omitted : 0;
             this._updateNetworkTooltip();
             this._networkRefreshStatus.text = 'Atualizado às ' + GLib.DateTime.new_now_local().format('%H:%M');
         } catch (error) {
@@ -968,10 +1132,76 @@ class AzClockCommandLabel extends Label {
             this._networkRefreshPending = false;
             if (!this._networkDestroyed) {
                 this._networkRefreshButton.reactive = true;
-                this._networkRefreshButton.accessible_name = this._firewallRows ? 'Atualizar eventos do firewall' : 'Atualizar conexões e portas';
+                this._networkRefreshButton.accessible_name = this._dockerRows ? 'Atualizar serviços Docker' : this._firewallRows ? 'Atualizar eventos do firewall' : 'Atualizar conexões e portas';
                 if (pending && this._networkDialog?.visible)
                     this._refreshNetworkDialog();
             }
+        }
+    }
+
+    _buildDockerDialog() {
+        this._networkBackdrop = new St.Widget({reactive: true, visible: false});
+        this._networkBackdrop.add_constraint(new Clutter.BindConstraint({source: global.stage, coordinate: Clutter.BindCoordinate.ALL}));
+        this._networkBackdrop.connect('button-press-event', () => {
+            this._closeNetworkDialog();
+            return Clutter.EVENT_STOP;
+        });
+        Main.uiGroup.add_child(this._networkBackdrop);
+        this._networkDialog = new St.BoxLayout({vertical: true, reactive: true,
+            style: 'background-color: #202020; color: white; border: 1px solid #606060; border-radius: 8px; padding: 12px; spacing: 10px;'});
+        this._dockerHeading = new St.Label({text: 'Docker · serviços em execução', style: 'font-weight: bold; font-size: 18px;'});
+        this._networkDialog.add_child(this._dockerHeading);
+        const note = new St.Label({text: 'Clique no serviço para abrir a porta TCP publicada. Portas sem HTTP podem não abrir uma página.', style: 'font-size: 12px; color: #c8c8c8;'});
+        note.clutter_text.set_line_wrap(true);
+        this._networkDialog.add_child(note);
+        const scroll = new St.ScrollView({style: 'width: 720px; height: 300px;', reactive: true});
+        scroll.set_policy(St.PolicyType.NEVER, St.PolicyType.AUTOMATIC);
+        this._dockerRows = new St.BoxLayout({vertical: true, style: 'spacing: 8px;'});
+        scroll.add_actor(this._dockerRows);
+        this._networkDialog.add_child(scroll);
+        const footer = new St.BoxLayout({style: 'spacing: 8px;'});
+        this._networkRefreshButton = new St.Button({reactive: true, can_focus: true, accessible_name: 'Atualizar serviços Docker', style: 'background-color: transparent; color: white; padding: 6px;'});
+        this._networkRefreshButton.set_child(new St.Icon({icon_name: 'view-refresh-symbolic', icon_size: 18, style: 'color: white;'}));
+        this._networkRefreshButton.connect('clicked', () => this._refreshNetworkDialog());
+        footer.add_child(this._networkRefreshButton);
+        this._networkRefreshStatus = new St.Label({text: '', style: 'font-size: 12px; color: #c8c8c8;'});
+        footer.add_child(this._networkRefreshStatus);
+        this._networkDialog.add_child(footer);
+        Main.uiGroup.add_child(this._networkDialog);
+    }
+
+    _validDockerUrl(url) {
+        try {
+            const uri = GLib.Uri.parse(url, GLib.UriFlags.NONE);
+            return ['http', 'https'].includes(uri.get_scheme()) && !!uri.get_host() &&
+                !uri.get_userinfo() && uri.get_port() >= 1 && uri.get_port() <= 65535 &&
+                !uri.get_query() && !uri.get_fragment();
+        } catch (error) { return false; }
+    }
+
+    _renderDocker(data) {
+        if (typeof data.text !== 'string' || data.text.length > 128 || !Array.isArray(data.items) || data.items.length > 100 ||
+            data.items.some(item => !item || !['name', 'ports', 'url'].every(key => typeof item[key] === 'string') ||
+                item.name.length > 128 || item.ports.length > 256 || item.url.length > 512 ||
+                (item.url && !this._validDockerUrl(item.url))))
+            throw new Error('Resposta Docker inválida.');
+        this._dockerHeading.text = 'Docker · ' + data.text;
+        this._dockerRows.destroy_all_children();
+        if (!data.items.length)
+            this._dockerRows.add_child(new St.Label({text: data.error || 'Nenhum contêiner em execução.', style: 'padding: 8px;'}));
+        if (Number.isInteger(data.omitted) && data.omitted > 0)
+            this._dockerRows.add_child(new St.Label({text: `${data.omitted} entradas adicionais; consulte o Docker para a lista completa.`}));
+        for (const item of data.items) {
+            const row = new St.BoxLayout({style: 'spacing: 12px; padding: 8px;'});
+            const service = new St.Button({label: item.name, reactive: !!item.url, can_focus: !!item.url,
+                style: 'color: #82cfff;', accessible_name: item.url ? `Abrir ${item.name}: ${item.url}` : item.name});
+            service.connect('clicked', () => {
+                try { Gio.AppInfo.launch_default_for_uri(item.url, null); }
+                catch (error) { this._networkRefreshStatus.text = 'Não foi possível abrir o navegador.'; }
+            });
+            row.add_child(service);
+            row.add_child(new St.Label({text: item.ports, style: 'color: #ffd479;'}));
+            this._dockerRows.add_child(row);
         }
     }
 
@@ -1122,7 +1352,7 @@ class AzClockCommandLabel extends Label {
                 if (data.remote === true)
                     button('WHOIS / RDAP (externo)', () => {
                         try {
-                            Gio.AppInfo.launch_default_for_uri(`https://rdap.org/ip/${encodeURIComponent(target)}`, null);
+                            Gio.AppInfo.launch_default_for_uri(`https://rdap.org/ip/${encodeURIComponent(target).replace(/%3A/gi, ':')}`, null);
                         } catch (error) {
                             label.text = 'Não foi possível abrir a consulta externa.';
                         }
@@ -1147,6 +1377,8 @@ class AzClockCommandLabel extends Label {
             return;
         }
         const firewall = getData(this.widgetIndex, this.elementIndex, 'Text_Command').includes('/firewall-widget.py');
+        if (getData(this.widgetIndex, this.elementIndex, 'Text_Command').includes('/docker-widget.py') && !this._networkDialog)
+            this._buildDockerDialog();
         if (firewall && !this._networkDialog)
             this._buildFirewallDialog();
         if (!this._networkDialog) {
@@ -1313,7 +1545,7 @@ class AzClockCommandLabel extends Label {
         if (!this._networkDestroyed && this._networkDialogLabel) {
             this._networkDialogLabel.text = this._networkTooltipText;
             if (this._networkConnectionsBox) {
-                const signature = JSON.stringify(this._networkConnectionItems);
+                const signature = JSON.stringify([this._networkConnectionItems, this._networkConnectionOmitted || 0]);
                 if (signature !== this._networkConnectionSignature) {
                     this._networkConnectionSignature = signature;
                     this._networkConnectionsBox.destroy_all_children();
@@ -1335,6 +1567,8 @@ class AzClockCommandLabel extends Label {
                         row.add_child(new St.Label({text: String(item.port), style: 'color: #ffd479;'}));
                         this._networkConnectionsBox.add_child(row);
                     }
+                    if (this._networkConnectionOmitted)
+                        this._networkConnectionsBox.add_child(new St.Label({text: `${this._networkConnectionOmitted} conexões adicionais omitidas.`, style: 'padding: 6px;'}));
                     if (!this._networkConnectionItems.length)
                         this._networkConnectionsBox.add_child(new St.Label({text: 'Nenhuma conexão externa', style: 'padding: 6px;'}));
                 }
@@ -1357,12 +1591,12 @@ class AzClockCommandLabel extends Label {
 
     _startPollingInterval() {
         const command = getData(this.widgetIndex, this.elementIndex, 'Text_Command');
-        if (command.includes('/firewall-widget.py'))
+        if (metricMode(command) || command.includes('/firewall-widget.py') || command.startsWith('playerctl -p spotify,chromium metadata'))
             return;
         const interval = command.includes('/clima-widget.py')
             ? 300000
             : Math.max(getData(this.widgetIndex, this.elementIndex, 'Text_PollingInterval'), 250);
-        this._pollingIntervalId = GLib.timeout_add(GLib.PRIORITY_HIGH, interval, () => {
+        this._pollingIntervalId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, interval, () => {
             this._executeCommand();
             return GLib.SOURCE_CONTINUE;
         });
@@ -1375,8 +1609,152 @@ class AzClockCommandLabel extends Label {
         }
     }
 
+    setStyle() {
+        super.setStyle();
+        if (this._mediaRow) {
+            this._mediaRow.x_align = this.x_align;
+            this._mediaRow.y_align = this.y_align;
+        }
+    }
+
+    _setMediaIcon(player) {
+        if (!player) {
+            this._mediaIcon?.hide();
+            return;
+        }
+        if (!this._mediaRow) {
+            const parent = this.get_parent();
+            if (!parent)
+                return;
+            const index = parent.get_children().indexOf(this);
+            const row = new St.BoxLayout({vertical: false, x_align: this.x_align, y_align: this.y_align,
+                style: 'spacing: 6px;'});
+            parent.remove_child(this);
+            row.add_child(this);
+            this._mediaIcon = new St.Icon({icon_size: 16, y_align: Clutter.ActorAlign.CENTER,
+                style: 'icon-size: 16px;', visible: false});
+            row.add_child(this._mediaIcon);
+            parent.insert_child_at_index(row, index);
+            this._mediaRow = row;
+        }
+        const spotify = /^org\.mpris\.MediaPlayer2\.spotify(?:\.|$)/.test(player);
+        const filename = spotify ? 'spotify.svg' : 'chrome.svg';
+        if (this._mediaIconFile !== filename) {
+            this._mediaIcon.gicon = Gio.icon_new_for_string(GLib.build_filenamev([Me.path, 'media', 'players', filename]));
+            this._mediaIcon.accessible_name = spotify ? 'Spotify' : 'Google Chrome';
+            this._mediaIconFile = filename;
+        }
+        this._mediaIcon.show();
+    }
+
+    _stopMedia() {
+        this._mediaIcon?.hide();
+        this._mediaBusy = false;
+        this._mediaPending = false;
+        if (this._mediaTimer) {
+            GLib.source_remove(this._mediaTimer);
+            this._mediaTimer = null;
+        }
+        this._mediaGeneration = (this._mediaGeneration || 0) + 1;
+        for (const id of this._mediaSubscriptions || [])
+            Gio.DBus.session.signal_unsubscribe(id);
+        this._mediaSubscriptions = null;
+    }
+
+    _queueMedia() {
+        if (this._mediaTimer || this._networkDestroyed)
+            return;
+        this._mediaTimer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 100, () => {
+            this._mediaTimer = null;
+            this._refreshMedia();
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
+    _refreshMedia() {
+        if (this._mediaBusy) {
+            this._mediaPending = true;
+            return;
+        }
+        this._mediaBusy = true;
+        if (!this._mediaSubscriptions) {
+            this._mediaSubscriptions = [
+                Gio.DBus.session.signal_subscribe(null, 'org.freedesktop.DBus.Properties', 'PropertiesChanged',
+                    '/org/mpris/MediaPlayer2', null, Gio.DBusSignalFlags.NONE, () => this._queueMedia()),
+                Gio.DBus.session.signal_subscribe('org.freedesktop.DBus', 'org.freedesktop.DBus', 'NameOwnerChanged',
+                    '/org/freedesktop/DBus', null, Gio.DBusSignalFlags.NONE, (_c, _s, _p, _i, _m, args) => {
+                        if (args.deep_unpack()[0].startsWith('org.mpris.MediaPlayer2.'))
+                            this._queueMedia();
+                    }),
+            ];
+        }
+        const generation = this._mediaGeneration = (this._mediaGeneration || 0) + 1;
+        const call = (name, path, iface, method, params) => new Promise((resolve, reject) => {
+            Gio.DBus.session.call(name, path, iface, method, params, null, Gio.DBusCallFlags.NONE, 3000, null,
+                (connection, result) => {
+                    try { resolve(connection.call_finish(result)); } catch (error) { reject(error); }
+                });
+        });
+        (async () => {
+            let text = '\u200b';
+            let selectedPlayer = null;
+            let bestScore = -1;
+            try {
+                const names = (await call('org.freedesktop.DBus', '/org/freedesktop/DBus',
+                    'org.freedesktop.DBus', 'ListNames', null)).deep_unpack()[0];
+                const players = names.filter(name => /^org\.mpris\.MediaPlayer2\.(spotify|chromium|chrome)(\.|$)/.test(name))
+                    .sort((a, b) => Number(!a.includes('.spotify')) - Number(!b.includes('.spotify')));
+                for (const player of players) {
+                    try {
+                        const values = (await call(player, '/org/mpris/MediaPlayer2', 'org.freedesktop.DBus.Properties',
+                            'GetAll', new GLib.Variant('(s)', ['org.mpris.MediaPlayer2.Player']))).deep_unpack()[0];
+                        const status = values.PlaybackStatus?.deep_unpack();
+                        const metadata = values.Metadata?.deep_unpack() || {};
+                        const title = metadata['xesam:title']?.deep_unpack() || '';
+                        const artist = metadata['xesam:artist']?.deep_unpack() || [];
+                        const score = status === 'Playing' ? 2 : status === 'Paused' ? 1 : 0;
+                        if (score > bestScore) {
+                            bestScore = score;
+                            selectedPlayer = player;
+                            text = `${status === 'Playing' ? '▶️' : status === 'Paused' ? '⏸️' : '⏹️'}  ${Array.isArray(artist) ? artist.join(', ') : ''} — ${title}`.slice(0, 1024);
+                        }
+                        if (score === 2)
+                            break;
+                    } catch (error) { /* Player may disappear between discovery and read. */ }
+                }
+            } catch (error) { text = 'Mídia indisponível'; }
+            if (!this._networkDestroyed && generation === this._mediaGeneration) {
+                this.text = text;
+                this.clutter_text.set_text(text);
+                this._setMediaIcon(selectedPlayer);
+                this._mediaBusy = false;
+                if (this._mediaPending) {
+                    this._mediaPending = false;
+                    this._queueMedia();
+                }
+            }
+        })();
+    }
+
     _executeCommand() {
         const command = getData(this.widgetIndex, this.elementIndex, 'Text_Command');
+        if (metricMode(command)) {
+            this._cancelCommand();
+            if (this._mediaSubscriptions)
+                this._stopMedia();
+            metricLabels.add(this);
+            scheduleMetrics();
+            return;
+        }
+        if (metricLabels.delete(this))
+            scheduleMetrics();
+        if (command.startsWith('playerctl -p spotify,chromium metadata')) {
+            this._cancelCommand();
+            this._refreshMedia();
+            return;
+        }
+        if (this._mediaSubscriptions)
+            this._stopMedia();
         this._execCommand(command);
     }
 
@@ -1457,9 +1835,16 @@ class AzClockCommandLabel extends Label {
             }
 
             let displayText = response;
+            if (command.includes('/docker-widget.py') && response.startsWith('AZCLOCK_DOCKER:')) {
+                const payload = JSON.parse(response.slice('AZCLOCK_DOCKER:'.length));
+                displayText = payload.text;
+                this._scheduleNetworkClick();
+            }
+
             if (command.includes('/firewall-widget.py') && response.startsWith('AZCLOCK_FIREWALL:')) {
                 const payload = JSON.parse(response.slice('AZCLOCK_FIREWALL:'.length));
                 displayText = payload.text;
+                this.accessible_name = payload.text + ' · ' + (payload.updated || 'Atualização manual pendente');
                 this._scheduleNetworkClick();
             }
             if (command.includes('/seguranca-widget.py') && response.startsWith('AZCLOCK_NETWORK:')) {
@@ -1525,7 +1910,9 @@ class AzClock {
     }
 
     _startClockTimer() {
-        this._updateClockId = GLib.timeout_add(GLib.PRIORITY_HIGH, 1000, () => {
+        if (this._updateClockId || !WIDGETDATA.some(widget => widget.some(element => [DIGITAL_CLOCK, ANALOG_CLOCK].includes(element.Element_Type))))
+            return;
+        this._updateClockId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 1000, () => {
             for (const widget of this.widgets)
                 widget.updateClocks();
 
@@ -1560,7 +1947,7 @@ class AzClock {
         return widget;
     }
 
-    _createWidgets() {
+    _createWidgetsWithoutSignals() {
         this.widgets = [];
 
         for (let i = 0; i < WIDGETDATA.length; i++) {
@@ -1568,6 +1955,10 @@ class AzClock {
             this.widgets.push(widget);
         }
 
+    }
+
+    _createWidgets() {
+        this._createWidgetsWithoutSignals();
         Me.settings.connectObject('changed::widget-data', () => {
             if (this._dataChangedTimeoutId)
                 GLib.source_remove(this._dataChangedTimeoutId);
@@ -1607,23 +1998,24 @@ class AzClock {
 
     _widgetDataChangedEvent() {
         const changedData = Me.settings.get_value('changed-data').deep_unpack();
-        const widgetIndex = parseInt(changedData['WidgetIndex']);
-        const elementIndex_ = parseInt(changedData['ElementIndex']);
+        const widgetIndex = /^\d+$/.test(changedData['WidgetIndex'] || '') ? Number(changedData['WidgetIndex']) : NaN;
+        const elementIndex_ = /^\d+$/.test(changedData['ElementIndex'] || '') ? Number(changedData['ElementIndex']) : NaN;
         const elementType = changedData['ElementType'];
-        const widgetDeleted = changedData['WidgetDeleted'];
-        const widgetAdded = changedData['WidgetAdded'];
-        const elementDeleted = changedData['ElementDeleted'];
-        const elementAdded = changedData['ElementAdded'];
-        const widgetMoved = changedData['WidgetMoved'];
-        const widgetIndexChanged = changedData['WidgetIndexChanged'];
-        const widgetIndexNew = parseInt(changedData['WidgetIndexNew']);
-        const elementIndexChanged = changedData['ElementIndexChanged'];
+        const widgetDeleted = changedData['WidgetDeleted'] === 'true';
+        const widgetAdded = changedData['WidgetAdded'] === 'true';
+        const elementDeleted = changedData['ElementDeleted'] === 'true';
+        const elementAdded = changedData['ElementAdded'] === 'true';
+        const widgetMoved = changedData['WidgetMoved'] === 'true';
+        const widgetIndexChanged = changedData['WidgetIndexChanged'] === 'true';
+        const widgetIndexNew = /^\d+$/.test(changedData['WidgetIndexNew'] || '') ? Number(changedData['WidgetIndexNew']) : NaN;
+        const elementIndexChanged = changedData['ElementIndexChanged'] === 'true';
 
-        if (widgetIndex === undefined) {
+        if (!Number.isInteger(widgetIndex) || widgetIndex < 0 || widgetIndex > this.widgets.length || (widgetIndex === this.widgets.length && !widgetAdded) ||
+            (widgetIndexChanged && (!Number.isInteger(widgetIndexNew) || widgetIndexNew < 0 || widgetIndexNew >= this.widgets.length))) {
             debugLog('update all this.widgets');
 
-            for (const widget of this.widgets)
-                widget.updateComponents();
+            this._destroyWidgets();
+            this._createWidgetsWithoutSignals();
         } else if (widgetIndexChanged) {
             debugLog(`widget index changed from ${widgetIndex} to ${widgetIndexNew}`);
 
@@ -1650,6 +2042,9 @@ class AzClock {
             const oldWidget = this.widgets[widgetIndex];
             this.widgets[widgetIndex] = this._createWidget(widgetIndex, 0);
             oldWidget.destroy();
+        } else if (elementType && (!Number.isInteger(elementIndex_) || elementIndex_ < 0 || !WIDGETDATA[widgetIndex]?.[elementIndex_])) {
+            this.widgets[widgetIndex].createElements();
+            this.widgets[widgetIndex].updateComponents(0);
         } else if (elementDeleted || elementAdded || elementIndexChanged) {
             debugLog(`element added/deleted/index-changed at widget ${widgetIndex}`);
 
@@ -1661,6 +2056,8 @@ class AzClock {
             this.widgets[widgetIndex].updateComponents();
         }
 
+        this._removeClockTimer();
+        this._startClockTimer();
         Me.settings.set_value('changed-data', new GLib.Variant('a{ss}', {}));
     }
 }

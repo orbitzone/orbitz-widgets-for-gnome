@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import time
 import shutil
+from widget_runtime import load, save
 from pathlib import Path
 
 def cpu():
@@ -27,8 +28,11 @@ print('<span font_family="monospace">')
 print(f'CPU  {bar(usage)}  {usage:3.0f}%')
 print()
 print(f'RAM  {bar(ram)}  {ram:3.0f}%')
-disk = shutil.disk_usage(Path.home())
-ssd = disk.used / disk.total * 100
+ssd = load('disk-usage.json', 60)
+if type(ssd) not in (int, float) or not 0 <= ssd <= 100:
+    disk = shutil.disk_usage(Path.home())
+    ssd = disk.used / disk.total * 100
+    save('disk-usage.json', ssd)
 print()
 print(f'SSD  {bar(ssd)}  {ssd:3.0f}%')
 print('</span>')

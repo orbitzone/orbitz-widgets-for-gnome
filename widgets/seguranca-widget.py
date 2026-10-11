@@ -1,34 +1,40 @@
 #!/usr/bin/env python3
 """Contadores TCP; atividade de rede não implica invasão."""
-import html
 import sys
-import ctypes
 import time
 import math
 import os
 import tempfile
 import stat
 from pathlib import Path
-from concurrent.futures import ThreadPoolExecutor
 import json
 import ipaddress
 import subprocess
+from widget_runtime import run as bounded_run
+
+_PSL = None
 
 def display_hostname(name):
+    import ctypes
+    global _PSL
     if not name:
         return ''
     try:
-        psl = ctypes.CDLL('libpsl.so.5')
-        psl.psl_builtin.restype = ctypes.c_void_p
-        psl.psl_registrable_domain.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
-        psl.psl_registrable_domain.restype = ctypes.c_char_p
-        domain = psl.psl_registrable_domain(psl.psl_builtin(), name.rstrip('.').encode())
+        if _PSL is False:
+            return name.rstrip('.')
+        if _PSL is None:
+            _PSL = ctypes.CDLL('libpsl.so.5')
+            _PSL.psl_builtin.restype = ctypes.c_void_p
+            _PSL.psl_registrable_domain.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
+            _PSL.psl_registrable_domain.restype = ctypes.c_char_p
+        domain = _PSL.psl_registrable_domain(_PSL.psl_builtin(), name.rstrip('.').encode())
         return domain.decode() if domain else name.rstrip('.')
     except (OSError, AttributeError):
+        _PSL = False
         return name.rstrip('.')
 
 def sockets(state):
-    result = subprocess.run(['ss', '-Htn', 'state', state], capture_output=True,
+    result = bounded_run(['ss', '-Htn', 'state', state], capture_output=True,
                             text=True, timeout=4, check=True)
     return [line.split() for line in result.stdout.splitlines() if line.strip()]
 
@@ -37,7 +43,8 @@ def address(endpoint):
     return host.strip('[]'), port
 
 def hostnames(ips):
-    cache_path = Path(os.environ.get('XDG_CACHE_HOME', Path.home() / '.cache')) / 'orbitz-widgets' / 'network-hostnames.json'
+    from concurrent.futures import ThreadPoolExecutor
+    cache_path = Path(__file__).resolve().parent.parent / 'work' / 'network-hostnames.json'
     cache = {}
     try:
         fd = os.open(cache_path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
@@ -61,7 +68,7 @@ def hostnames(ips):
     pending = [ip for ip in sorted(ips) if now - cache.get(ip, {}).get('time', 0) > 3600][:16]
     def resolve(ip):
         try:
-            result = subprocess.run(['getent', 'hosts', ip], capture_output=True, text=True, timeout=0.5)
+            result = bounded_run(['getent', 'hosts', ip], capture_output=True, text=True, timeout=0.5)
             fields = result.stdout.split()
             return ip, fields[1][:253] if result.returncode == 0 and len(fields) > 1 else ''
         except (OSError, subprocess.SubprocessError):
@@ -122,22 +129,18 @@ try:
                 continue
         ports.add(port)
     if '--summary' in sys.argv:
-        text = f'Conexões externas: {external}\nPortas escutando: {len(ports)}'
+        text = f'Conexões externas: {external}\nEscutando portas: {len(ports)}'
         print('AZCLOCK_NETWORK:' + json.dumps({'text': text}, ensure_ascii=False))
         sys.exit(0)
     ordered = sorted(ports, key=int)
     details = '\n'.join(f'{port}/TCP' for port in ordered)
     tooltip = details or 'Nenhuma porta escutando'
     resolved = hostnames({ip for ip, port in peers})
-    connection_rows = []
     connection_items = []
-    for ip, port in sorted(peers):
+    for ip, port in sorted(peers)[:200]:
         name = resolved.get(ip)
         connection_items.append({'hostname': name or '', 'display': display_hostname(name), 'ip': ip, 'port': port})
-        name_part = f'<span foreground="#82cfff">{html.escape(name)}</span> ' if name else ''
-        connection_rows.append(name_part + f'<span foreground="#c8c8c8">({html.escape(ip)})</span> — <span foreground="#ffd479">{html.escape(port)}</span>')
-    connections = '\n'.join(connection_rows) or 'Nenhuma conexão externa'
-    text = f'Conexões externas: {external}\nPortas escutando: {len(ports)}'
-    print('AZCLOCK_NETWORK:' + json.dumps({'text': text, 'tooltip': tooltip, 'connections': connections, 'connection_items': connection_items}, ensure_ascii=False))
+    text = f'Conexões externas: {external}\nEscutando portas: {len(ports)}'
+    print('AZCLOCK_NETWORK:' + json.dumps({'text': text, 'tooltip': tooltip, 'connection_items': connection_items, 'omitted': max(0, len(peers) - 200)}, ensure_ascii=False))
 except (OSError, ValueError, subprocess.SubprocessError):
     print('Leitura indisponível')

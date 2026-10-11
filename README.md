@@ -4,7 +4,7 @@
 
 **Target platform: Ubuntu 22.04 LTS Desktop (Jammy), with GNOME Shell 42 and Python 3.10.** Ubuntu Server without a GNOME desktop and Ubuntu flavors using KDE/Xfce are not covered. Ubuntu 24.04 and later are not supported by this legacy extension.
 
-Orbitz combines eight standalone Python scripts with a customized version of [Desktop Clock (azclock)](https://gitlab.com/AndrewZaech/azclock). Display system information directly on your GNOME desktop and open a network panel to inspect TCP connections, listening ports or run an optional internet speed test.
+Orbitz combines nine standalone Python widget scripts and shared runtime modules with a customized version of [Desktop Clock (azclock)](https://gitlab.com/AndrewZaech/azclock). Display system information directly on your GNOME desktop and open a network panel to inspect TCP connections, listening ports or run an optional internet speed test.
 
 **Looking for azclock / Desktop Clock custom commands?** This project contains a customized copy of Andrew Zaech's **azclock v7** extension and ready-to-use Python command widgets for **Ubuntu 22.04 / GNOME 42**. It keeps the original `azclock@azclock.gitlab.com` UUID and is a community customization, not an official upstream release. See [installation](#download-and-install), [widget commands](#configure-each-widget) and [upstream azclock](https://gitlab.com/AndrewZaech/azclock).
 
@@ -14,8 +14,9 @@ Orbitz combines eight standalone Python scripts with a customized version of [De
 
 - [Screenshots](#screenshots)
 - [Desktop overview](#desktop-overview)
-- [Network panel](#network-panel)
-- [Speed-test results](#speed-test-results)
+- [Security panel](#security-panel)
+- [Docker panel](#docker-panel)
+- [Firewall inspection](#firewall-inspection)
 - [Now Playing](#now-playing)
 - [Widgets](#widgets)
 - [Stack and compatibility](#stack-and-compatibility)
@@ -27,8 +28,8 @@ Orbitz combines eight standalone Python scripts with a customized version of [De
 - [Change the weather location](#change-the-weather-location)
 - [Enable optional speed testing](#enable-optional-speed-testing)
 - [Optional Now Playing widget: Spotify and Chrome/Chromium](#optional-now-playing-widget-spotify-and-chromechromium)
-- [How it works](#how-it-works)
 - [Per-widget requirements checklist](#per-widget-requirements-checklist)
+- [Docker widget](#docker-widget)
 - [Firewall event widget](#firewall-event-widget)
 - [Reliability, security and performance](#reliability-security-and-performance)
 - [Troubleshooting](#troubleshooting)
@@ -37,29 +38,37 @@ Orbitz combines eight standalone Python scripts with a customized version of [De
 
 ## Screenshots
 
+Screenshots from the configured desktop on October 11, 2026. Layout, fonts and positions are configurable.
+
 ### Desktop overview
 
-Clock, weather, top processes, CPU/RAM/storage usage, hardware temperatures and network monitoring. This is an example layout; appearance and positions are configured manually.
+Clock/weather, processes, CPU/RAM/storage, temperatures and separate traffic, security, Docker and firewall widgets.
 
-![Orbitz desktop widgets showing clock, weather, system usage and network activity](docs/images/desktop-widgets.png)
+![Desktop with system metrics, weather and separate network, security, Docker and firewall widgets](docs/images/desktop-widgets.png)
 
-### Network panel
+### Security panel
 
-Local TCP ports, remote connections and the optional speed-test button. The bottom-left icon refreshes the panel on demand.
+Local TCP listeners, remote destinations and the optional speed test. Opening the panel or clicking refresh collects a new snapshot.
 
-![Network panel with TCP ports, remote destinations and internet speed-test controls](docs/images/network-panel.png)
+![Security panel with TCP listeners, remote connections and manual refresh](docs/images/network-panel.png)
 
-### Speed-test results
+### Docker panel
 
-Download and upload speeds in Mbps, latency in milliseconds and the time of the last completed Ookla test.
+Running containers and published host ports. Recognized web services open in the browser; other ports remain visible without an automatic web link.
 
-![Speed-test results showing download and upload speeds, ping and last test time](docs/images/speedtest-results.png)
+![Docker panel showing Portainer and PostgreSQL port mappings](docs/images/docker-panel.png)
+
+### Firewall inspection
+
+Inspect a selected IP or port, copy it, request reverse DNS or open public-IP RDAP information.
+
+![Firewall IP inspection with optional DNS and WHOIS RDAP controls](docs/images/firewall-inspection.png)
 
 ### Now Playing
 
-Shows what is playing in **Spotify or Chromium**: playback status, artist and track title, when the application provides them. The optional command widget reads this information through Playerctl/MPRIS.
+Playback status, artist and title, followed by a small Spotify or Chrome icon identifying the selected player.
 
-![Now Playing widget displaying Eminem — Evil Deeds](docs/images/now-playing.png)
+![Now Playing showing Tech N9ne — Speedom with the Spotify icon after the title](docs/images/now-playing.png)
 
 ## Widgets
 
@@ -67,18 +76,20 @@ Shows what is playing in **Spotify or Chromium**: playback status, artist and tr
 |---|---|
 | **CPU, RAM and storage** — `cpu-ram-widget.py` | Shows CPU utilization, RAM usage and storage usage for the filesystem containing your home directory, with text progress bars. |
 | **Top processes** — `processos-widget.py` | Lists up to seven processes ranked by CPU consumption over a one-second sample. Process usage may exceed 100% on multicore systems. |
-| **Network traffic** — `rede-widget.py` | Shows current receive/transmit rates for the interface selected from the IPv4 default route. This measures traffic, not your connection's maximum speed. |
+| **Network traffic** — `rede-widget.py` | Shows current receive/transmit rates for the interface selected from the default route (IPv4, with IPv6 fallback). This measures traffic, not your connection's maximum speed. |
 | **TCP connections and ports** — `seguranca-widget.py` | Counts non-loopback TCP connections and listening ports. Click the widget to open a panel with local ports and remote destinations; click a hostname to copy its full name. Counts do not indicate whether a connection is malicious. |
 | **Hardware temperatures** — `temperaturas-widget.py` | Reads available CPU/GPU sensors from Linux sysfs, with an optional `sensors` fallback. Intel coretemp and AMDGPU are handled directly; unavailable readings display `N/D`. |
 | **External volumes** — `volumes-widget.py` | Shows usage and free space for detected removable/external volumes and desktop mount locations. System mounts are filtered out. |
 | **Firewall** — `firewall-widget.py` | Shows the last refreshed UFW blocked/rejected-event count. Click to group records by source, destination and protocol, with ports, interface, repetition count and last timestamp. |
 | **Weather** — `clima-widget.py` | Shows current conditions, temperature, feels-like temperature, humidity, daily low/high and precipitation probability through Open-Meteo. Defaults to Brasília, Brazil. |
+| **Docker** — `docker-widget.py` | Counts running containers; opens a panel with names, published ports and browser links for web services. |
 
 The network panel also includes an optional **Ookla Speedtest CLI** integration for download/upload speed in Mbps, latency in ms and the last test time. Results appear after a successful test. Speed tests run only when requested.
 
 **Language:** this README is in English. Widget labels and panel messages currently remain in Portuguese. Script filenames are preserved for compatibility.
 
-An optional **Now Playing** command widget uses `playerctl` / MPRIS to show media from Spotify and Chrome/Chromium. It is configured separately; it is not an eighth Python script.
+An optional **Now Playing** widget reads MPRIS metadata directly from Spotify and Chrome/Chromium, with a player icon after the title. It is configured separately and has no additional Python script.
+
 
 ## Stack and compatibility
 
@@ -125,7 +136,7 @@ sudo apt install git python3 bash util-linux procps iproute2 libc-bin \
 
 | Packages | Used for |
 |---|---|
-| `python3` | All eight scripts; no pip packages required |
+| `python3` | All nine widgets and their helper modules; no pip packages required |
 | `bash`, `util-linux`, `procps`, `coreutils` | Command execution, isolated process groups (`setsid`), cancellation (`/usr/bin/kill`), volumes (`lsblk`) and file installation |
 | `iproute2`, `libc-bin` | TCP socket information (`ss`) and hostname lookup (`getent`) |
 | `gjs`, `gir1.2-gtk-4.0`, `gir1.2-adw-1` | JavaScript runtime and preferences UI bindings |
@@ -185,7 +196,7 @@ gnome-extensions enable azclock@azclock.gitlab.com
 gnome-extensions prefs azclock@azclock.gitlab.com
 ```
 
-Open its preferences to add widgets and configure command elements, fonts, colors, positions and alignment. Personal layout settings are not bundled: copying the files does not automatically create the eight widgets.
+Open its preferences to add widgets and configure command elements, fonts, colors, positions and alignment. Personal layout settings are not bundled: copying the files does not automatically create the widgets.
 
 ### Configure each widget
 
@@ -197,11 +208,11 @@ python3 /home/YOUR_USER/.local/share/orbitz-widgets/cpu-ram-widget.py
 
 In the preferences, add a widget, add a **command** element, paste its command and set its polling interval. Repeat for each script. Fonts, colors, orientation and positioning are manual preferences; no personal layout is automatically imported.
 
-To generate the eight absolute command paths for your account:
+To generate the nine absolute command paths for your account:
 
 ```bash
 for script in cpu-ram-widget.py processos-widget.py rede-widget.py \
-  seguranca-widget.py temperaturas-widget.py volumes-widget.py clima-widget.py firewall-widget.py; do
+  seguranca-widget.py temperaturas-widget.py volumes-widget.py clima-widget.py firewall-widget.py docker-widget.py; do
   printf 'python3 "%s/.local/share/orbitz-widgets/%s"\n' "$HOME" "$script"
 done
 ```
@@ -210,7 +221,7 @@ Copy the resulting lines into the appropriate command elements. Keep the Python 
 
 Change the filename for the other entries in the widget table. Use the actual path to your home directory if it is not under `/home`.
 
-Polling intervals are in **milliseconds**: `6000` means 6 seconds, `12000` means 12 seconds and `20000` means 20 seconds. The weather command is explicitly scheduled every **five minutes**, regardless of the value currently shown in the interval editor.
+Polling intervals are in **milliseconds**: `6000` means 6 seconds, `12000` means 12 seconds and `20000` means 20 seconds. Set weather to **300000 ms** (five minutes); the extension enforces that schedule. The interval editor now accepts values up to one hour. Keep **traffic and security in separate widgets**, each with one command element, so they can be positioned independently.
 
 The network panel refreshes **when opened** or when its bottom-left refresh icon is clicked. It does not periodically refresh its contents. Closing it cancels an active refresh or speed test.
 
@@ -218,7 +229,7 @@ The network panel refreshes **when opened** or when its bottom-left refresh icon
 
 Edit `PARAMS` in your installed `clima-widget.py`: set `latitude`, `longitude` and `timezone`, and update the Brasília display text and cache filename if needed. The script keeps the last valid forecast when a request fails.
 
-Caches are stored under `$XDG_CACHE_HOME/orbitz-widgets`, falling back to `~/.cache/orbitz-widgets`. They are not tracked in this repository.
+Runtime caches use `$XDG_CACHE_HOME/orbitz-widgets`, falling back to `~/.cache/orbitz-widgets`. Weather and DNS retain a sibling `work/` directory next to the scripts directory. Caches are private, validated and excluded from the repository.
 
 ### Enable optional speed testing
 
@@ -252,50 +263,17 @@ The proprietary binary is **not bundled**. It has separate terms for personal, n
 
 ## Optional Now Playing widget: Spotify and Chrome/Chromium
 
-The extra component is [**playerctl**](https://github.com/altdesktop/playerctl), a command-line client for the **MPRIS** media interface on your session D-Bus. No additional GNOME media extension or Python package is required for this command widget.
-
-### How it works
-
-**Now Playing works with both the Spotify desktop app and Chromium browser playback.** Google Chrome can also work when it exposes an MPRIS player in your desktop session.
-
-The application publishes playback metadata through **MPRIS**, a standard media-player interface on Linux. Playerctl reads that metadata over your session D-Bus; Desktop Clock runs the configured command at the polling interval and displays its output on the desktop. The widget does not capture audio, identify songs by listening, or require a Spotify API key.
-
-The example below displays **Playing/Paused/Stopped**, **artist** and **title**. Chromium can expose media from websites such as a music or video player, but the available fields depend on the website: a video may provide a title without an artist. Only applications listed by `playerctl --list-all` can be queried.
-
-When both Spotify and Chromium are open, the supplied command prefers the player selection beginning with Spotify; it does not merge tracks from different applications or guarantee selection of whichever is currently audible. To show Chromium specifically, use `-p chromium`; for Spotify, use `-p spotify`. Match the actual player names reported on your system. You can create separate command elements for each application if you want both displayed.
-
-This is a **metadata display**, not a playback-control panel. It stays blank when no matching player is available and updates at the configured interval, so a track change may take a few seconds to appear.
-
-
-```bash
-sudo apt install playerctl
-playerctl --version
-```
-
-Install the media applications separately if needed:
-
-- **Spotify:** the official [Spotify Snap](https://snapcraft.io/spotify) can be installed with `sudo snap install spotify`. If Snap support was removed, install `snapd` first with `sudo apt install snapd` and follow its session/restart instructions.
-- **Google Chrome:** download the official **64-bit `.deb` for Debian/Ubuntu** from [Google](https://www.google.com/chrome/), then install the downloaded file with `sudo apt install ./google-chrome-stable_current_amd64.deb` from its directory. This example is for amd64; follow Google's supported system requirements for other machines.
-- **Chromium:** an alternative on Ubuntu is `sudo snap install chromium`.
-
-Open Spotify or Chrome/Chromium, start playback and inspect which players are exposed:
-
-```bash
-playerctl --list-all
-playerctl metadata --format '{{status}}  {{artist}} — {{title}}'
-```
-
-Add another **command** element in Desktop Clock. This example selects Spotify and Chromium/Chrome, escapes media text before the extension renders markup, and stays visually blank if no matching player is available:
+Add a separate command widget with this command value:
 
 ```text
-playerctl -p spotify,chromium,chrome metadata --format '{{status}}  {{artist}} — {{title}}' 2>/dev/null | python3 -c 'import html,sys; text=sys.stdin.read().strip(); print(html.escape(text) if text else "\u200b")'
+playerctl -p spotify,chromium metadata
 ```
 
-Use the names printed by `playerctl --list-all` if your applications expose a different name. Spotify is listed first in the selection; if several apps are open, select the specific player you want with `-p NAME`. You may also omit `-p` to use Playerctl's default selection.
+The customized extension recognizes this value and reads **MPRIS directly over the session D-Bus**. Playerctl is not required for this built-in integration and no shell pipeline runs each second. Metadata updates through player/property events; the polling control indicates event-based updates.
 
-Set a finite polling interval such as `6000` ms for this element. Do **not** use `--follow` in a periodically executed widget: it would leave the command running until the extension's timeout.
+The widget displays playback status, artist and title as plain text, followed by a **16 px Spotify or Chrome SVG icon**. A playing player takes priority over a paused one; Spotify wins when both are playing. The icon is hidden when no matching player is available. Spotify, Chromium and Chrome must expose MPRIS metadata in the same desktop session. Website metadata may omit the artist.
 
-Browser playback must expose MPRIS/media metadata. Not every site provides artist/title, and sandboxed applications may not expose a player. If Chrome is absent from the list, check its media integration/settings and restart playback/the browser; Playerctl cannot display a player that the browser does not advertise. This integration displays metadata; it does not fix playback failures or install Spotify/Chrome automatically.
+This display does not capture audio, require a Spotify API key or control playback. Custom Playerctl commands outside this recognized value still use the regular command execution path. Playerctl can be installed separately for diagnostics, but is optional.
 
 ## Per-widget requirements checklist
 
@@ -303,15 +281,32 @@ Browser playback must expose MPRIS/media metadata. Not every site provides artis
 |---|---|
 | CPU/RAM/home filesystem | Linux `/proc` and access to your home filesystem |
 | Top processes | Readable `/proc`; some processes may be hidden by system permissions |
-| Traffic | Active IPv4 default route; the selected interface may be a VPN |
+| Traffic | Active default route (IPv4, with IPv6 fallback); the selected interface may be a VPN |
 | TCP panel | `ss`/`getent`; hostname lookup can be absent or time out |
 | Temperatures | Supported hardware sensors/drivers; optional lm-sensors |
 | External volumes | Mounted removable/external volumes; an empty widget can be normal |
 | Weather | Internet access and correct coordinates/time zone; default is Brasília |
 | Speed test | Separate official Ookla executable, correct architecture and accepted terms |
-| Now Playing | Separate Playerctl package and an application exposing MPRIS in your session |
+| Docker | Docker CLI and permission to query the configured daemon |
+| Now Playing | An application exposing MPRIS in your session; built-in mode does not require Playerctl |
 
 Package names were checked against Ubuntu 22.04 sources and the development machine. **A full clean-VM installation test has not yet been performed**, so this guide does not claim that all hardware/app combinations have been validated.
+
+## Docker widget
+
+Configure a separate command widget with `python3 /home/YOUR_USER/.local/share/orbitz-widgets/docker-widget.py`. Its label is **Docker Cotainers: N**, preserving the configured spelling. Use a 15000 ms interval for the summary. Click it to open a panel listing running containers and their published host ports; refresh is manual.
+
+The collector uses read-only `docker ps` and projected `docker inspect` queries. It does not start or stop containers, alter firewall rules or change socket permissions. A TCP listener list alone does not necessarily show Docker NAT mappings, which is why Docker has its own widget.
+
+The panel shows up to 100 port entries and reports omitted entries. Unpublished containers still appear. Known web ports receive browser links; UDP, PostgreSQL and Portainer's tunnel port 8000 do not receive automatic links. The sample Portainer mapping 9443 → 9000 uses HTTP, based on its internal web port.
+
+To specify another protocol, host or application path, create `~/.config/orbitz-widgets/docker-urls.json`:
+
+```json
+{"portainer:9443": "http://127.0.0.1:9443", "my-service:1234": "https://localhost:1234/app"}
+```
+
+Keys may be `container-name:host-port` or just `container-name`. URLs require HTTP/HTTPS and an explicit port, without embedded credentials, query or fragment. Automatic localhost links are disabled for remote Docker contexts; configure an accessible URL explicitly.
 
 ## Firewall event widget
 
@@ -331,14 +326,17 @@ The refresh shares the network panel's timeout, bounded output, cancellation and
 
 ## Reliability, security and performance
 
-- One periodic command runs at a time per element; canceled executions cannot publish stale results.
-- Combined stdout/stderr is limited to **256 KiB** per execution.
-- Timeouts are **30 seconds** for periodic commands, **15 seconds** for panel refresh and **120 seconds** for speed tests.
-- Command groups are terminated on cancellation; this is not a sandbox and does not cover descendants that deliberately create a separate session.
-- Weather and DNS caches are validated and written atomically with restricted file permissions.
-- Identical command text is not reapplied to the UI. Panel details are collected on demand.
+- CPU, process and traffic widgets share one persistent Python collector. Their one-second sampling windows are preserved; use 12000, 12000 and 6000 ms intervals respectively. Install **all `widgets/*.py` files together**, including `metrics-worker.py` and `widget_runtime.py`.
+- Media uses MPRIS events; panel-opening detection uses one shared adaptive timer. Unchanged clock text does not trigger another relayout.
+- Sensor discovery, volume inventories and home-filesystem usage use validated caches of up to one minute. Volume mount changes invalidate the inventory; IPv6 routes are supported for traffic fallback.
+- Regular commands run once at a time per element, with stale-response protection. Combined stdout/stderr is capped at **256 KiB**; Python collectors also use bounded reads, with a **2 MiB** kernel-log limit.
+- Timeouts remain **30 seconds** for regular commands, **15 seconds** for panel refresh and **120 seconds** for speed tests. Group cancellation is asynchronous; the metrics collector has a watchdog and restart delay.
+- Security details display at most **200 connections**, Docker at most **100 entries**, and firewall at most **50 groups**, with truncation indicated where applicable.
+- Settings export uses typed JSON. Import accepts JSON and legacy dconf data, validates schema/structure/size, and presents commands for confirmation before applying them. It does not spawn `dconf load`.
 
-Custom commands run with your account's permissions. Only import configuration files you trust. The panel's opening detector uses adaptive pointer checks for compatibility with the desktop layer; the project does not claim zero idle CPU or a measured percentage reduction.
+Custom commands execute with your account's permissions. Cancellation is not a sandbox and cannot contain descendants that deliberately create another session. Docker access retains the daemon's existing privileges; no new permissions are granted by these widgets.
+
+Syntax checks, GJS subprocess/cancellation tests, malformed-data cases, cache/URL validation and package hashes were verified after the changes. Full desktop CPU/memory profiling and a clean-VM installation test have not been completed; no global percentage performance improvement is claimed.
 
 ## Troubleshooting
 
@@ -359,4 +357,4 @@ Desktop Clock / azclock was created by **Andrew Zaech**. Original notices and as
 
 Orbitz customizations and Python widgets: **orbitzone / Orbitz**. See [`LICENSE`](LICENSE) for the included GNU GPL v3 license text. System dependencies and Ookla Speedtest CLI retain their own licenses.
 
-**Project topics:** azclock, Desktop Clock, azclock custom commands, Desktop Clock widgets, Ubuntu 22.04, GNOME Shell extension, Linux desktop widgets, Python system monitor, CPU monitor, RAM monitor, network monitoring, TCP connections, hardware temperatures, disk usage, weather widget, Spotify now playing, MPRIS, Playerctl and internet speed test.
+**Project topics:** azclock, Desktop Clock, azclock custom commands, Desktop Clock widgets, Ubuntu 22.04, GNOME Shell extension, Linux desktop widgets, Python system monitor, CPU monitor, RAM monitor, network monitoring, TCP connections, hardware temperatures, disk usage, weather widget, Spotify now playing, MPRIS, Docker containers and internet speed test.
