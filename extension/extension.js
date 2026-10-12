@@ -1069,7 +1069,7 @@ class AzClockCommandLabel extends Label {
         const run = {generation: this._networkGeneration, cancellable: new Gio.Cancellable(), proc: null};
         this._networkRefreshRun = run;
         this._networkRefreshButton.reactive = false;
-        this._networkRefreshButton.accessible_name = this._dockerRows ? 'Atualizando serviços Docker' : this._firewallRows ? 'Atualizando eventos do firewall' : 'Atualizando conexões e portas';
+        this._networkRefreshButton.accessible_name = this._processesDialog ? 'Consultando processos' : this._updatesRows ? 'Consultando atualizações' : this._dockerRows ? 'Atualizando serviços Docker' : this._firewallRows ? 'Atualizando eventos do firewall' : 'Atualizando conexões e portas';
         this._networkRefreshStatus.text = '';
         let proc;
         try {
@@ -1086,6 +1086,23 @@ class AzClockCommandLabel extends Label {
             const [stdout] = await readCommandOutput(run);
             if (this._networkDestroyed || run.cancelled || run.generation !== this._networkGeneration || !this._networkDialog.visible)
                 return;
+            if (command.includes('/processos-widget.py')) {
+                if (!proc.get_successful() || !stdout.startsWith('AZCLOCK_PROCESSES:'))
+                    throw new Error('Não foi possível consultar os processos.');
+                this._renderProcesses(JSON.parse(stdout.slice('AZCLOCK_PROCESSES:'.length)));
+                this._networkRefreshStatus.text = 'Consultado às ' + GLib.DateTime.new_now_local().format('%H:%M');
+                return;
+            }
+            if (command.includes('/atualizacoes-widget.py')) {
+                if (!proc.get_successful() || !stdout.startsWith('AZCLOCK_UPDATES:'))
+                    throw new Error('Não foi possível consultar as atualizações.');
+                const data = JSON.parse(stdout.slice('AZCLOCK_UPDATES:'.length));
+                this._renderUpdates(data);
+                this.text = data.text;
+                this.clutter_text.set_markup(GLib.markup_escape_text(data.text, -1));
+                this._networkRefreshStatus.text = 'Consultado às ' + GLib.DateTime.new_now_local().format('%H:%M');
+                return;
+            }
             if (command.includes('/docker-widget.py')) {
                 if (!proc.get_successful() || !stdout.startsWith('AZCLOCK_DOCKER:'))
                     throw new Error('Não foi possível consultar o Docker.');
@@ -1133,10 +1150,192 @@ class AzClockCommandLabel extends Label {
             this._networkRefreshPending = false;
             if (!this._networkDestroyed) {
                 this._networkRefreshButton.reactive = true;
-                this._networkRefreshButton.accessible_name = this._dockerRows ? 'Atualizar serviços Docker' : this._firewallRows ? 'Atualizar eventos do firewall' : 'Atualizar conexões e portas';
+                this._networkRefreshButton.accessible_name = this._processesDialog ? 'Atualizar diagnóstico e processos' : this._updatesRows ? 'Atualizar consulta de atualizações' : this._dockerRows ? 'Atualizar serviços Docker' : this._firewallRows ? 'Atualizar eventos do firewall' : 'Atualizar conexões e portas';
                 if (pending && this._networkDialog?.visible)
                     this._refreshNetworkDialog();
             }
+        }
+    }
+
+    _buildUpdatesDialog() {
+        this._networkBackdrop = new St.Widget({reactive: true, visible: false});
+        this._networkBackdrop.add_constraint(new Clutter.BindConstraint({source: global.stage, coordinate: Clutter.BindCoordinate.ALL}));
+        this._networkBackdrop.connect('button-press-event', () => {
+            this._closeNetworkDialog();
+            return Clutter.EVENT_STOP;
+        });
+        Main.uiGroup.add_child(this._networkBackdrop);
+        this._networkDialog = new St.BoxLayout({vertical: true, reactive: true,
+            style: 'background-color: #202020; color: white; border: 1px solid #606060; border-radius: 8px; padding: 12px; spacing: 10px;'});
+        this._updatesHeading = new St.Label({text: 'Atualizações', style: 'font-weight: bold; font-size: 18px;'});
+        this._networkDialog.add_child(this._updatesHeading);
+        const note = new St.Label({text: 'Consulte os pacotes abaixo. Passe o mouse nas ações para ver o comando.', style: 'font-size: 12px; color: #c8c8c8;'});
+        note.clutter_text.set_line_wrap(true);
+        this._updatesNote = note;
+        this._networkDialog.add_child(note);
+        const scroll = new St.ScrollView({style: 'width: 720px; height: 300px;', reactive: true});
+        scroll.set_policy(St.PolicyType.NEVER, St.PolicyType.AUTOMATIC);
+        this._updatesRows = new St.BoxLayout({vertical: true, style: 'spacing: 8px;'});
+        scroll.add_actor(this._updatesRows);
+        this._networkDialog.add_child(scroll);
+        this._updatesActions = new St.BoxLayout({vertical: true, style: 'spacing: 8px;'});
+        this._networkDialog.add_child(this._updatesActions);
+        const footer = new St.BoxLayout({style: 'spacing: 8px;'});
+        this._networkRefreshButton = new St.Button({reactive: true, can_focus: true, label: 'Reler lista', accessible_name: 'Reler lista de atualizações', style: 'background-color: transparent; color: white; padding: 6px;'});
+        this._networkRefreshButton.connect('clicked', () => this._refreshNetworkDialog());
+        footer.add_child(this._networkRefreshButton);
+        this._networkRefreshStatus = new St.Label({text: '', style: 'font-size: 12px; color: #c8c8c8;'});
+        footer.add_child(this._networkRefreshStatus);
+        this._networkDialog.add_child(footer);
+        Main.uiGroup.add_child(this._networkDialog);
+    }
+
+    _renderUpdates(data) {
+        if (typeof data.text !== 'string' || data.text.length > 128 || typeof data.reboot !== 'boolean' ||
+            typeof data.index_updated !== 'string' || data.index_updated.length > 64 ||
+            typeof data.error !== 'string' || data.error.length > 256 || !Array.isArray(data.items) || data.items.length > 100 ||
+            !Number.isInteger(data.omitted) || data.omitted < 0 ||
+            !Array.isArray(data.notices) || data.notices.length > 20 || data.notices.some(x => typeof x !== 'string' || x.length > 2048) ||
+            !Array.isArray(data.actions) || data.actions.length > 20 || data.actions.some(x => !x ||
+                typeof x.id !== 'string' || !/^[a-z0-9-]{1,40}$/.test(x.id) || typeof x.name !== 'string' || x.name.length > 80 ||
+                typeof x.command !== 'string' || x.command.length > 2048) ||
+            data.items.some(item => !item || !['name', 'installed', 'version', 'source'].every(k => typeof item[k] === 'string' && item[k].length <= 512)))
+            throw new Error('Resposta de atualizações inválida.');
+        this._updatesHeading.text = data.text;
+        this._updatesRows.destroy_all_children();
+        const add = (text, color = '#c8c8c8') => {
+            const label = new St.Label({text, style: `padding: 4px; color: ${color};`});
+            label.clutter_text.set_line_wrap(true);
+            this._updatesRows.add_child(label);
+        };
+        add(data.reboot ? 'Reinicialização pendente.' : 'Sem indicação de reinicialização pendente.');
+        add('Índice APT mais antigo: ' + data.index_updated);
+        for (const notice of data.notices) add(notice);
+        if (data.error) add(data.error);
+        if (data.omitted) add(`${data.omitted} pacotes adicionais.`);
+        for (const source of ['APT', 'Snap', 'Flatpak']) {
+            const items = data.items.filter(item => item.source === source);
+            add(source + ' · ' + items.length, 'white');
+            for (const item of items)
+                add((item.security ? '[Segurança] ' : '') + item.name + ' · ' + item.installed + ' → ' + item.version, item.security ? '#ffd479' : '#82cfff');
+        }
+        this._updatesActions.destroy_all_children();
+        this._updatesActions.add_child(new St.Label({text: 'Ações · confirme com Enter no terminal',
+            style: 'font-size: 12px; color: #c8c8c8;'}));
+        let row;
+        for (const [index, action] of data.actions.entries()) {
+            if (index % 4 === 0) {
+                row = new St.BoxLayout({style: 'spacing: 8px;', x_expand: true});
+                this._updatesActions.add_child(row);
+            }
+            const button = new St.Button({reactive: true, can_focus: true,
+                accessible_name: action.name + ': ' + action.command, x_expand: true,
+                style: 'width: 156px; padding: 8px; border-radius: 6px; background-color: #315d80; color: white;'});
+            const label = new St.Label({text: action.name, x_align: Clutter.ActorAlign.CENTER});
+            label.clutter_text.set_line_wrap(true);
+            label.clutter_text.set_ellipsize(Pango.EllipsizeMode.NONE);
+            button.set_child(label);
+            this._attachActionTooltip(button, action.command);
+            button.connect('clicked', () => {
+                try {
+                    const [, argv] = GLib.shell_parse_argv(getData(this.widgetIndex, this.elementIndex, 'Text_Command'));
+                    Gio.Subprocess.new([...argv, '--action', action.id], Gio.SubprocessFlags.NONE);
+                    this._networkRefreshStatus.text = 'Comando aberto no terminal; releia a lista após concluir.';
+                } catch (error) { this._networkRefreshStatus.text = 'Não foi possível abrir o terminal.'; }
+            });
+            row.add_child(button);
+        }
+    }
+
+    _attachActionTooltip(button, command) {
+        const tooltip = new St.Label({text: command, visible: false, reactive: false,
+            style: 'max-width: 620px; padding: 10px 12px; border-radius: 6px; background-color: #101820; color: #e5f3ff; border: 1px solid #6088a8; font-family: monospace; font-size: 12px;'});
+        tooltip.clutter_text.set_line_wrap(true);
+        tooltip.clutter_text.set_line_wrap_mode(Pango.WrapMode.WORD_CHAR);
+        tooltip.clutter_text.set_ellipsize(Pango.EllipsizeMode.NONE);
+        Main.uiGroup.add_child(tooltip);
+        const hide = () => tooltip.hide();
+        const show = () => {
+            if (!this._networkDialog.visible) return;
+            tooltip.show();
+            const [x, y] = button.get_transformed_position();
+            const [width, height] = tooltip.get_preferred_size().slice(2);
+            const monitor = Main.layoutManager.findMonitorForActor(button) || Main.layoutManager.primaryMonitor;
+            tooltip.set_position(Math.max(monitor.x + 8, Math.min(x, monitor.x + monitor.width - width - 8)),
+                y - height - 8 >= monitor.y ? y - height - 8 : y + button.height + 8);
+        };
+        button.track_hover = true;
+        button.connect('notify::hover', () => button.hover ? show() : hide());
+        button.connect('key-focus-in', show);
+        button.connect('key-focus-out', hide);
+        button.connect('clicked', hide);
+        const visibilitySignal = this._networkDialog.connect('notify::visible', hide);
+        button.connect('destroy', () => {
+            this._networkDialog.disconnect(visibilitySignal);
+            tooltip.destroy();
+        });
+    }
+
+    _buildProcessesDialog() {
+        this._buildUpdatesDialog();
+        this._processesDialog = true;
+        this._updatesHeading.text = 'Processos · desempenho';
+        this._updatesNote.text = 'Diagnóstico da amostra atual. CPU por processo pode superar 100% ao usar vários núcleos.';
+        this._networkRefreshButton.label = 'Atualizar';
+        this._networkRefreshButton.accessible_name = 'Atualizar diagnóstico e processos';
+    }
+
+    _renderProcesses(data) {
+        const validRows = rows => Array.isArray(rows) && rows.length <= 7 && rows.every(r => r &&
+            Number.isInteger(r.pid) && r.pid > 0 && typeof r.name === 'string' && r.name.length <= 80 &&
+            Number.isFinite(r.cpu) && r.cpu >= 0 && Number.isFinite(r.memory) && r.memory >= 0);
+        if (!data || typeof data.summary !== 'string' || data.summary.length > 2048 ||
+            !Array.isArray(data.notices) || data.notices.length > 20 || data.notices.some(n => typeof n !== 'string' || n.length > 2048) ||
+            !validRows(data.cpu_rows) || !validRows(data.memory_rows) ||
+            !Array.isArray(data.actions) || data.actions.length > 8 || data.actions.some(a => !a ||
+                !['monitor', 'startup', 'balanced', 'performance'].includes(a.id) ||
+                ['name', 'command', 'effect'].some(k => typeof a[k] !== 'string' || a[k].length > 2048)))
+            throw new Error('Resposta de processos inválida.');
+        this._updatesRows.destroy_all_children();
+        this._updatesActions.destroy_all_children();
+        const add = (text, color = '#c8c8c8') => {
+            const label = new St.Label({text, style: `padding: 4px; color: ${color};`});
+            label.clutter_text.set_line_wrap(true);
+            label.clutter_text.set_ellipsize(Pango.EllipsizeMode.NONE);
+            this._updatesRows.add_child(label);
+        };
+        add(data.summary, '#82cfff');
+        for (const notice of data.notices) add(notice);
+        for (const [title, rows] of [['Maior uso de CPU', data.cpu_rows], ['Maior uso de RAM', data.memory_rows]]) {
+            add(title, 'white');
+            for (const row of rows)
+                add(`${row.name} · PID ${row.pid} · CPU ${row.cpu.toFixed(1)}% · RAM ${row.memory} MiB`);
+        }
+        this._updatesActions.add_child(new St.Label({text: 'Ações · confira o comando no tooltip e confirme com Enter no terminal',
+            style: 'font-size: 12px; color: #c8c8c8;'}));
+        let row;
+        for (const [index, action] of data.actions.entries()) {
+            if (index % 4 === 0) {
+                row = new St.BoxLayout({style: 'spacing: 8px;'});
+                this._updatesActions.add_child(row);
+            }
+            const button = new St.Button({reactive: true, can_focus: true,
+                accessible_name: action.name + ': ' + action.effect + ' ' + action.command,
+                style: 'width: 156px; padding: 8px; border-radius: 6px; background-color: #315d80; color: white;'});
+            const label = new St.Label({text: action.name, x_align: Clutter.ActorAlign.CENTER});
+            label.clutter_text.set_line_wrap(true);
+            button.set_child(label);
+            this._attachActionTooltip(button, action.effect + '\n\n' + action.command);
+            button.connect('clicked', () => {
+                try {
+                    const [, argv] = GLib.shell_parse_argv(getData(this.widgetIndex, this.elementIndex, 'Text_Command'));
+                    Gio.Subprocess.new([...argv, '--action', action.id], Gio.SubprocessFlags.NONE);
+                    this._networkRefreshStatus.text = 'Ação aberta no terminal. Atualize o diagnóstico após concluir.';
+                } catch (error) {
+                    this._networkRefreshStatus.text = 'Não foi possível abrir a ação.';
+                }
+            });
+            row.add_child(button);
         }
     }
 
@@ -1216,9 +1415,9 @@ class AzClockCommandLabel extends Label {
         Main.uiGroup.add_child(this._networkBackdrop);
         this._networkDialog = new St.BoxLayout({vertical: true, reactive: true,
             style: 'background-color: #202020; color: white; border: 1px solid #606060; border-radius: 8px; padding: 12px; spacing: 10px;'});
-        this._firewallHeading = new St.Label({text: 'Firewall · eventos bloqueados', style: 'font-weight: bold; font-size: 18px;'});
+        this._firewallHeading = new St.Label({text: 'Firewall · padrões de atividade', style: 'font-weight: bold; font-size: 18px;'});
         this._networkDialog.add_child(this._firewallHeading);
-        const note = new St.Label({text: 'Pacote bloqueado não comprova invasão. Repetições são agrupadas por origem, destino e protocolo.', style: 'font-size: 12px; color: #c8c8c8;'});
+        const note = new St.Label({text: 'Destaques por persistência e variação de portas, destinos ou protocolos. Um padrão indica o que revisar; não comprova invasão.', style: 'font-size: 12px; color: #c8c8c8;'});
         note.clutter_text.set_line_wrap(true);
         this._networkDialog.add_child(note);
         const scroll = new St.ScrollView({style: 'width: 720px; height: 300px;', reactive: true});
@@ -1239,22 +1438,30 @@ class AzClockCommandLabel extends Label {
 
     _renderFirewall(data) {
         this._cancelFirewallInspection();
-        if (typeof data.text !== 'string' || typeof data.scope !== 'string' || typeof data.updated !== 'string' || !Array.isArray(data.groups) || data.groups.length > 50)
+        if (typeof data.text !== 'string' || data.text.length > 128 || typeof data.scope !== 'string' || data.scope.length > 4096 || typeof data.updated !== 'string' || !Array.isArray(data.groups) || data.groups.length > 50)
             throw new Error('Resposta do firewall inválida.');
         for (const row of data.groups) {
-            if (!row || !['source', 'destination', 'protocol', 'ports', 'last', 'kind', 'interface'].every(key => typeof row[key] === 'string') || !Number.isInteger(row.count) || row.count < 1)
+            if (!row || !['source', 'destination', 'protocol', 'ports', 'last', 'kind', 'interface'].every(key => typeof row[key] === 'string' && row[key].length <= 512) || !Number.isInteger(row.count) || row.count < 1 || (data.pattern_mode && (typeof row.reason !== 'string' || row.reason.length > 4096)))
                 throw new Error('Evento do firewall inválido.');
         }
         this._firewallData = data;
         this._firewallHeading.text = data.text + ' · Firewall';
         this._firewallRows.destroy_all_children();
         const scope = new St.Label({text: data.scope, style: 'font-size: 11px; color: #c8c8c8;'});
+        scope.clutter_text.set_line_wrap(true);
+        scope.clutter_text.set_ellipsize(Pango.EllipsizeMode.NONE);
         this._firewallRows.add_child(scope);
         if (!data.groups.length)
-            this._firewallRows.add_child(new St.Label({text: 'Nenhum evento bloqueado encontrado na amostra.', style: 'color: #8bd5a1; padding: 8px;'}));
+            this._firewallRows.add_child(new St.Label({text: 'Nenhum padrão atingiu os critérios de destaque na janela coletada.', style: 'color: #8bd5a1; padding: 8px;'}));
         for (const item of data.groups) {
             const box = new St.BoxLayout({vertical: true, style: 'padding: 8px; spacing: 4px; border-bottom: 1px solid #444;'});
             const escape = value => GLib.markup_escape_text(String(value), -1);
+            if (data.pattern_mode && typeof item.reason === 'string') {
+                const evidence = new St.Label({text: item.reason, style: 'font-size: 12px; color: #ffd479;'});
+                evidence.clutter_text.set_line_wrap(true);
+                evidence.clutter_text.set_ellipsize(Pango.EllipsizeMode.NONE);
+                box.add_child(evidence);
+            }
             const sourceColor = item.source_remote === true || item.kind === 'Origem externa' ? '#ff9e64' : '#82cfff';
             const title = new St.BoxLayout({style: 'spacing: 8px;'});
             const source = new St.Button({label: item.source, reactive: true, can_focus: true, style: `color: ${sourceColor}; padding: 0px; font-family: monospace;`});
@@ -1266,7 +1473,7 @@ class AzClockCommandLabel extends Label {
             title.add_child(destination);
             title.add_child(new St.Label({text: `${item.count} eventos`}));
             box.add_child(title);
-            box.add_child(new St.Label({text: `${item.kind} · ${item.protocol} · ${item.interface || '—'}`, style: 'color: #c8c8c8; font-size: 12px;'}));
+            box.add_child(new St.Label({text: `${item.kind}${item.local ? ' · origem local/reservada' : ''} · ${item.protocol} · ${item.interface || '—'}`, style: 'color: #c8c8c8; font-size: 12px;'}));
             let ports = new St.BoxLayout({style: 'spacing: 8px;'});
             ports.add_child(new St.Label({text: 'Portas destino:', style: 'font-size: 12px;'}));
             const portValues = item.ports.split(', ').slice(0, 30);
@@ -1377,6 +1584,10 @@ class AzClockCommandLabel extends Label {
             this._closeNetworkDialog();
             return;
         }
+        if (getData(this.widgetIndex, this.elementIndex, 'Text_Command').includes('/processos-widget.py') && !this._networkDialog)
+            this._buildProcessesDialog();
+        if (getData(this.widgetIndex, this.elementIndex, 'Text_Command').includes('/atualizacoes-widget.py') && !this._networkDialog)
+            this._buildUpdatesDialog();
         const firewall = getData(this.widgetIndex, this.elementIndex, 'Text_Command').includes('/firewall-widget.py');
         if (getData(this.widgetIndex, this.elementIndex, 'Text_Command').includes('/docker-widget.py') && !this._networkDialog)
             this._buildDockerDialog();
@@ -1592,9 +1803,9 @@ class AzClockCommandLabel extends Label {
 
     _startPollingInterval() {
         const command = getData(this.widgetIndex, this.elementIndex, 'Text_Command');
-        if (metricMode(command) || command.includes('/firewall-widget.py') || command.startsWith('playerctl -p spotify,chromium metadata'))
+        if (metricMode(command) || command.includes('/atualizacoes-widget.py') || command.startsWith('playerctl -p spotify,chromium metadata'))
             return;
-        const interval = command.includes('/clima-widget.py')
+        const interval = command.includes('/firewall-widget.py') ? 60000 : command.includes('/clima-widget.py')
             ? 300000
             : Math.max(getData(this.widgetIndex, this.elementIndex, 'Text_PollingInterval'), 250);
         this._pollingIntervalId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, interval, () => {
@@ -1740,6 +1951,8 @@ class AzClockCommandLabel extends Label {
     _executeCommand() {
         const command = getData(this.widgetIndex, this.elementIndex, 'Text_Command');
         if (metricMode(command)) {
+            if (metricMode(command) === 'processes')
+                this._scheduleNetworkClick();
             this._cancelCommand();
             if (this._mediaSubscriptions)
                 this._stopMedia();
@@ -1836,6 +2049,14 @@ class AzClockCommandLabel extends Label {
             }
 
             let displayText = response;
+            if (command.includes('/atualizacoes-widget.py') && response.startsWith('AZCLOCK_UPDATES:')) {
+                const payload = JSON.parse(response.slice('AZCLOCK_UPDATES:'.length));
+                if (typeof payload.text !== 'string' || payload.text.length > 128)
+                    throw new Error('Resposta de atualizações inválida.');
+                displayText = GLib.markup_escape_text(payload.text, -1);
+                this._scheduleNetworkClick();
+            }
+
             if (command.includes('/docker-widget.py') && response.startsWith('AZCLOCK_DOCKER:')) {
                 const payload = JSON.parse(response.slice('AZCLOCK_DOCKER:'.length));
                 displayText = payload.text;

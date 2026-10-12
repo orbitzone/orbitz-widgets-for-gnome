@@ -60,9 +60,9 @@ Running containers and published host ports. Recognized web services open in the
 
 ### Firewall inspection
 
-Inspect a selected IP or port, copy it, request reverse DNS or open public-IP RDAP information.
+Review persistent activity and changes across ports, destinations or protocols. Inspect selected IPs and ports for supporting evidence.
 
-![Firewall IP inspection with optional DNS and WHOIS RDAP controls](docs/images/firewall-inspection.png)
+![Firewall pattern analysis with persistence, port variation and local-source context](docs/images/firewall-inspection.png)
 
 ### Now Playing
 
@@ -75,11 +75,11 @@ Playback status, artist and title, followed by a small Spotify or Chrome icon id
 | Widget / script | What it does |
 |---|---|
 | **CPU, RAM and storage** — `cpu-ram-widget.py` | Shows CPU utilization, RAM usage and SSD usage for the filesystem containing your home directory, with text progress bars. An **EXT** row appears when external storage is mounted; its percentage combines used space and capacity across the detected filesystems, counting each filesystem once. The widget does not mount devices. |
-| **Top processes** — `processos-widget.py` | Lists up to seven processes ranked by CPU consumption over a one-second sample. Process usage may exceed 100% on multicore systems. |
+| **Top processes** — `processos-widget.py` | Lists up to seven processes ranked by CPU consumption. Click for a performance snapshot, CPU/RAM rankings, contextual suggestions and available process, startup and power-profile actions. Process usage may exceed 100% on multicore systems. |
 | **Network traffic** — `rede-widget.py` | Shows current receive/transmit rates for the interface selected from the default route (IPv4, with IPv6 fallback). This measures traffic, not your connection's maximum speed. |
 | **TCP connections and ports** — `seguranca-widget.py` | Counts non-loopback TCP connections and listening ports. Click the widget to open a panel with local ports and remote destinations; click a hostname to copy its full name. Counts do not indicate whether a connection is malicious. |
 | **Hardware temperatures** — `temperaturas-widget.py` | Reads available CPU/GPU sensors from Linux sysfs, with an optional `sensors` fallback. Intel coretemp and AMDGPU are handled directly; unavailable readings display `N/D`. |
-| **Firewall** — `firewall-widget.py` | Shows the last refreshed UFW blocked/rejected-event count. Click to group records by source, destination and protocol, with ports, interface, repetition count and last timestamp. |
+| **Firewall** — `firewall-widget.py` | Shows the number of noteworthy UFW activity patterns in a rolling 24-hour window. Click for persistence and path-variation evidence, with discovery traffic summarized as background noise. |
 | **Weather** — `clima-widget.py` | Shows current conditions, temperature, feels-like temperature, humidity, daily low/high and precipitation probability through Open-Meteo. Defaults to Brasília, Brazil. |
 | **Docker** — `docker-widget.py` | Counts running containers; opens a panel with names, published ports and browser links for web services. |
 
@@ -308,13 +308,23 @@ Keys may be `container-name:host-port` or just `container-name`. URLs require HT
 
 ## Firewall event widget
 
-Configure a command element with `python3 /home/YOUR_USER/.local/share/orbitz-widgets/firewall-widget.py`. This element has **no periodic command timer**: startup reads a cached count, and kernel logs are queried only when the panel opens or its refresh icon is clicked. Before the first refresh, the count displays `—`.
+Configure a command element with `python3 /home/YOUR_USER/.local/share/orbitz-widgets/firewall-widget.py`. The extension refreshes its summary every 60 seconds. Opening the panel or clicking refresh updates the analysis and shows supporting evidence.
 
-Requires UFW logging and permission to read kernel journal entries in your session. The widget never invokes sudo or changes firewall rules. If access is unavailable, the panel reports a collection error instead of presenting zero as a verified count. Use `sudo ufw logging low` to select low-volume logging on an already configured firewall; enabling/changing firewall policy is a separate administrator task.
+Requires UFW logging and permission to read kernel journal entries in your session. The collector never invokes sudo or changes firewall rules. Collection failures retain the previous snapshot and explicitly mark it as unavailable or stale. Logged events are not a complete count of blocked packets: logging may be rate-limited or disabled.
 
-The snapshot covers the last 24 hours, capped at 2000 matching kernel log records and 50 displayed groups. UFW logging is rate-limited, so the count is **logged events in the sample**, not a complete count of all blocked packets. Orange highlights external source IPs, blue highlights local/destination addresses, and yellow highlights ports. These are descriptive hints, not an intrusion diagnosis.
+The collector uses journal cursors to resume after the last processed record. Each round reads up to 10,000 records within an eight-second budget; subsequent rounds continue the backlog without recounting old records. Data is aggregated into five-minute intervals and expires after approximately 24 hours. The cache is bounded to 8 MiB and 512 origins; incomplete collection or storage eviction is reported as partial coverage. The panel shows up to 30 prioritized patterns and reports additional patterns.
 
-Click an IP address or destination port to inspect it. Details include first/last records, source counts, destinations, source/destination ports, protocols, interfaces and the last 50 original records from the selected sample. Port inspection also queries current local listeners; process names are visible only when your user has permission. Common service names are hints, not proof of the service running there.
+Initial review criteria:
+
+- **Persistence with variation:** at least 12 records across three five-minute intervals spanning ten minutes, plus six destination ports, three destination addresses or two protocols.
+- **Persistent repetition:** the same temporal persistence, with at least 30 records even without path variation.
+- **Many-port sequence:** at least 30 records across 12 destination ports, even within a short burst.
+
+Multicast, IGMP and common local UDP discovery are summarized rather than rendered as incident cards. Local/reserved origins receive explicit context about potentially legitimate device communication. Each card explains the observations, timestamps and recent activity. These are review heuristics, not proof of an attack or authentication failures.
+
+Click an IP or destination port to inspect cached supporting evidence and recent raw samples. Port inspection also queries visible local listeners. Reverse DNS and public-IP RDAP remain explicit manual actions.
+
+The process modal samples CPU, available RAM, swap, CPU temperature when available and home-partition free space. It ranks processes by CPU and RSS, offers contextual suggestions and exposes only installed process/startup tools and supported power profiles. Buttons show their effect and command in tooltips. Actions open in a terminal and require Enter before execution; selecting performance mode can increase energy use, heat and noise. RAM caches are not automatically cleared.
 
 Use the copy button to copy the selected address/port and Back to return to the grouped overview. Inspection runs only on click, with a timeout, output cap and cancellation on close, refresh or a new selection.
 
@@ -329,7 +339,7 @@ The refresh shares the network panel's timeout, bounded output, cancellation and
 - Sensor discovery, volume inventories and home-filesystem usage use validated caches of up to one minute. Volume mount changes invalidate the inventory; IPv6 routes are supported for traffic fallback.
 - Regular commands run once at a time per element, with stale-response protection. Combined stdout/stderr is capped at **256 KiB**; Python collectors also use bounded reads, with a **2 MiB** kernel-log limit.
 - Timeouts remain **30 seconds** for regular commands, **15 seconds** for panel refresh and **120 seconds** for speed tests. Group cancellation is asynchronous; the metrics collector has a watchdog and restart delay.
-- Security details display at most **200 connections**, Docker at most **100 entries**, and firewall at most **50 groups**, with truncation indicated where applicable.
+- Security details display at most **200 connections**, Docker at most **100 entries**, and firewall at most **30 pattern cards**, with truncation indicated where applicable.
 - Settings export uses typed JSON. Import accepts JSON and legacy dconf data, validates schema/structure/size, and presents commands for confirmation before applying them. It does not spawn `dconf load`.
 
 Custom commands execute with your account's permissions. Cancellation is not a sandbox and cannot contain descendants that deliberately create another session. Docker access retains the daemon's existing privileges; no new permissions are granted by these widgets.
@@ -358,3 +368,9 @@ Orbitz customizations and Python widgets: **orbitzone / Orbitz**. See [`LICENSE`
 **Project topics:** azclock, Desktop Clock, azclock custom commands, Desktop Clock widgets, Ubuntu 22.04, GNOME Shell extension, Linux desktop widgets, Python system monitor, CPU monitor, RAM monitor, network monitoring, TCP connections, hardware temperatures, disk usage, weather widget, Spotify now playing, MPRIS, Docker containers and internet speed test.
 
 Clock/weather widgets keep a default width of 440 px and wrap long text onto additional lines. Other widgets use their natural width. Set **Widget width (px; 0 = default)** to override the width and enable wrapping for a particular widget; anchors use the final width and height.
+
+The **Atualizações** widget (`atualizacoes-widget.py`, Ubuntu) groups APT, Snap and Flatpak updates, installed/available versions, APT security origins and reboot-requesting packages. APT reads local indexes; Flatpak uses cached metadata; Snap queries its service. Old APT indexes, failures and partial results are explicitly marked. Refresh is manual; opening the dialog rereads the list. Action buttons use a compact four-column grid with command tooltips; the unused-dependency action is labeled “Remover sobras”.
+
+Actions open GNOME Terminal, display the command and wait for Enter before execution. APT update, upgrade, full-upgrade, autoclean, autoremove, Snap refresh, Flatpak update and update/upgrade/autoclean are separate choices. APT retains its normal confirmations; no passwords are stored. After completing an action, click **Reler lista**.
+
+Custom buttons are defined in `~/.config/orbitz-widgets/update-actions.json`, a JSON array of up to ten objects with `name` and `command` strings. Example: `[{"name":"Atualizar APT","command":"sudo apt update && sudo apt upgrade"}]`. Commands run only through an explicit click and terminal confirmation.
