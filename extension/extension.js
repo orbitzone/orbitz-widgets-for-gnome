@@ -1,7 +1,7 @@
 /* eslint-disable jsdoc/require-jsdoc */
 const {
     Clutter, Gio, GLib, GObject,
-    Graphene, Pango, St,
+    Graphene, Meta, Pango, St,
 } = imports.gi;
 
 const DND = imports.ui.dnd;
@@ -2285,12 +2285,51 @@ class AzClock {
         this._controller.set_child(this._controllerIcon);
         this._controller.connect('clicked', () => this._running ? this._stopWidgets() : this._startWidgets());
         Main.layoutManager.addChrome(this._controller, {affectsStruts: false, trackFullscreen: false});
+        this._controllerWindows = new Set();
+        const watchWindow = window => {
+            if (this._controllerWindows.has(window)) return;
+            this._controllerWindows.add(window);
+            window.connectObject('position-changed', () => this._stackControllerBehindWindows(),
+                'size-changed', () => this._stackControllerBehindWindows(),
+                'notify::minimized', () => this._stackControllerBehindWindows(),
+                'notify::gtk-application-id', () => this._stackControllerBehindWindows(),
+                'notify::title', () => this._stackControllerBehindWindows(),
+                'unmanaged', () => {
+                    this._controllerWindows.delete(window);
+                    window.disconnectObject(this._controller);
+                    this._stackControllerBehindWindows();
+                }, this._controller);
+        };
+        for (const actor of global.get_window_actors()) watchWindow(actor.meta_window);
+        global.display.connectObject('restacked', () => this._stackControllerBehindWindows(),
+            'window-created', (_display, window) => { watchWindow(window); this._stackControllerBehindWindows(); }, this._controller);
+        global.workspace_manager.connectObject('active-workspace-changed', () => this._stackControllerBehindWindows(), this._controller);
         Main.layoutManager.connectObject('monitors-changed', () => this._positionController(), this._controller);
         try {
             this._controllerSettings = ExtensionUtils.getSettings();
             this._controllerSettings.connectObject('changed::widget-data', () => this._positionController(), this._controller);
         } catch (error) { logError(error, 'Posição dos widgets indisponível'); }
         this._positionController();
+    }
+
+    _stackControllerBehindWindows() {
+        if (!this._controller) return;
+        const workspace = global.workspace_manager.get_active_workspace();
+        const {x, y, width, height} = this._controller;
+        // A desktop window can intercept input below window_group on Wayland.
+        // Keep native button input, but never expose it over an application window.
+        const covered = [...this._controllerWindows].some(window => {
+            // DING emulates a desktop window on Wayland without changing its
+            // NORMAL window type. Its full-monitor surface must not hide us.
+            const desktopIcons = window.get_gtk_application_id?.() === 'com.rastersoft.ding' ||
+                window.customJS_ding?._keepAtBottom === true;
+            if (desktopIcons || window.get_window_type() === Meta.WindowType.DESKTOP ||
+                !window.showing_on_its_workspace() || !window.located_on_workspace(workspace)) return false;
+            const rect = window.get_frame_rect();
+            return rect.x < x + width && rect.x + rect.width > x &&
+                rect.y < y + height && rect.y + rect.height > y;
+        });
+        this._controller.visible = !covered;
     }
 
     _controllerMonitor() {
@@ -2325,6 +2364,7 @@ class AzClock {
         const panelHeight = monitor === primary ? Math.max(28, Main.panel.height || 0) : 0;
         this._controller.set_position(monitor.x + monitor.width - 52, monitor.y + panelHeight + 8);
         this._controller.show();
+        this._stackControllerBehindWindows();
     }
 
     _setControllerState(running, busy = false) {
@@ -2386,6 +2426,7 @@ class AzClock {
     disable() {
         this._stopWidgets();
         this._controller?.destroy();
+        this._controllerWindows?.clear();
         this._controller = null;
         this._controllerButton = null;
         this._controllerIcon = null;

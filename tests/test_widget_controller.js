@@ -19,13 +19,14 @@ const settings = {
     get_value() { return {deep_unpack: () => ({})}; }, set_value() {},
 };
 const context = {
+    Meta: {WindowType:{DESKTOP:1}},
     widgetsEnabled: false, activeCommandRuns: new Set(), pendingStops: new Set(),
     metricLabels: new Set(), networkClickLabels: new Set(), metricRestart: null, networkClickTimer: null,
     WIDGETDATA: null, DIGITAL_CLOCK: 'Digital_Clock', ANALOG_CLOCK: 'Analog_Clock',
     Me: {path:'/extension', settings: null, imports: {settings: {SettingsImport: {validateWidgets() { if (failValidation) throw Error('bad config'); }}}}},
     ExtensionUtils: {getSettings() { settingsRead++; return settings; }},
     Utils: {unpackData() { return [[{Widget_Type:'Widget_Box'}, {Element_Type:'Digital_Clock'}],[{Widget_Type:'Widget_Box'}],[{Widget_Type:'Widget_Box'}]]; }},
-    Main: {panel: {height:28, addToStatusArea() {}}, layoutManager: {addChrome() {}, primaryMonitor: {x:0,y:0,width:1920,height:1080}, disconnectObject() {}, connectObject() {}, _backgroundGroup: {add_child() {}}}, notifyError() {}},
+    Main: {panel: {height:28, addToStatusArea() {}}, layoutManager: {addChrome(actor, params) { actor.inputTracked = params; }, primaryMonitor: {x:0,y:0,width:1920,height:1080}, disconnectObject() {}, connectObject() {}, _backgroundGroup: {add_child() {}}}, notifyError() {}},
     PanelMenu: {Button: Actor}, St: {Button: Actor, Label: Actor, Icon: Actor}, Clutter: {ActorAlign: {CENTER:0}},
     Gio: {icon_new_for_string: value => value},
     GLib: {build_filenamev: parts => parts.join('/'), Variant: class {}, PRIORITY_DEFAULT:0, SOURCE_CONTINUE: true, SOURCE_REMOVE:false,
@@ -37,17 +38,37 @@ const context = {
         destroy() { destroyed++; super.destroy(); }
     },
     stopMetrics() { stopped++; }, stopCommandRun(run) { run.cancelled = true; return Promise.resolve(); },
-    logError() {}, debugLog() {}, global: {display: {get_n_monitors: () => 1}},
+    logError() {}, debugLog() {}, global: {get_window_actors: () => [], workspace_manager: {get_active_workspace: () => 0, connectObject() {}}, display: {get_n_monitors: () => 1, connectObject() {}}, window_group: {add_child() {}, get_children: () => [{meta_window:{get_window_type:()=>0}}], set_child_below_sibling(actor,sibling){actor.below=sibling}, set_child_above_sibling(){}}},
 };
 vm.createContext(context);
 vm.runInContext(source.slice(source.indexOf('class AzClock {')) + 'this.Controller = AzClock;', context);
 (async () => {
     const controller = new context.Controller();
     controller.enable();
+    assert.equal(controller._controller.inputTracked.affectsStruts, false);
+    assert.equal(controller._controller.inputTracked.trackFullscreen, false);
+    assert.equal(typeof controller._controller.events.clicked, "function");
     assert.equal(controller._controller.visible, true); assert(controller._controller.style.includes('background-color: transparent')); assert.equal(controller._controllerIcon.icon_size, 24); assert.equal(controller._controller.width, 40);
     assert.equal(controller._controller.x, 1868); assert.equal(controller._controller.y, 36);
     assert.equal(created, 0); assert.equal(settingsRead, 1); assert.equal(timers.size, 0);
     assert.equal(controller._controllerIcon.gicon, '/extension/media/controls/widgets-white.svg');
+    const coveringWindow = {get_window_type: () => 0, showing_on_its_workspace: () => true,
+        located_on_workspace: () => true, get_frame_rect: () => ({x:1800,y:0,width:120,height:100})};
+    controller._controllerWindows.add(coveringWindow);
+    controller._stackControllerBehindWindows(); assert.equal(controller._controller.visible, false);
+    coveringWindow.showing_on_its_workspace = () => false;
+    controller._stackControllerBehindWindows(); assert.equal(controller._controller.visible, true);
+    coveringWindow.showing_on_its_workspace = () => true;
+    coveringWindow.get_window_type = () => 1;
+    controller._stackControllerBehindWindows(); assert.equal(controller._controller.visible, true);
+    coveringWindow.get_window_type = () => 0;
+    coveringWindow.get_gtk_application_id = () => 'com.rastersoft.ding';
+    controller._stackControllerBehindWindows(); assert.equal(controller._controller.visible, true);
+    coveringWindow.get_gtk_application_id = () => 'org.example.Application';
+    controller._stackControllerBehindWindows(); assert.equal(controller._controller.visible, false);
+    coveringWindow.customJS_ding = {_keepAtBottom: true};
+    controller._stackControllerBehindWindows(); assert.equal(controller._controller.visible, true);
+    controller._controllerWindows.clear();
     const primary=context.Main.layoutManager.primaryMonitor;
     const second={x:-1280,y:0,width:1280,height:1024};
     context.Main.layoutManager.monitors=[primary,second];
@@ -57,7 +78,7 @@ vm.runInContext(source.slice(source.indexOf('class AzClock {')) + 'this.Controll
     settings.get_value=()=>({deep_unpack:()=>[[{Location_X:'0',Location_Y:'100',Box_AnchorPoint:'2'}]]});
     assert.strictEqual(controller._controllerMonitor(),second);
     settings.get_value=originalGet; controller._positionController();
-    controller._startWidgets();
+    controller._controller.events.clicked();
     assert.equal(created, 3); assert.equal(controller.widgets.length, 3); assert(timers.size > 0);
     assert.equal(controller._controllerIcon.gicon, '/extension/media/controls/widgets-active.svg');
     const run = {}; context.activeCommandRuns.add(run);
