@@ -6,6 +6,7 @@ import time
 from pathlib import Path
 
 from widget_runtime import run as bounded_run, launch_terminal
+from pressure_metrics import snapshot as pressure_snapshot
 
 PAGE_SIZE = os.sysconf('SC_PAGE_SIZE')
 TICKS = os.sysconf('SC_CLK_TCK')
@@ -89,11 +90,6 @@ def details():
     notices = []
     if cpu >= 85: notices.append('CPU ocupada nesta amostra. Revise os processos com maior uso antes de alterar o perfil de energia.')
     if total and free/total < 0.15: notices.append('Pouca memória disponível. Revise os aplicativos com maior consumo e feche os que não precisa.')
-    try:
-        pressure = Path('/proc/pressure/memory').read_text()
-        match = re.search(r'^some avg10=([\d.]+)', pressure, re.M)
-        if match and float(match[1]) >= 5: notices.append('Há espera por memória nos últimos 10 segundos. Revise os processos que mais usam RAM.')
-    except OSError: pass
     if swap: notices.append('Swap em uso, por si só, não indica lentidão. Observe a memória disponível e a espera por memória.')
     disk = shutil.disk_usage(Path.home())
     if disk.free/disk.total < 0.1: notices.append('Menos de 10% de espaço livre na partição da pasta pessoal. Revise arquivos grandes para liberar espaço.')
@@ -105,7 +101,7 @@ def details():
     summary += f"\nTemperatura {temperature:.0f} °C" if temperature else '\nTemperatura indisponível'
     summary += f' · Disco livre {disk.free/1073741824:.1f} GiB'
     if profile: summary += ' · Perfil ' + profile
-    return dict(summary=summary, notices=notices, cpu_rows=heapq.nsmallest(7,rows,key=lambda r:(-r['cpu'],r['pid'])), memory_rows=heapq.nsmallest(7,rows,key=lambda r:(-r['memory'],r['pid'])), actions=available_actions())
+    return dict(pressure=pressure_snapshot(), summary=summary, notices=notices, cpu_rows=heapq.nsmallest(7,rows,key=lambda r:(-r['cpu'],r['pid'])), memory_rows=heapq.nsmallest(7,rows,key=lambda r:(-r['memory'],r['pid'])), actions=available_actions())
 
 def launch(identifier):
     action = next((a for a in available_actions() if a['id'] == identifier), None)
@@ -138,3 +134,6 @@ print('PROCESSO             CPU')
 for index, (cpu, pid, name) in enumerate(rows[:7]):
     print(html.escape(f'{name[:18]:18} {cpu:5.1f}%'), end='\n' if index < len(rows[:7]) - 1 else '')
 print('</span>')
+pressure = pressure_snapshot()
+color = '#ff6b6b' if any(i['level'] == 'high' for i in pressure['items']) else '#ffd479' if any(i['level'] == 'attention' for i in pressure['items']) else '#c8c8c8'
+print(f"<span foreground=\"{color}\">{html.escape(pressure['text'])}</span>")

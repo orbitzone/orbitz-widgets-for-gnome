@@ -1065,6 +1065,10 @@ class AzClockCommandLabel extends Label {
     }
 
     _closeNetworkDialog() {
+        if (this._networkModalGrab) {
+            Main.popModal(this._networkModalGrab);
+            this._networkModalGrab = null;
+        }
         this._cancelFirewallInspection();
         this._networkGeneration++;
         this._networkRefreshPending = false;
@@ -1111,6 +1115,13 @@ class AzClockCommandLabel extends Label {
             const [stdout] = await readCommandOutput(run);
             if (this._networkDestroyed || run.cancelled || run.generation !== this._networkGeneration || !this._networkDialog.visible)
                 return;
+            if (command.includes('/servicos-widget.py')) {
+                if (!proc.get_successful() || !stdout.startsWith('AZCLOCK_SERVICES:'))
+                    throw new Error('Não foi possível consultar os serviços.');
+                this._renderServices(JSON.parse(stdout.slice('AZCLOCK_SERVICES:'.length)));
+                this._networkRefreshStatus.text = 'Consultado às ' + GLib.DateTime.new_now_local().format('%H:%M');
+                return;
+            }
             if (command.includes('/temperaturas-widget.py')) {
                 if (!proc.get_successful() || !stdout.startsWith('AZCLOCK_TEMPERATURES:'))
                     throw new Error('Não foi possível consultar os sensores.');
@@ -1189,10 +1200,12 @@ class AzClockCommandLabel extends Label {
         }
     }
 
-    _buildUpdatesDialog() {
+    _buildUpdatesDialog(compact = false) {
         this._networkBackdrop = new St.Widget({reactive: true, visible: false});
         this._networkBackdrop.add_constraint(new Clutter.BindConstraint({source: global.stage, coordinate: Clutter.BindCoordinate.ALL}));
-        this._networkBackdrop.connect('button-press-event', () => {
+        this._networkBackdrop.connect('button-press-event', (_actor, event) => {
+            if (this._networkDialog?.contains(event.get_source()))
+                return Clutter.EVENT_PROPAGATE;
             this._closeNetworkDialog();
             return Clutter.EVENT_STOP;
         });
@@ -1205,11 +1218,15 @@ class AzClockCommandLabel extends Label {
         note.clutter_text.set_line_wrap(true);
         this._updatesNote = note;
         this._networkDialog.add_child(note);
-        const scroll = new St.ScrollView({style: 'width: 720px; height: 300px;', reactive: true});
-        scroll.set_policy(St.PolicyType.NEVER, St.PolicyType.AUTOMATIC);
-        this._updatesRows = new St.BoxLayout({vertical: true, style: 'spacing: 8px;'});
-        scroll.add_actor(this._updatesRows);
-        this._networkDialog.add_child(scroll);
+        this._updatesRows = new St.BoxLayout({vertical: true, style: 'spacing: 10px; width: 720px;'});
+        if (compact) {
+            this._networkDialog.add_child(this._updatesRows);
+        } else {
+            const scroll = new St.ScrollView({style: 'width: 720px; height: 300px;', reactive: true});
+            scroll.set_policy(St.PolicyType.NEVER, St.PolicyType.AUTOMATIC);
+            scroll.add_actor(this._updatesRows);
+            this._networkDialog.add_child(scroll);
+        }
         this._updatesActions = new St.BoxLayout({vertical: true, style: 'spacing: 8px;'});
         this._networkDialog.add_child(this._updatesActions);
         const footer = new St.BoxLayout({style: 'spacing: 8px;'});
@@ -1219,7 +1236,7 @@ class AzClockCommandLabel extends Label {
         this._networkRefreshStatus = new St.Label({text: '', style: 'font-size: 12px; color: #c8c8c8;'});
         footer.add_child(this._networkRefreshStatus);
         this._networkDialog.add_child(footer);
-        Main.uiGroup.add_child(this._networkDialog);
+        this._networkBackdrop.add_child(this._networkDialog);
     }
 
     _renderUpdates(data) {
@@ -1262,8 +1279,9 @@ class AzClockCommandLabel extends Label {
             }
             const button = new St.Button({reactive: true, can_focus: true,
                 accessible_name: action.name + ': ' + action.command, x_expand: true,
-                style: 'width: 156px; padding: 8px; border-radius: 6px; background-color: #315d80; color: white;'});
-            const label = new St.Label({text: action.name, x_align: Clutter.ActorAlign.CENTER});
+                height: 38, y_align: Clutter.ActorAlign.CENTER,
+                style: 'width: 156px; min-height: 22px; padding: 8px; border-radius: 6px; background-color: #315d80; color: white;'});
+            const label = new St.Label({text: action.name, x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER});
             label.clutter_text.set_line_wrap(true);
             label.clutter_text.set_ellipsize(Pango.EllipsizeMode.NONE);
             button.set_child(label);
@@ -1300,7 +1318,8 @@ class AzClockCommandLabel extends Label {
         button.connect('notify::hover', () => button.hover ? show() : hide());
         button.connect('key-focus-in', show);
         button.connect('key-focus-out', hide);
-        button.connect('clicked', hide);
+        if (button instanceof St.Button)
+            button.connect('clicked', hide);
         const visibilitySignal = this._networkDialog.connect('notify::visible', hide);
         button.connect('destroy', () => {
             this._networkDialog.disconnect(visibilitySignal);
@@ -1312,7 +1331,9 @@ class AzClockCommandLabel extends Label {
     _buildTemperaturesDialog() {
         this._networkBackdrop = new St.Widget({reactive: true, visible: false});
         this._networkBackdrop.add_constraint(new Clutter.BindConstraint({source: global.stage, coordinate: Clutter.BindCoordinate.ALL}));
-        this._networkBackdrop.connect('button-press-event', () => {
+        this._networkBackdrop.connect('button-press-event', (_actor, event) => {
+            if (this._networkDialog?.contains(event.get_source()))
+                return Clutter.EVENT_PROPAGATE;
             this._closeNetworkDialog();
             return Clutter.EVENT_STOP;
         });
@@ -1332,7 +1353,7 @@ class AzClockCommandLabel extends Label {
         this._networkRefreshStatus = new St.Label({text: '', style: 'font-size: 12px; color: #b9c5cf;', y_align: Clutter.ActorAlign.CENTER});
         footer.add_child(this._networkRefreshStatus);
         this._networkDialog.add_child(footer);
-        Main.uiGroup.add_child(this._networkDialog);
+        this._networkBackdrop.add_child(this._networkDialog);
     }
 
     _temperatureCategory(item) {
@@ -1428,12 +1449,88 @@ class AzClockCommandLabel extends Label {
         this._networkDialog.set_position(monitor.x + Math.max(8, (monitor.width - width) / 2), monitor.y + Math.max(8, (monitor.height - height) / 2));
     }
 
+    _renderPressure(data) {
+        const averagesValid = values => Array.isArray(values) && values.length === 3 &&
+            values.every(value => Number.isFinite(value) && value >= 0 && value <= 100);
+        if (!data || typeof data.text !== 'string' || data.text.length > 160 ||
+            !Array.isArray(data.items) || data.items.length !== 3 ||
+            data.items.some((item, index) => !item || item.resource !== ['cpu', 'memory', 'io'][index] ||
+                typeof item.name !== 'string' || item.name.length > 40 ||
+                typeof item.suggestion !== 'string' || item.suggestion.length > 256 ||
+                !['normal', 'attention', 'high', 'unavailable'].includes(item.level) ||
+                (item.averages !== null && !averagesValid(item.averages)) ||
+                (item.full !== null && !averagesValid(item.full))))
+            throw new Error('Resposta de pressão inválida.');
+        const columns = new St.BoxLayout({style: 'spacing: 12px;'});
+        for (const item of data.items) {
+            const color = {normal: '#9fdf9f', attention: '#ffd479', high: '#ff6b6b', unavailable: '#aaaaaa'}[item.level];
+            const column = new St.BoxLayout({vertical: true,
+                style: 'width: 220px; padding: 8px; spacing: 8px; background-color: #292929; border-radius: 6px;'});
+            column.add_child(new St.Label({text: item.name, style: `font-weight: bold; color: ${color};`}));
+            const text = item.averages === null ? 'Leitura indisponível' :
+                item.averages.map((value, index) => `${[10, 60, 300][index]} s: ${value.toFixed(1)}%`).join('\n');
+            column.add_child(new St.Label({text, style: `color: ${color};`}));
+            if (item.full !== null)
+                column.add_child(new St.Label({text: `Espera total · 10 s: ${item.full[0].toFixed(1)}%`}));
+            const note = new St.Label({text: item.level === 'normal' ? 'Sem pressão relevante na média de 10 s.' : item.suggestion});
+            note.clutter_text.set_line_wrap(true);
+            note.clutter_text.set_ellipsize(Pango.EllipsizeMode.NONE);
+            column.add_child(note);
+            columns.add_child(column);
+        }
+        this._updatesRows.add_child(columns);
+    }
+
+    _buildServicesDialog() {
+        this._buildUpdatesDialog(true);
+        this._updatesHeading.text = 'Serviços · falhas registradas';
+        this._updatesNote.text = 'Somente leitura · passe o mouse nos serviços para ver os detalhes';
+        this._networkRefreshButton.set_child(new St.Label({text: 'Atualizar'}));
+    }
+
+    _renderServices(data) {
+        if (!data || typeof data.text !== 'string' || data.text.length > 160 ||
+            !Array.isArray(data.groups) || data.groups.length !== 2 || data.groups.some((group, index) =>
+                !group || group.scope !== ['system', 'user'][index] || !Number.isInteger(group.count) || group.count < 0 ||
+                typeof group.error !== 'string' || group.error.length > 256 || !Array.isArray(group.items) || group.items.length > 6 ||
+                group.items.some(item => !item || ['name', 'description', 'result', 'status', 'changed'].some(key =>
+                    typeof item[key] !== 'string' || item[key].length > 256))))
+            throw new Error('Resposta de serviços inválida.');
+        this._updatesRows.destroy_all_children();
+        const columns = new St.BoxLayout({style: 'spacing: 12px;'});
+        for (const group of data.groups) {
+            const card = new St.BoxLayout({vertical: true, style: 'width: 338px; padding: 8px; spacing: 8px; background-color: #292929; border-radius: 6px;'});
+            card.add_child(new St.Label({text: `${group.scope === 'system' ? 'Sistema' : 'Sua sessão'} · ${group.count}`,
+                style: `font-weight: bold; color: ${group.count ? '#ffd479' : group.error ? '#aaaaaa' : '#9fdf9f'};`}));
+            if (group.error || !group.count) {
+                const note = new St.Label({text: group.error || 'Nenhum serviço com falha', style: 'color: #c8c8c8;'});
+                note.clutter_text.set_line_wrap(true);
+                card.add_child(note);
+            }
+            for (const item of group.items) {
+                const button = new St.Button({reactive: true, can_focus: true, accessible_name: item.name + ': ' + item.description,
+                    style: 'padding: 6px; color: #ffd479;'});
+                const label = new St.Label({text: item.name});
+                label.clutter_text.set_ellipsize(Pango.EllipsizeMode.END);
+                button.set_child(label);
+                this._attachActionTooltip(button, `${item.description}\n${item.name}\nResultado: ${item.result || 'Indisponível'} · Código: ${item.status || 'N/D'}\nMudança de estado: ${item.changed || 'Horário indisponível'}\nPode ser uma falha antiga ou de um componente opcional. O resultado não determina a causa raiz.`);
+                card.add_child(button);
+            }
+            if (group.count > group.items.length)
+                card.add_child(new St.Label({text: `+ ${group.count - group.items.length} serviços · consulte o systemctl`}));
+            columns.add_child(card);
+        }
+        this._updatesRows.add_child(columns);
+    }
+
     _buildProcessesDialog() {
-        this._buildUpdatesDialog();
+        this._buildUpdatesDialog(true);
         this._processesDialog = true;
         this._updatesHeading.text = 'Processos · desempenho';
-        this._updatesNote.text = 'Diagnóstico da amostra atual. CPU por processo pode superar 100% ao usar vários núcleos.';
-        this._networkRefreshButton.label = 'Atualizar';
+        this._updatesNote.text = 'Pressão de recursos · médias de 10 s / 1 min / 5 min';
+        this._updatesNote.reactive = true;
+        this._attachActionTooltip(this._updatesNote, 'PSI mede o tempo de espera por recursos, não o uso. Atenção ≥ 5%; alta ≥ 20% na média de 10 s. Limites indicativos, não diagnóstico de falha.');
+        this._networkRefreshButton.set_child(new St.Label({text: 'Atualizar'}));
         this._networkRefreshButton.accessible_name = 'Atualizar diagnóstico e processos';
     }
 
@@ -1450,21 +1547,44 @@ class AzClockCommandLabel extends Label {
             throw new Error('Resposta de processos inválida.');
         this._updatesRows.destroy_all_children();
         this._updatesActions.destroy_all_children();
-        const add = (text, color = '#c8c8c8') => {
-            const label = new St.Label({text, style: `padding: 4px; color: ${color};`});
-            label.clutter_text.set_line_wrap(true);
-            label.clutter_text.set_ellipsize(Pango.EllipsizeMode.NONE);
-            this._updatesRows.add_child(label);
+        this._renderPressure(data.pressure);
+        const overview = new St.BoxLayout({style: 'spacing: 10px;'});
+        const badge = (icon, text, tooltip, color) => {
+            const button = new St.Button({reactive: true, can_focus: true,
+                accessible_name: text + ': ' + tooltip,
+                style: `padding: 7px 12px; background-color: #292929; border-radius: 6px; color: ${color};`});
+            const content = new St.BoxLayout({style: 'spacing: 6px;'});
+            content.add_child(new St.Icon({icon_name: icon, icon_size: 16}));
+            content.add_child(new St.Label({text}));
+            button.set_child(content);
+            this._attachActionTooltip(button, tooltip);
+            return button;
         };
-        add(data.summary, '#82cfff');
-        for (const notice of data.notices) add(notice);
-        for (const [title, rows] of [['Maior uso de CPU', data.cpu_rows], ['Maior uso de RAM', data.memory_rows]]) {
-            add(title, 'white');
-            for (const row of rows)
-                add(`${row.name} · PID ${row.pid} · CPU ${row.cpu.toFixed(1)}% · RAM ${row.memory} MiB`);
+        overview.add_child(badge('computer-symbolic', 'Resumo do sistema', data.summary, '#82cfff'));
+        overview.add_child(badge('dialog-information-symbolic', 'Observações', data.notices.join('\n\n'), '#c8c8c8'));
+        this._updatesRows.add_child(overview);
+        const rankings = new St.BoxLayout({style: 'spacing: 12px;'});
+        for (const [title, rows, memory] of [['CPU · maiores consumos', data.cpu_rows, false], ['RAM · maiores consumos', data.memory_rows, true]]) {
+            const card = new St.BoxLayout({vertical: true,
+                style: 'width: 338px; padding: 8px; spacing: 6px; background-color: #292929; border-radius: 6px;'});
+            card.add_child(new St.Label({text: title, style: 'font-weight: bold; color: #82cfff;'}));
+            for (const process of rows.slice(0, 3)) {
+                const line = new St.BoxLayout({style: 'spacing: 8px;'});
+                const name = new St.Label({text: process.name, x_expand: true, style: 'width: 225px;'});
+                name.clutter_text.set_ellipsize(Pango.EllipsizeMode.END);
+                line.add_child(name);
+                line.add_child(new St.Label({text: memory ? `${process.memory} MiB` : `${process.cpu.toFixed(1)}%`,
+                    style: 'color: #ededed;'}));
+                const button = new St.Button({reactive: true, can_focus: true,
+                    accessible_name: `${process.name}, PID ${process.pid}, CPU ${process.cpu.toFixed(1)}%, RAM ${process.memory} MiB`});
+                button.set_child(line);
+                this._attachActionTooltip(button, `PID ${process.pid} · CPU ${process.cpu.toFixed(1)}% · RAM ${process.memory} MiB\nCPU pode superar 100% ao usar vários núcleos.`);
+                card.add_child(button);
+            }
+            if (!rows.length) card.add_child(new St.Label({text: 'Nenhum processo nesta amostra', style: 'color: #aaaaaa;'}));
+            rankings.add_child(card);
         }
-        this._updatesActions.add_child(new St.Label({text: 'Ações · confira o comando no tooltip e confirme com Enter no terminal',
-            style: 'font-size: 12px; color: #c8c8c8;'}));
+        this._updatesRows.add_child(rankings);
         let row;
         for (const [index, action] of data.actions.entries()) {
             if (index % 4 === 0) {
@@ -1473,8 +1593,9 @@ class AzClockCommandLabel extends Label {
             }
             const button = new St.Button({reactive: true, can_focus: true,
                 accessible_name: action.name + ': ' + action.effect + ' ' + action.command,
-                style: 'width: 156px; padding: 8px; border-radius: 6px; background-color: #315d80; color: white;'});
-            const label = new St.Label({text: action.name, x_align: Clutter.ActorAlign.CENTER});
+                height: 38, y_align: Clutter.ActorAlign.CENTER,
+                style: 'width: 156px; min-height: 22px; padding: 8px; border-radius: 6px; background-color: #315d80; color: white;'});
+            const label = new St.Label({text: action.name, x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER});
             label.clutter_text.set_line_wrap(true);
             button.set_child(label);
             this._attachActionTooltip(button, action.effect + '\n\n' + action.command);
@@ -1482,7 +1603,7 @@ class AzClockCommandLabel extends Label {
                 try {
                     const [, argv] = GLib.shell_parse_argv(getData(this.widgetIndex, this.elementIndex, 'Text_Command'));
                     Gio.Subprocess.new([...argv, '--action', action.id], Gio.SubprocessFlags.NONE);
-                    this._networkRefreshStatus.text = 'Ação aberta no terminal. Atualize o diagnóstico após concluir.';
+                    this._networkRefreshStatus.text = 'Confira o comando e confirme com Enter no terminal.';
                 } catch (error) {
                     this._networkRefreshStatus.text = 'Não foi possível abrir a ação.';
                 }
@@ -1494,7 +1615,9 @@ class AzClockCommandLabel extends Label {
     _buildDockerDialog() {
         this._networkBackdrop = new St.Widget({reactive: true, visible: false});
         this._networkBackdrop.add_constraint(new Clutter.BindConstraint({source: global.stage, coordinate: Clutter.BindCoordinate.ALL}));
-        this._networkBackdrop.connect('button-press-event', () => {
+        this._networkBackdrop.connect('button-press-event', (_actor, event) => {
+            if (this._networkDialog?.contains(event.get_source()))
+                return Clutter.EVENT_PROPAGATE;
             this._closeNetworkDialog();
             return Clutter.EVENT_STOP;
         });
@@ -1519,7 +1642,7 @@ class AzClockCommandLabel extends Label {
         this._networkRefreshStatus = new St.Label({text: '', style: 'font-size: 12px; color: #c8c8c8;'});
         footer.add_child(this._networkRefreshStatus);
         this._networkDialog.add_child(footer);
-        Main.uiGroup.add_child(this._networkDialog);
+        this._networkBackdrop.add_child(this._networkDialog);
     }
 
     _validDockerUrl(url) {
@@ -1562,7 +1685,9 @@ class AzClockCommandLabel extends Label {
     _buildFirewallDialog() {
         this._networkBackdrop = new St.Widget({reactive: true, visible: false});
         this._networkBackdrop.add_constraint(new Clutter.BindConstraint({source: global.stage, coordinate: Clutter.BindCoordinate.ALL}));
-        this._networkBackdrop.connect('button-press-event', () => {
+        this._networkBackdrop.connect('button-press-event', (_actor, event) => {
+            if (this._networkDialog?.contains(event.get_source()))
+                return Clutter.EVENT_PROPAGATE;
             this._closeNetworkDialog();
             return Clutter.EVENT_STOP;
         });
@@ -1587,7 +1712,7 @@ class AzClockCommandLabel extends Label {
         this._networkRefreshStatus = new St.Label({text: '', style: 'font-size: 12px; color: #c8c8c8;'});
         footer.add_child(this._networkRefreshStatus);
         this._networkDialog.add_child(footer);
-        Main.uiGroup.add_child(this._networkDialog);
+        this._networkBackdrop.add_child(this._networkDialog);
     }
 
     _renderFirewall(data) {
@@ -1738,6 +1863,8 @@ class AzClockCommandLabel extends Label {
             this._closeNetworkDialog();
             return;
         }
+        if (getData(this.widgetIndex, this.elementIndex, 'Text_Command').includes('/servicos-widget.py') && !this._networkDialog)
+            this._buildServicesDialog();
         if (getData(this.widgetIndex, this.elementIndex, 'Text_Command').includes('/temperaturas-widget.py') && !this._networkDialog)
             this._buildTemperaturesDialog();
         if (getData(this.widgetIndex, this.elementIndex, 'Text_Command').includes('/processos-widget.py') && !this._networkDialog)
@@ -1752,7 +1879,9 @@ class AzClockCommandLabel extends Label {
         if (!this._networkDialog) {
             this._networkBackdrop = new St.Widget({reactive: true, visible: false});
             this._networkBackdrop.add_constraint(new Clutter.BindConstraint({source: global.stage, coordinate: Clutter.BindCoordinate.ALL}));
-            this._networkBackdrop.connect('button-press-event', () => {
+            this._networkBackdrop.connect('button-press-event', (_actor, event) => {
+            if (this._networkDialog?.contains(event.get_source()))
+                return Clutter.EVENT_PROPAGATE;
                 this._closeNetworkDialog();
                 return Clutter.EVENT_STOP;
             });
@@ -1821,9 +1950,11 @@ class AzClockCommandLabel extends Label {
             this._networkRefreshStatus = new St.Label({text: '', style: 'color: #c8c8c8; font-size: 12px;', y_align: Clutter.ActorAlign.CENTER});
             footer.add_child(this._networkRefreshStatus);
             this._networkDialog.add_child(footer);
-            Main.uiGroup.add_child(this._networkDialog);
+            this._networkBackdrop.add_child(this._networkDialog);
         }
         this._networkBackdrop.show();
+        if (!this._networkModalGrab)
+            this._networkModalGrab = Main.pushModal(this._networkBackdrop);
         Main.uiGroup.set_child_above_sibling(this._networkBackdrop, null);
         this._networkDialog.show();
         const [x, y] = this.get_transformed_position();
@@ -1841,7 +1972,7 @@ class AzClockCommandLabel extends Label {
             py = Math.max(monitor.y + 8, py);
         }
         this._networkDialog.set_position(px, py);
-        Main.uiGroup.set_child_above_sibling(this._networkDialog, null);
+        this._networkBackdrop.set_child_above_sibling(this._networkDialog, null);
         this._refreshNetworkDialog();
     }
 
@@ -2210,6 +2341,13 @@ class AzClockCommandLabel extends Label {
             }
 
             let displayText = response;
+            if (command.includes('/servicos-widget.py') && response.startsWith('AZCLOCK_SERVICES:')) {
+                const payload = JSON.parse(response.slice('AZCLOCK_SERVICES:'.length));
+                if (typeof payload.text !== 'string' || payload.text.length > 160) throw new Error('Resumo de serviços inválido.');
+                displayText = GLib.markup_escape_text(payload.text, -1);
+                this._scheduleNetworkClick();
+            }
+
             if (command.includes('/temperaturas-widget.py'))
                 this._scheduleNetworkClick();
             if (command.includes('/atualizacoes-widget.py') && response.startsWith('AZCLOCK_UPDATES:')) {

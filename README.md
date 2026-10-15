@@ -76,7 +76,8 @@ Playback status, artist and title, followed by a small Spotify or Chrome icon id
 | Widget / script | What it does |
 |---|---|
 | **CPU, RAM and storage** — `cpu-ram-widget.py` | Shows CPU utilization, RAM usage and SSD usage for the filesystem containing your home directory, with text progress bars. An **EXT** row appears when external storage is mounted; its percentage combines used space and capacity across the detected filesystems, counting each filesystem once. The widget does not mount devices. |
-| **Top processes** — `processos-widget.py` | Lists up to seven processes ranked by CPU consumption. Click for a performance snapshot, CPU/RAM rankings, contextual suggestions and available process, startup and power-profile actions. Process usage may exceed 100% on multicore systems. |
+| **Failed services** — `servicos-widget.py` | Counts failed systemd services for the system and current user separately. Click for compact cards with recorded result, exit status and state-change time in tooltips. Read-only, refreshed every 60 seconds. |
+| **Top processes** — `processos-widget.py` | Lists up to seven processes ranked by CPU consumption. Click for a performance snapshot, CPU/RAM rankings, contextual suggestions and available process, startup and power-profile actions. Includes a compact PSI bottleneck summary and three detail columns for CPU, memory and storage I/O. Process usage may exceed 100% on multicore systems. |
 | **Network traffic** — `rede-widget.py` | Shows current receive/transmit rates for the interface selected from the default route (IPv4, with IPv6 fallback). This measures traffic, not your connection's maximum speed. |
 | **TCP connections and ports** — `seguranca-widget.py` | Counts non-loopback TCP connections and listening ports. Click the widget to open a panel with local ports and remote destinations; click a hostname to copy its full name. Counts do not indicate whether a connection is malicious. |
 | **Hardware temperatures** — `temperaturas-widget.py` | Reads available CPU/GPU sensors from Linux sysfs, with an optional `sensors` fallback. Intel coretemp and AMDGPU are handled directly; unavailable readings display `N/D`. |
@@ -275,7 +276,7 @@ To generate the eight absolute command paths for your account:
 
 ```bash
 for script in cpu-ram-widget.py processos-widget.py rede-widget.py \
-  seguranca-widget.py temperaturas-widget.py clima-widget.py firewall-widget.py docker-widget.py; do
+  seguranca-widget.py temperaturas-widget.py clima-widget.py firewall-widget.py docker-widget.py servicos-widget.py; do
   printf 'python3 "%s/.local/share/orbitz-widgets/%s"\n' "$HOME" "$script"
 done
 ```
@@ -466,3 +467,19 @@ Implementation files:
 - [`extension/media/controls/`](extension/media/controls/): white and lime SVG assets; keep this directory in the installed extension.
 
 Controller regression checks: `node tests/test_widget_controller.js` and `python3 -m unittest discover -s tests -v`. The lifecycle test uses mocked GNOME actors; process-tree termination is tested with real child processes. See the individual audit for the validation limits.
+
+### Bottleneck indicators (PSI)
+
+The processes widget reads `/proc/pressure/{cpu,memory,io}` alongside its existing sample. Click it to see three columns with 10-, 60- and 300-second averages, suggestions, and a manual refresh. Below them, two compact cards show the top three CPU and RAM consumers; tooltips carry process IDs, system details and observations. The processes panel does not use a scrolling list. No additional sampling process, timer, network call or disk history is created. The master control stops this collection with the other widgets.
+
+PSI measures time during which tasks wait for resources, **not resource utilization** or attribution to a specific process. Yellow (at least 5%) and red (at least 20%) use the 10-second `some` average as UI heuristics, not universal fault thresholds. Memory and I/O also show `full`, when all non-idle tasks are stalled; system-level CPU `full` is intentionally omitted. Low PSI does not rule out application-specific problems. Missing or unreadable PSI is shown as unavailable/partial, never as healthy.
+
+Requires kernel PSI support and read access to `/proc/pressure`; no extra package or administrator permission is needed. Install `pressure_metrics.py` with the other `widgets/*.py` helpers. See the [kernel PSI documentation](https://docs.kernel.org/accounting/psi.html).
+
+### Failed services
+
+The services widget requires `systemctl` (from Ubuntu's `systemd` package), a running systemd system manager and access to the current user's systemd manager for session services. It queries only failed `.service` units; failed timers, sockets and historical failures of units no longer marked failed are outside this view. Missing tools, denied queries or an unavailable user bus are reported as incomplete, never as a verified healthy state.
+
+Use `python3 /path/to/widgets/servicos-widget.py` with a 60000 ms polling interval. The widget is included in the settings template and follows the master start/stop control. A summary uses two bounded queries; opening or manually refreshing the panel adds at most one batched detail query per scope. Each query has a two-second timeout and an output cap. Up to six services per scope are displayed, with the remaining count indicated.
+
+Tooltips show systemd's `Result`, `ExecMainStatus` and `StateChangeTimestamp`, when available. The timestamp is the last state change, not a guaranteed failure time; a result or exit status alone does not establish the root cause. This widget does not read journal messages, use sudo, restart services or reset failure records. Detailed log investigation remains available through `journalctl -b -u UNIT` (or `journalctl --user -b -u UNIT`) according to your session's permissions.
