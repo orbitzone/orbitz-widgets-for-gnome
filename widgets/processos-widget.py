@@ -132,11 +132,13 @@ for pid, (name, ticks, birth, rss) in second.items():
     cpu = max(0, ticks - first[pid][1]) / TICKS / elapsed * 100
     rows.append((cpu, pid, name))
 rows = heapq.nsmallest(7, rows, key=lambda row: (-row[0], row[1]))
-print('<span font_family="monospace">', end='')
-print('PROCESSO             CPU')
-for index, (cpu, pid, name) in enumerate(rows[:7]):
-    print(html.escape(f'{name[:18]:18} {cpu:5.1f}%'), end='\n' if index < len(rows[:7]) - 1 else '')
-print('</span>')
+# All lines need equal width: GNOME may center each line independently.
+formatted_rows = [(name[:18], f'{cpu:.1f}%') for cpu, _pid, name in rows]
+cpu_width = max([6] + [len(cpu) for _name, cpu in formatted_rows])
+lines = [f'{"PROCESSO":18} {"CPU":>{cpu_width}}']
+lines.extend(f'{name:18} {cpu:>{cpu_width}}' for name, cpu in formatted_rows)
+print('<span font_family="monospace">' + html.escape('\n'.join(lines)) + '</span>')
 pressure = pressure_snapshot()
 color = '#ff6b6b' if any(i['level'] == 'high' for i in pressure['items']) else '#ffd479' if any(i['level'] == 'attention' for i in pressure['items']) else '#c8c8c8'
+print()  # Separate the pressure summary from the process list.
 print(f"<span foreground=\"{color}\">{html.escape(pressure['text'])}</span>")
