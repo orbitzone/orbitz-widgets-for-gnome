@@ -20,6 +20,8 @@ def parse_pressure(text):
         averages = [float(values[key]) for key in ('avg10', 'avg60', 'avg300')]
         if not all(math.isfinite(value) and 0 <= value <= 100 for value in averages):
             raise ValueError('PSI inválido')
+        if fields[0] in result:
+            raise ValueError('Amostra PSI duplicada')
         result[fields[0]] = averages
     if 'some' not in result:
         raise ValueError('PSI sem amostra')

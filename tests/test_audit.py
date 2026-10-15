@@ -124,6 +124,14 @@ class WidgetTests(unittest.TestCase):
             self.assertTrue(partial)
             self.assertLessEqual(sum(len(x) for x in lines), 4194304)
 
+    def test_process_startup_path_is_shell_quoted(self):
+        module = definitions('processos-widget.py')
+        folder = "/tmp/config with 'quotes;$(false)"
+        with patch.dict(module['os'].environ, {'XDG_CONFIG_HOME': folder}), patch.dict(module, query=lambda args: ''), patch.object(module['shutil'], 'which', side_effect=lambda name: '/usr/bin/xdg-open' if name == 'xdg-open' else None):
+            actions = module['available_actions']()
+        import shlex
+        self.assertEqual(shlex.split(actions[0]['command']), ['xdg-open', folder + '/autostart'])
+
     def test_process_query_bounds(self):
         module = definitions('processos-widget.py')
         with patch.dict(module, bounded_run=lambda *a, **k: (_ for _ in ()).throw(ValueError('limit'))):

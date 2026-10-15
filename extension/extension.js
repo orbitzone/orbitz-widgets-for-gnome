@@ -100,6 +100,9 @@ async function readCommandOutput(run, input = null) {
             run.proc.wait_async(run.cancellable),
         ]);
         return [stdout, stderr];
+    } catch (error) {
+        await stopCommandRun(run);
+        throw error;
     } finally { activeCommandRuns.delete(run); }
 
 }
@@ -1022,7 +1025,6 @@ class AzClockCommandLabel extends Label {
                 GLib.source_remove(this._networkClickTimer);
                 this._networkClickTimer = null;
             }
-            this._closeNetworkDialog();
             this._networkBackdrop?.destroy();
             if (this._networkTooltip) {
                 this._networkTooltip.destroy();
@@ -1320,9 +1322,10 @@ class AzClockCommandLabel extends Label {
         button.connect('key-focus-out', hide);
         if (button instanceof St.Button)
             button.connect('clicked', hide);
-        const visibilitySignal = this._networkDialog.connect('notify::visible', hide);
+        const dialog = this._networkDialog;
+        const visibilitySignal = dialog.connect('notify::visible', hide);
         button.connect('destroy', () => {
-            this._networkDialog.disconnect(visibilitySignal);
+            dialog.disconnect(visibilitySignal);
             tooltip.destroy();
         });
         return show;
@@ -1458,6 +1461,7 @@ class AzClockCommandLabel extends Label {
                 typeof item.name !== 'string' || item.name.length > 40 ||
                 typeof item.suggestion !== 'string' || item.suggestion.length > 256 ||
                 !['normal', 'attention', 'high', 'unavailable'].includes(item.level) ||
+                (item.level === 'unavailable') !== (item.averages === null) ||
                 (item.averages !== null && !averagesValid(item.averages)) ||
                 (item.full !== null && !averagesValid(item.full))))
             throw new Error('Resposta de pressão inválida.');
@@ -1491,8 +1495,8 @@ class AzClockCommandLabel extends Label {
     _renderServices(data) {
         if (!data || typeof data.text !== 'string' || data.text.length > 160 ||
             !Array.isArray(data.groups) || data.groups.length !== 2 || data.groups.some((group, index) =>
-                !group || group.scope !== ['system', 'user'][index] || !Number.isInteger(group.count) || group.count < 0 ||
-                typeof group.error !== 'string' || group.error.length > 256 || !Array.isArray(group.items) || group.items.length > 6 ||
+                !group || group.scope !== ['system', 'user'][index] || !Number.isSafeInteger(group.count) || group.count < 0 ||
+                typeof group.error !== 'string' || group.error.length > 256 || !Array.isArray(group.items) || group.items.length > 6 || group.items.length > group.count ||
                 group.items.some(item => !item || ['name', 'description', 'result', 'status', 'changed'].some(key =>
                     typeof item[key] !== 'string' || item[key].length > 256))))
             throw new Error('Resposta de serviços inválida.');

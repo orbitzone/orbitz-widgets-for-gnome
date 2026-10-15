@@ -20,4 +20,6 @@ const cards=host._updatesRows.children[0].children;
 assert.equal(cards.length,2); assert.equal(cards[1].children[1].text,'Sem acesso');
 assert(tips[0].includes('exit-code')); assert(tips[0].includes('Today'));
 assert.throws(()=>context.render.call(host,{...data,groups:[]}),/inválida/);
+assert.throws(() => context.render.call(host, {...data, groups: [{...data.groups[0], count: 0}, data.groups[1]]}), /inválida/);
+assert.throws(() => context.render.call(host, {...data, groups: [{...data.groups[0], count: Number.MAX_SAFE_INTEGER + 1}, data.groups[1]]}), /inválida/);
 console.log('OK: separate system/session cards, unavailable scope and result tooltips.');

@@ -9,7 +9,7 @@ class Label {
         this.signals[signal] = callback;
         return signal;
     }
-    disconnect() {}
+    disconnect(signal) { this.disconnected = signal; }
     hide() { this.visible = false; }
     destroy() { this.destroyed = true; }
 }
@@ -27,7 +27,10 @@ for (const actor of [new Label(), new Button()]) {
     assert(actor.signals['notify::hover']);
     actor.signals['key-focus-out']();
     assert.equal(tooltips.at(-1).visible, false);
+    const originalDialog = host._networkDialog;
+    host._networkDialog = null;
     actor.signals.destroy();
+    assert.equal(originalDialog.disconnected, 'notify::visible');
     assert(tooltips.at(-1).destroyed);
 }
 console.log('OK: tooltips accept labels and buttons with their supported signals.');

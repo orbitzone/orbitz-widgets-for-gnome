@@ -12,17 +12,20 @@ def collect(details=False):
     groups = []
     for scope in ('system', 'user'):
         group = dict(scope=scope, items=[], count=0, error='')
-        base = ['systemctl', '--user'] if scope == 'user' else ['systemctl', '--system']
+        base = ['systemctl', '--' + scope, '--no-ask-password', '--full']
         try:
             output = run(base + ['--failed', '--type=service', '--plain', '--no-legend', '--no-pager'], timeout=2, check=True, limit=65536).stdout
             units = []
+            count = 0
             for line in output.splitlines():
                 fields = line.split(None, 4)
-                if len(fields) < 4 or not UNIT.fullmatch(fields[0]):
+                if len(fields) < 4 or len(fields[0]) > 256 or fields[0].startswith('-') or not UNIT.fullmatch(fields[0]) or fields[2] != 'failed':
                     raise ValueError('Lista de serviços inválida')
-                units.append(dict(name=fields[0][:256], description=fields[4][:256] if len(fields)>4 else fields[0], result='', status='', changed=''))
-            group['count'] = len(units)
-            group['items'] = units[:6] if details else []
+                count += 1
+                if details and len(units) < 6:
+                    units.append(dict(name=fields[0], description=fields[4][:256] if len(fields)>4 else fields[0], result='', status='', changed=''))
+            group['count'] = count
+            group['items'] = units
             if details and group['items']:
                 try:
                     raw = run(base + ['show', '--no-pager', '--property=Id,Result,ExecMainStatus,StateChangeTimestamp', '--', *[i['name'] for i in group['items']]], timeout=2, check=True, limit=32768).stdout
@@ -32,6 +35,8 @@ def collect(details=False):
                         records[values.get('Id')] = values
                     for item in group['items']:
                         values = records.get(item['name'], {})
+                        if any(key not in values for key in ('Result', 'ExecMainStatus', 'StateChangeTimestamp')):
+                            group['error'] = 'Lista disponível; detalhes indisponíveis.'
                         item.update(result=values.get('Result','')[:128], status=values.get('ExecMainStatus','')[:32], changed=values.get('StateChangeTimestamp','')[:128])
                 except (OSError, ValueError, subprocess.SubprocessError):
                     group['error'] = 'Lista disponível; detalhes indisponíveis.'

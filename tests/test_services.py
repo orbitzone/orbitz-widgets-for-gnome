@@ -34,3 +34,18 @@ class ServicesTests(unittest.TestCase):
     def test_malformed_list_is_not_healthy(self):
         with patch.object(services,'run',return_value=subprocess.CompletedProcess([],0,'unrecognized response')):
             self.assertEqual(services.collect()['text'],'Serviços: consulta incompleta')
+
+    def test_missing_details_are_reported_as_partial(self):
+        def query(args, **kwargs):
+            text = 'Id=other.service\nResult=exit-code\n' if 'show' in args else 'test.service loaded failed failed Test'
+            return subprocess.CompletedProcess(args, 0, text)
+        with patch.object(services, 'run', side_effect=query):
+            data = services.collect(True)
+        self.assertTrue(all(group['error'] for group in data['groups']))
+        self.assertIn('parcial', data['text'])
+
+    def test_rejects_option_names_and_nonfailed_units(self):
+        for line in ('--bad.service loaded failed failed Test', 'test.service loaded active running Test', 'x'*257 + '.service loaded failed failed Test'):
+            with self.subTest(line=line), patch.object(services, 'run', return_value=subprocess.CompletedProcess([], 0, line)):
+                data = services.collect(True)
+                self.assertTrue(all(group['error'] for group in data['groups']))

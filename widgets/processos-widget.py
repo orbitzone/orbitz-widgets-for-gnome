@@ -2,6 +2,12 @@
 import html
 import heapq
 import os
+import json
+import re
+import shlex
+import shutil
+import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -17,21 +23,18 @@ def snapshot():
         if not directory.name.isdigit():
             continue
         try:
-            text = (directory / 'stat').read_text()
+            with (directory / 'stat').open() as stream:
+                text = stream.read(8192)
             end = text.rfind(')')
             fields = text[end + 2:].split()
-            name = text[text.find('(') + 1:end]
+            if end < 0:
+                continue
+            name = ''.join(c if c.isprintable() else ' ' for c in text[text.find('(') + 1:end])[:80]
             result[int(directory.name)] = (name, int(fields[11]) + int(fields[12]), fields[19], max(0,int(fields[21])) * PAGE_SIZE)
         except (OSError, ValueError, IndexError):
             continue
     return result
 
-
-import json
-import re
-import sys
-import shutil
-import subprocess
 
 def query(args):
     try:

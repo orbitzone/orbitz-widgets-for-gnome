@@ -6,6 +6,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'widgets'))
 from pressure_metrics import parse_pressure, snapshot
 
 class PressureTests(unittest.TestCase):
+    def test_duplicate_samples_are_rejected(self):
+        with self.assertRaises(ValueError):
+            parse_pressure('some avg10=0 avg60=0 avg300=0\nsome avg10=1 avg60=1 avg300=1')
+
     def test_rejects_invalid_and_nonfinite(self):
         for value in ('nan', 'inf', '-1', '101'):
             with self.assertRaises(ValueError):
