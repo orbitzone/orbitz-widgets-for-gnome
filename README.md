@@ -147,6 +147,10 @@ The standard Ubuntu Desktop session supplies GNOME Shell, St, Clutter and the se
 
 ### Additional packages by feature
 
+A package being preinstalled does **not** make it optional. In particular, UFW is a requirement of the firewall widget even on Ubuntu installations that already include it.
+
+**Required by a feature** means that the feature cannot work without the package/service/permission. Displaying “unavailable” instead of crashing is error handling, not successful operation. **Truly optional** means a working fallback exists or a supplemental action is omitted without breaking the main widget.
+
 Install the packages for the features you intend to use. The following adds the complete temperature list, terminal actions, process/startup tools and hostname display support:
 
 ```bash
@@ -174,18 +178,36 @@ sudo apt install lm-sensors gnome-terminal gnome-system-monitor \
 | Downloading the optional speed-test archive | `curl`, `tar` | Used only by the manual installation example below. |
 | Controller and collector shutdown | `python3`, `coreutils`, `util-linux`; bundled `extension/stop-collectors.py` | Native `timeout`, `kill` and `setsid`, plus the owned-process-tree shutdown helper. No additional Python library or pip dependency is required. |
 
-Optional Ubuntu packages for the corresponding features:
+### Required services and tools for the complete widget suite
+
+For all nine configured widgets, package providers and terminal maintenance actions, the following are **feature requirements**, not merely cosmetic extras:
+
 
 ```bash
-# Install only the features you use; these are not prerequisites for every widget.
-sudo apt install power-profiles-daemon
-sudo apt install ufw
-sudo apt install snapd flatpak
+sudo apt install lm-sensors gnome-terminal ufw snapd flatpak
 
 # If Docker is not already installed: Ubuntu's packaged Docker distribution.
 # Existing Docker Engine/CLI installations can be used instead.
 sudo apt install docker.io
 ```
+
+These packages are in addition to the base packages above. Existing Docker Engine/CLI installations satisfy the Docker requirement; do not install a second distribution just to satisfy this guide.
+
+Package installation alone is insufficient: the Docker daemon must be running and accessible, UFW must have usable logging and the session must be able to read it, and Snap/Flatpak need their services or remotes as appropriate. Installing UFW does not enable firewall policy or logging. This guide does not automatically change those settings.
+
+Without Docker/daemon access, the Docker widget reports unavailable. Without readable UFW logs, firewall analysis cannot produce a verified diagnosis. Without `gnome-terminal`, terminal actions cannot open. Without `lm-sensors`, `/sys` fallback may show some temperatures, but the complete sensor list is not guaranteed. Missing Snap or Flatpak is reported as “Não instalado” during package listing; commands that invoke those tools still require them. In particular, the combined “Buscar atualizações” command requires APT, Snap **and** Flatpak. Choose only installed-provider actions if using a reduced setup.
+
+### Optional enhancements with defined fallback
+
+| Package | Actual behavior when absent |
+|---|---|
+| `gnome-system-monitor` | The process action uses `top` from required `procps` instead. |
+| `gnome-startup-applications` | Startup review opens the autostart folder using `xdg-open`; install `xdg-utils` for this fallback. |
+| `libpsl5` | Full hostnames are shown instead of shortened registrable domains. |
+| `gir1.2-gweather-4.0` | Preferences disable location search; other settings and the Python weather widget remain available. |
+| `power-profiles-daemon` | Profile actions are omitted; the process monitoring widget still works. Install this package to use `powerprofilesctl`, subject to hardware support. |
+
+The Ookla CLI is **required to execute the speed-test button**; it is not required to list network connections. NVIDIA's `nvidia-smi` is similarly a requirement for that GPU query, not for unrelated CPU sensors. This distinction applies to individual capabilities, not to every component of the suite.
 
 For sensors, verify the command before opening the temperature panel:
 
