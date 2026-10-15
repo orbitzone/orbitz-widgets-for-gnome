@@ -135,9 +135,10 @@ try:
     ordered = sorted(ports, key=int)
     details = '\n'.join(f'{port}/TCP' for port in ordered)
     tooltip = details or 'Nenhuma porta escutando'
-    resolved = hostnames({ip for ip, port in peers})
+    visible_peers = sorted(peers)[:200]
+    resolved = hostnames({ip for ip, port in visible_peers})
     connection_items = []
-    for ip, port in sorted(peers)[:200]:
+    for ip, port in visible_peers:
         name = resolved.get(ip)
         connection_items.append({'hostname': name or '', 'display': display_hostname(name), 'ip': ip, 'port': port})
     text = f'Conexões externas: {external}\nEscutando portas: {len(ports)}'

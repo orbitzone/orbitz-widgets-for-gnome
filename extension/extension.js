@@ -9,6 +9,9 @@ const ExtensionUtils = imports.misc.extensionUtils;
 const Main = imports.ui.main;
 const Me = ExtensionUtils.getCurrentExtension();
 const PopupMenu = imports.ui.popupMenu;
+let widgetsEnabled = false;
+const activeCommandRuns = new Set();
+const pendingStops = new Set();
 const Utils = Me.imports.utils;
 
 const Gettext = imports.gettext.domain(Me.metadata['gettext-domain']);
@@ -20,35 +23,44 @@ Gio._promisify(Gio.InputStream.prototype, 'read_bytes_async');
 Gio._promisify(Gio.OutputStream.prototype, 'write_all_async');
 Gio._promisify(Gio.DataInputStream.prototype, 'read_line_async');
 
-function stopCommandRun(run) {
-    if (!run)
-        return;
-    run.cancelled = true;
-    run.cancellable.cancel();
-    const proc = run.proc;
-    if (!proc)
-        return;
-    const pid = proc.get_identifier();
-    if (pid && /^\d+$/.test(pid)) {
-        try {
-            // Keep the parent alive until the group signal has been dispatched.
-            const killer = Gio.Subprocess.new(['/usr/bin/kill', '-KILL', '--', `-${pid}`],
-                Gio.SubprocessFlags.STDOUT_SILENCE | Gio.SubprocessFlags.STDERR_SILENCE);
-            killer.wait_async(null, (process, result) => {
-                try { process.wait_finish(result); }
-                catch (error) { logError(error, 'Desktop Clock process group cleanup'); }
-                proc.force_exit();
-            });
-            return;
-        } catch (error) {
-            logError(error, 'Desktop Clock process group cleanup');
-        }
-    }
-    proc.force_exit();
+function collectorBirth(pid) {
+    if (!pid || !/^\d+$/.test(pid)) return null;
+    try {
+        const [, bytes] = GLib.file_get_contents(`/proc/${pid}/stat`);
+        const text = new TextDecoder().decode(bytes);
+        return text.slice(text.lastIndexOf(')') + 2).trim().split(/\s+/)[19];
+    } catch (error) { return null; }
 }
 
+function stopCommandRun(run) {
+    if (!run) return Promise.resolve();
+    if (run.stopPromise) return run.stopPromise;
+    run.cancelled = true;
+    run.cancellable?.cancel();
+    const proc = run.proc;
+    if (!proc) return Promise.resolve();
+    const pid = proc.get_identifier();
+    const birth = run.birth || collectorBirth(pid);
+    run.stopPromise = (async () => {
+        try {
+            if (pid && birth && /^\d+$/.test(pid)) {
+                const killer = Gio.Subprocess.new(['python3', GLib.build_filenamev([Me.path, 'stop-collectors.py']), pid, birth],
+                    Gio.SubprocessFlags.STDOUT_SILENCE | Gio.SubprocessFlags.STDERR_SILENCE);
+                await killer.wait_async(null);
+                if (!killer.get_successful()) throw new Error('Falha ao encerrar árvore do coletor.');
+            }
+        } catch (error) { logError(error, 'Desktop Clock collector cleanup'); }
+        try { proc.force_exit(); await proc.wait_async(null); }
+        catch (error) { /* Process may already have exited. */ }
+    })();
+    pendingStops.add(run.stopPromise);
+    run.stopPromise.finally(() => pendingStops.delete(run.stopPromise));
+    return run.stopPromise;
+}
 
 async function readCommandOutput(run, input = null) {
+    activeCommandRuns.add(run);
+    run.birth = collectorBirth(run.proc.get_identifier());
     let total = 0;
     const read = async stream => {
         const chunks = [];
@@ -82,11 +94,14 @@ async function readCommandOutput(run, input = null) {
             run.proc.get_stdin_pipe().close(null);
         }
     };
-    const [stdout, stderr] = await Promise.all([
-        read(run.proc.get_stdout_pipe()), read(run.proc.get_stderr_pipe()), write(),
-        run.proc.wait_async(run.cancellable),
-    ]);
-    return [stdout, stderr];
+    try {
+        const [stdout, stderr] = await Promise.all([
+            read(run.proc.get_stdout_pipe()), read(run.proc.get_stderr_pipe()), write(),
+            run.proc.wait_async(run.cancellable),
+        ]);
+        return [stdout, stderr];
+    } finally { activeCommandRuns.delete(run); }
+
 }
 
 
@@ -127,7 +142,7 @@ function stopMetrics() {
     }
 }
 function scheduleMetrics() {
-    if (metricRestart)
+    if (!widgetsEnabled || metricRestart)
         return;
     metricRestart = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 100, () => {
         metricRestart = null;
@@ -136,6 +151,7 @@ function scheduleMetrics() {
     });
 }
 async function startMetrics() {
+    if (!widgetsEnabled) return;
     stopMetrics();
     if (!metricLabels.size)
         return;
@@ -196,7 +212,7 @@ async function startMetrics() {
             for (const label of metricLabels)
                 if (!label._networkDestroyed)
                     label._setErrorState();
-            if (metricLabels.size && !metricRestart)
+            if (widgetsEnabled && metricLabels.size && !metricRestart)
                 metricRestart = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 5000, () => {
                     metricRestart = null;
                     startMetrics();
@@ -282,6 +298,7 @@ class AzClockDesktopWidget extends St.Widget {
             pivot_point: new Graphene.Point({x: 0.5, y: .5}),
         });
 
+        try {
         this._widgetIndex = index;
 
         const isVertical = getData(this._widgetIndex, WIDGET_DATA_INDEX, 'Box_VerticalLayout', 'bool');
@@ -297,6 +314,7 @@ class AzClockDesktopWidget extends St.Widget {
 
         this.createElements();
         this.updateClocks(true);
+        } catch (error) { this.destroy(); throw error; }
     }
 
     _getStableWidth() {
@@ -424,6 +442,8 @@ class AzClockDesktopWidget extends St.Widget {
         if (this._updateClockId)
             return;
         this._updateClockId = GLib.timeout_add(priority, delay, () => {
+            this._updateClockId = null;
+            try {
             this.setStyle();
             this.setElementsStyle();
             this._refreshCommands();
@@ -431,7 +451,7 @@ class AzClockDesktopWidget extends St.Widget {
             this.setPositionFromSettings();
             this.queue_relayout();
             this.updateClocks(true);
-            this._updateClockId = null;
+            } catch (error) { this._onInitializationError?.(error); }
             return GLib.SOURCE_REMOVE;
         });
     }
@@ -625,6 +645,11 @@ class AzClockDesktopWidget extends St.Widget {
 
     _onDestroy() {
         this._removeMenuTimeout();
+        if (this._menu) {
+            this._menuManager.removeMenu(this._menu);
+            this._menu.destroy();
+            this._menu = null;
+        }
 
         if (this._updateClockId) {
             GLib.source_remove(this._updateClockId);
@@ -985,7 +1010,7 @@ class AzClockCommandLabel extends Label {
                 this._speedtestTimeout = null;
             }
             if (this._speedtestProcess) {
-                this._speedtestProcess.force_exit();
+                stopCommandRun(this._speedtestRun);
                 this._speedtestProcess = null;
             }
             this._closeNetworkDialog();
@@ -1069,7 +1094,7 @@ class AzClockCommandLabel extends Label {
         const run = {generation: this._networkGeneration, cancellable: new Gio.Cancellable(), proc: null};
         this._networkRefreshRun = run;
         this._networkRefreshButton.reactive = false;
-        this._networkRefreshButton.accessible_name = this._processesDialog ? 'Consultando processos' : this._updatesRows ? 'Consultando atualizações' : this._dockerRows ? 'Atualizando serviços Docker' : this._firewallRows ? 'Atualizando eventos do firewall' : 'Atualizando conexões e portas';
+        this._networkRefreshButton.accessible_name = this._temperatureRows ? 'Consultando temperaturas' : this._processesDialog ? 'Consultando processos' : this._updatesRows ? 'Consultando atualizações' : this._dockerRows ? 'Atualizando serviços Docker' : this._firewallRows ? 'Atualizando eventos do firewall' : 'Atualizando conexões e portas';
         this._networkRefreshStatus.text = '';
         let proc;
         try {
@@ -1086,6 +1111,13 @@ class AzClockCommandLabel extends Label {
             const [stdout] = await readCommandOutput(run);
             if (this._networkDestroyed || run.cancelled || run.generation !== this._networkGeneration || !this._networkDialog.visible)
                 return;
+            if (command.includes('/temperaturas-widget.py')) {
+                if (!proc.get_successful() || !stdout.startsWith('AZCLOCK_TEMPERATURES:'))
+                    throw new Error('Não foi possível consultar os sensores.');
+                this._renderTemperatures(JSON.parse(stdout.slice('AZCLOCK_TEMPERATURES:'.length)));
+                this._networkRefreshStatus.text = 'Atualizado às ' + GLib.DateTime.new_now_local().format('%H:%M');
+                return;
+            }
             if (command.includes('/processos-widget.py')) {
                 if (!proc.get_successful() || !stdout.startsWith('AZCLOCK_PROCESSES:'))
                     throw new Error('Não foi possível consultar os processos.');
@@ -1150,7 +1182,7 @@ class AzClockCommandLabel extends Label {
             this._networkRefreshPending = false;
             if (!this._networkDestroyed) {
                 this._networkRefreshButton.reactive = true;
-                this._networkRefreshButton.accessible_name = this._processesDialog ? 'Atualizar diagnóstico e processos' : this._updatesRows ? 'Atualizar consulta de atualizações' : this._dockerRows ? 'Atualizar serviços Docker' : this._firewallRows ? 'Atualizar eventos do firewall' : 'Atualizar conexões e portas';
+                this._networkRefreshButton.accessible_name = this._temperatureRows ? 'Atualizar temperaturas' : this._processesDialog ? 'Atualizar diagnóstico e processos' : this._updatesRows ? 'Atualizar consulta de atualizações' : this._dockerRows ? 'Atualizar serviços Docker' : this._firewallRows ? 'Atualizar eventos do firewall' : 'Atualizar conexões e portas';
                 if (pending && this._networkDialog?.visible)
                     this._refreshNetworkDialog();
             }
@@ -1274,6 +1306,126 @@ class AzClockCommandLabel extends Label {
             this._networkDialog.disconnect(visibilitySignal);
             tooltip.destroy();
         });
+        return show;
+    }
+
+    _buildTemperaturesDialog() {
+        this._networkBackdrop = new St.Widget({reactive: true, visible: false});
+        this._networkBackdrop.add_constraint(new Clutter.BindConstraint({source: global.stage, coordinate: Clutter.BindCoordinate.ALL}));
+        this._networkBackdrop.connect('button-press-event', () => {
+            this._closeNetworkDialog();
+            return Clutter.EVENT_STOP;
+        });
+        Main.uiGroup.add_child(this._networkBackdrop);
+        this._networkDialog = new St.BoxLayout({vertical: true, reactive: true,
+            style: 'background-color: #202020; color: white; border: 1px solid #606060; border-radius: 10px; padding: 16px; spacing: 12px;'});
+        this._temperatureHeading = new St.Label({text: 'Temperaturas · sensores', style: 'font-size: 18px; font-weight: bold;'});
+        this._networkDialog.add_child(this._temperatureHeading);
+        this._networkDialog.add_child(new St.Label({text: 'Acima de 80 °C em vermelho · identificação fornecida pelo sistema', style: 'font-size: 12px; color: #b9c5cf;'}));
+        this._temperatureRows = new St.BoxLayout({style: 'spacing: 12px;'});
+        this._networkDialog.add_child(this._temperatureRows);
+        const footer = new St.BoxLayout({style: 'spacing: 12px;'});
+        this._networkRefreshButton = new St.Button({label: 'Atualizar', reactive: true, can_focus: true,
+            accessible_name: 'Atualizar temperaturas', style: 'padding: 8px 12px; border-radius: 6px; background-color: #315d80; color: white;'});
+        this._networkRefreshButton.connect('clicked', () => this._refreshNetworkDialog());
+        footer.add_child(this._networkRefreshButton);
+        this._networkRefreshStatus = new St.Label({text: '', style: 'font-size: 12px; color: #b9c5cf;', y_align: Clutter.ActorAlign.CENTER});
+        footer.add_child(this._networkRefreshStatus);
+        this._networkDialog.add_child(footer);
+        Main.uiGroup.add_child(this._networkDialog);
+    }
+
+    _temperatureCategory(item) {
+        const code = item.name.split(' · ').pop();
+        if (item.group.startsWith('coretemp') || code === 'x86_pkg_temp') return 'CPU';
+        if (item.group.startsWith('NVIDIA') || item.group.startsWith('amdgpu')) return 'GPU';
+        if (item.group.startsWith('nvme')) return 'Armazenamento';
+        if (!item.group.startsWith('applesmc')) return 'Outros sensores';
+        if (code === 'TCGC' || code.startsWith('TG')) return 'GPU';
+        if (code.startsWith('TC')) return 'CPU';
+        if (/^TH0[A-Ca-c]$/.test(code)) return 'Armazenamento';
+        if (code === 'TM0P') return 'Memória RAM';
+        if (['TPCD', 'TTLD', 'TTRD', 'TW0P'].includes(code)) return 'Placa e conectividade';
+        if (/^Th[0-9]H$/.test(code)) return 'Dissipação';
+        if (['Ts0P', 'Ts1P', 'Ts0S', 'Ts1S'].includes(code)) return 'Gabinete';
+        if (code === 'TA0V') return 'Ambiente';
+        return 'Outros sensores';
+    }
+
+    _temperatureColumns(items) {
+        const groups = new Map();
+        for (const item of items) {
+            const title = this._temperatureCategory(item);
+            if (!groups.has(title)) groups.set(title, []);
+            groups.get(title).push(item);
+        }
+        const columns = [[], [], [], []];
+        const heights = [0, 0, 0, 0];
+        const critical = new Set(['CPU', 'GPU', 'Memória RAM', 'Armazenamento']);
+        const segments = [...groups].map(([title, sensors]) => ({title,
+            items: sensors.sort((a, b) => a.name.localeCompare(b.name, undefined, {numeric: true}))}));
+        segments.sort((a, b) => b.items.length - a.items.length);
+        for (const segment of segments) {
+            const start = critical.has(segment.title) ? 0 : 2;
+            const index = heights[start] <= heights[start + 1] ? start : start + 1;
+            columns[index].push(segment);
+            heights[index] += 36 + segment.items.length * 34;
+        }
+        return columns;
+    }
+
+    _renderTemperatures(data) {
+        if (!data || !Array.isArray(data.items) || data.items.length > 256 || !Number.isInteger(data.omitted) || data.omitted < 0)
+            throw new Error('Resposta dos sensores inválida.');
+        // Unavailable records never enter component state or acquire actors/signals.
+        const available = data.items.filter(x => x && typeof x === 'object' &&
+            Number.isFinite(x.value) && x.value >= -20 && x.value <= 250);
+        if (available.some(x => typeof x.group !== 'string' || x.group.length > 128 || typeof x.name !== 'string' || x.name.length > 100 ||
+            (x.description !== undefined && (typeof x.description !== 'string' || x.description.length > 512))))
+            throw new Error('Resposta dos sensores inválida.');
+        data = {items: available.map(x => ({group: x.group, name: x.name, value: x.value, description: x.description})), omitted: data.omitted};
+        this._temperatureData = data;
+        const monitor = Main.layoutManager.findMonitorForActor(this) || Main.layoutManager.primaryMonitor;
+        const columns = this._temperatureColumns(data.items);
+        this._temperatureHeading.text = `Temperaturas · ${data.items.length} sensores`;
+        this._temperatureRows.destroy_all_children();
+        for (const [index, segments] of columns.entries()) {
+            const column = new St.BoxLayout({vertical: true, style: 'spacing: 0px; width: 220px;'});
+            column.add_child(new St.Label({text: index < 2 ? 'Hardware crítico' : 'Sensores auxiliares',
+                style: `font-size: 11px; color: ${index < 2 ? '#8bd5ca' : '#b9c5cf'}; padding: 0px 4px 8px;`}));
+            for (const segment of segments) {
+                column.add_child(new St.Label({text: segment.title,
+                    style: 'font-size: 12px; font-weight: bold; color: #b9d5e8; padding: 8px 4px 6px;'}));
+                for (const item of segment.items) {
+                const hot = item.value > 80;
+                const card = new St.BoxLayout({vertical: true,
+                    style: 'height: 24px; padding: 3px 8px; margin-bottom: 4px; border-radius: 5px; background-color: #293039;'});
+                const line = new St.BoxLayout({style: 'spacing: 8px;'});
+                const name = new St.Label({text: item.name, x_expand: true, style: 'font-size: 13px; color: #e6edf3;'});
+                name.clutter_text.set_ellipsize(Pango.EllipsizeMode.END);
+                line.add_child(name);
+                const help = new St.Button({label: '?', reactive: true, can_focus: true,
+                    accessible_name: 'Descrição de ' + item.name,
+                    style: 'font-size: 12px; padding: 0px 4px; border-radius: 8px; background-color: #405268; color: #dcecff;'});
+                const showHelp = this._attachActionTooltip(help, (item.description || 'Sensor ' + item.name + ': descrição específica indisponível.') + '\nFonte: ' + item.group);
+                help.connect('clicked', showHelp);
+                line.add_child(help);
+                line.add_child(new St.Label({text: `${item.value.toFixed(1)} °C`,
+                    style: `font-size: 14px; font-weight: bold; color: ${hot ? '#ff5c5c' : '#8bd5ca'};`}));
+                card.add_child(line);
+                card.accessible_name = `${item.group}: ${item.name}, ${item.value} graus Celsius`;
+                column.add_child(card);
+                }
+                column.add_child(new St.Widget({style: 'height: 6px;'}));
+            }
+            this._temperatureRows.add_child(column);
+        }
+        if (!data.items.length)
+            this._temperatureRows.add_child(new St.Label({text: 'Nenhum sensor de temperatura disponível.', style: 'padding: 16px; color: #b9c5cf;'}));
+        if (data.omitted) this._temperatureHeading.text += ` · ${data.omitted} adicionais`;
+        const [, width] = this._networkDialog.get_preferred_width(-1);
+        const [, height] = this._networkDialog.get_preferred_height(width);
+        this._networkDialog.set_position(monitor.x + Math.max(8, (monitor.width - width) / 2), monitor.y + Math.max(8, (monitor.height - height) / 2));
     }
 
     _buildProcessesDialog() {
@@ -1389,6 +1541,8 @@ class AzClockCommandLabel extends Label {
         this._dockerRows.destroy_all_children();
         if (!data.items.length)
             this._dockerRows.add_child(new St.Label({text: data.error || 'Nenhum contêiner em execução.', style: 'padding: 8px;'}));
+        if (Number.isInteger(data.skipped_containers) && data.skipped_containers > 0)
+            this._dockerRows.add_child(new St.Label({text: `${data.skipped_containers} contêineres adicionais não inspecionados nesta consulta.`}));
         if (Number.isInteger(data.omitted) && data.omitted > 0)
             this._dockerRows.add_child(new St.Label({text: `${data.omitted} entradas adicionais; consulte o Docker para a lista completa.`}));
         for (const item of data.items) {
@@ -1584,6 +1738,8 @@ class AzClockCommandLabel extends Label {
             this._closeNetworkDialog();
             return;
         }
+        if (getData(this.widgetIndex, this.elementIndex, 'Text_Command').includes('/temperaturas-widget.py') && !this._networkDialog)
+            this._buildTemperaturesDialog();
         if (getData(this.widgetIndex, this.elementIndex, 'Text_Command').includes('/processos-widget.py') && !this._networkDialog)
             this._buildProcessesDialog();
         if (getData(this.widgetIndex, this.elementIndex, 'Text_Command').includes('/atualizacoes-widget.py') && !this._networkDialog)
@@ -1860,6 +2016,8 @@ class AzClockCommandLabel extends Label {
     }
 
     _stopMedia() {
+        this._mediaCancellable?.cancel();
+        this._mediaCancellable = null;
         this._mediaIcon?.hide();
         this._mediaBusy = false;
         this._mediaPending = false;
@@ -1884,6 +2042,7 @@ class AzClockCommandLabel extends Label {
     }
 
     _refreshMedia() {
+        if (!widgetsEnabled || this._networkDestroyed) return;
         if (this._mediaBusy) {
             this._mediaPending = true;
             return;
@@ -1901,8 +2060,9 @@ class AzClockCommandLabel extends Label {
             ];
         }
         const generation = this._mediaGeneration = (this._mediaGeneration || 0) + 1;
+        const cancellable = this._mediaCancellable = new Gio.Cancellable();
         const call = (name, path, iface, method, params) => new Promise((resolve, reject) => {
-            Gio.DBus.session.call(name, path, iface, method, params, null, Gio.DBusCallFlags.NONE, 3000, null,
+            Gio.DBus.session.call(name, path, iface, method, params, null, Gio.DBusCallFlags.NONE, 3000, cancellable,
                 (connection, result) => {
                     try { resolve(connection.call_finish(result)); } catch (error) { reject(error); }
                 });
@@ -1949,6 +2109,7 @@ class AzClockCommandLabel extends Label {
     }
 
     _executeCommand() {
+        if (!widgetsEnabled || this._networkDestroyed) return;
         const command = getData(this.widgetIndex, this.elementIndex, 'Text_Command');
         if (metricMode(command)) {
             if (metricMode(command) === 'processes')
@@ -2049,6 +2210,8 @@ class AzClockCommandLabel extends Label {
             }
 
             let displayText = response;
+            if (command.includes('/temperaturas-widget.py'))
+                this._scheduleNetworkClick();
             if (command.includes('/atualizacoes-widget.py') && response.startsWith('AZCLOCK_UPDATES:')) {
                 const payload = JSON.parse(response.slice('AZCLOCK_UPDATES:'.length));
                 if (typeof payload.text !== 'string' || payload.text.length > 128)
@@ -2106,37 +2269,138 @@ function init() {
 
 class AzClock {
     enable() {
-        Me.settings = ExtensionUtils.getSettings();
-        this._updateWidgetData();
-        this._createWidgets();
-        this._startClockTimer();
+        widgetsEnabled = false;
+        this.widgets = [];
+        this._running = false;
+        this._controller = new St.Button({reactive: true, can_focus: true, visible: true,
+            width: 40, height: 36, accessible_name: 'Iniciar widgets',
+            style: 'padding: 0px; border: 0px; background-color: transparent; box-shadow: none;'});
+        this._controllerButton = this._controller;
+        this._controllerIcons = {
+            stopped: Gio.icon_new_for_string(GLib.build_filenamev([Me.path, 'media', 'controls', 'widgets-white.svg'])),
+            running: Gio.icon_new_for_string(GLib.build_filenamev([Me.path, 'media', 'controls', 'widgets-active.svg'])),
+        };
+        this._controllerIcon = new St.Icon({gicon: this._controllerIcons.stopped, icon_size: 24, visible: true,
+            x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER});
+        this._controller.set_child(this._controllerIcon);
+        this._controller.connect('clicked', () => this._running ? this._stopWidgets() : this._startWidgets());
+        Main.layoutManager.addChrome(this._controller, {affectsStruts: false, trackFullscreen: false});
+        Main.layoutManager.connectObject('monitors-changed', () => this._positionController(), this._controller);
+        try {
+            this._controllerSettings = ExtensionUtils.getSettings();
+            this._controllerSettings.connectObject('changed::widget-data', () => this._positionController(), this._controller);
+        } catch (error) { logError(error, 'Posição dos widgets indisponível'); }
+        this._positionController();
     }
 
-    disable() {
-        Me.settings.set_value('changed-data', new GLib.Variant('a{ss}', {}));
+    _controllerMonitor() {
+        const fallback = Main.layoutManager.primaryMonitor;
+        try {
+            const data = this._controllerSettings?.get_value('widget-data').deep_unpack();
+            if (!Array.isArray(data)) return fallback;
+            const scores = new Map();
+            for (const widget of data.slice(0, 100)) {
+                const box = Array.isArray(widget) ? widget[0] : null;
+                if (!box || box.Location_X === undefined || box.Location_Y === undefined) continue;
+                const anchor = Number(box.Box_AnchorPoint) || 0;
+                const x = Number(box.Location_X) + (anchor === 2 || anchor === 3 ? -0.5 : 0.5);
+                const y = Number(box.Location_Y) + (anchor === 1 || anchor === 3 ? -0.5 : 0.5);
+                if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+                const monitor = (Main.layoutManager.monitors || []).find(m => x >= m.x && x < m.x + m.width && y >= m.y && y < m.y + m.height);
+                if (monitor) scores.set(monitor, (scores.get(monitor) || 0) + 1);
+            }
+            let selected = fallback, highest = 0;
+            for (const [monitor, count] of scores) {
+                if (count > highest) { selected = monitor; highest = count; }
+            }
+            return selected;
+        } catch (error) { return fallback; }
+    }
 
-        Me.settings.disconnectObject(this);
+    _positionController() {
+        if (!this._controller) return;
+        const monitor = this._controllerMonitor();
+        if (!monitor) { this._controller.hide(); return; }
+        const primary = Main.layoutManager.primaryMonitor;
+        const panelHeight = monitor === primary ? Math.max(28, Main.panel.height || 0) : 0;
+        this._controller.set_position(monitor.x + monitor.width - 52, monitor.y + panelHeight + 8);
+        this._controller.show();
+    }
+
+    _setControllerState(running, busy = false) {
+        if (!this._controllerButton) return;
+        this._controllerButton.reactive = !busy;
+        this._controllerButton.can_focus = !busy;
+        this._controllerIcon.gicon = running || busy ? this._controllerIcons.running : this._controllerIcons.stopped;
+        this._controllerButton.accessible_name = busy ? 'Encerrando widgets' : running ? 'Encerrar todos os widgets' : 'Iniciar widgets';
+    }
+
+    _startWidgets() {
+        if (this._running || this._stopping) return;
+        try {
+            Me.settings = ExtensionUtils.getSettings();
+            this._updateWidgetData();
+            Me.imports.settings.SettingsImport.validateWidgets(WIDGETDATA);
+            widgetsEnabled = true;
+            this._running = true;
+            this._createWidgets();
+            this._startClockTimer();
+            this._setControllerState(true);
+        } catch (error) { this._startupFailed(error); }
+    }
+
+    _startupFailed(error) {
+        logError(error, 'Falha ao iniciar widgets');
+        this._stopWidgets();
+        Main.notifyError('Widgets interrompidos', String(error.message || error).slice(0, 300));
+    }
+
+    _stopWidgets() {
+        if (this._stopping) return this._stopping;
+        this._running = false;
+        widgetsEnabled = false;
+        this._setControllerState(false, true);
+        Me.settings?.disconnectObject(this);
         Main.layoutManager.disconnectObject(this);
-
         if (this._dataChangedTimeoutId) {
             GLib.source_remove(this._dataChangedTimeoutId);
             this._dataChangedTimeoutId = null;
         }
-
         this._removeClockTimer();
         this._destroyWidgets();
-
+        for (const run of activeCommandRuns) stopCommandRun(run);
+        activeCommandRuns.clear();
+        stopMetrics();
+        if (metricRestart) { GLib.source_remove(metricRestart); metricRestart = null; }
+        if (networkClickTimer) { GLib.source_remove(networkClickTimer); networkClickTimer = null; }
+        metricLabels.clear();
+        networkClickLabels.clear();
         WIDGETDATA = null;
+        this._stopping = Promise.allSettled([...pendingStops]).then(() => {
+            this._stopping = null;
+            this._setControllerState(false);
+        });
+        return this._stopping;
+    }
 
+    disable() {
+        this._stopWidgets();
+        this._controller?.destroy();
+        this._controller = null;
+        this._controllerButton = null;
+        this._controllerIcon = null;
+        this._controllerIcons = null;
+        this._controllerSettings = null;
         Me.settings = null;
     }
 
     _startClockTimer() {
-        if (this._updateClockId || !WIDGETDATA.some(widget => widget.some(element => [DIGITAL_CLOCK, ANALOG_CLOCK].includes(element.Element_Type))))
+        if (!this._running || this._updateClockId || !WIDGETDATA?.some(widget => widget.some(element => [DIGITAL_CLOCK, ANALOG_CLOCK].includes(element.Element_Type))))
             return;
         this._updateClockId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 1000, () => {
-            for (const widget of this.widgets)
-                widget.updateClocks();
+            try {
+                for (const widget of this.widgets) widget.updateClocks();
+            } catch (error) { this._startupFailed(error); return GLib.SOURCE_REMOVE; }
 
             return GLib.SOURCE_CONTINUE;
         });
@@ -2156,17 +2420,22 @@ class AzClock {
     }
 
     _destroyWidgets() {
-        for (const widget of this.widgets)
-            widget.destroy();
-
-        this.widgets = null;
+        const widgets = this.widgets || [];
+        this.widgets = [];
+        for (const widget of widgets) {
+            try { widget.destroy(); }
+            catch (error) { logError(error, 'Falha ao destruir widget'); }
+        }
     }
 
     _createWidget(index, updateDelay = 300) {
         const widget = new DesktopWidget(index);
-        Main.layoutManager._backgroundGroup.add_child(widget);
-        widget.updateComponents(updateDelay);
-        return widget;
+        widget._onInitializationError = error => this._startupFailed(error);
+        try {
+            Main.layoutManager._backgroundGroup.add_child(widget);
+            widget.updateComponents(updateDelay);
+            return widget;
+        } catch (error) { widget.destroy(); throw error; }
     }
 
     _createWidgetsWithoutSignals() {
@@ -2182,18 +2451,22 @@ class AzClock {
     _createWidgets() {
         this._createWidgetsWithoutSignals();
         Me.settings.connectObject('changed::widget-data', () => {
+            if (!this._running) return;
             if (this._dataChangedTimeoutId)
                 GLib.source_remove(this._dataChangedTimeoutId);
 
             this._dataChangedTimeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 300, () => {
-                this._updateWidgetData();
-                this._widgetDataChangedEvent();
+                if (this._running) {
+                    try { this._updateWidgetData(); this._widgetDataChangedEvent(); }
+                    catch (error) { this._startupFailed(error); }
+                }
                 this._dataChangedTimeoutId = null;
                 return GLib.SOURCE_REMOVE;
             });
         }, this);
 
         Main.layoutManager.connectObject('monitors-changed', () => {
+            if (!this._running) return;
             if (global.display.get_n_monitors() === 0)
                 return;
 

@@ -5,6 +5,9 @@ import os
 import time
 from pathlib import Path
 
+from widget_runtime import run as bounded_run, launch_terminal
+
+PAGE_SIZE = os.sysconf('SC_PAGE_SIZE')
 TICKS = os.sysconf('SC_CLK_TCK')
 
 def snapshot():
@@ -17,7 +20,7 @@ def snapshot():
             end = text.rfind(')')
             fields = text[end + 2:].split()
             name = text[text.find('(') + 1:end]
-            result[int(directory.name)] = (name, int(fields[11]) + int(fields[12]), fields[19])
+            result[int(directory.name)] = (name, int(fields[11]) + int(fields[12]), fields[19], max(0,int(fields[21])) * PAGE_SIZE)
         except (OSError, ValueError, IndexError):
             continue
     return result
@@ -27,13 +30,12 @@ import json
 import re
 import sys
 import shutil
-import shlex
 import subprocess
 
 def query(args):
     try:
-        return subprocess.run(args, capture_output=True, text=True, timeout=3, check=True).stdout.strip()
-    except (OSError, subprocess.SubprocessError):
+        return bounded_run(args,timeout=3,check=True,limit=65536).stdout.strip()
+    except (OSError, ValueError, subprocess.SubprocessError):
         return ''
 
 def available_actions():
@@ -81,10 +83,8 @@ def details():
                 if 0 < value < 150: temperatures.append(value)
         except (OSError, ValueError): pass
     rows = []
-    for pid, (name, ticks, birth) in second.items():
+    for pid, (name, ticks, birth, rss) in second.items():
         if pid == os.getpid() or pid not in first or first[pid][2] != birth: continue
-        try: rss = int((Path('/proc')/str(pid)/'statm').read_text().split()[1]) * os.sysconf('SC_PAGE_SIZE')
-        except (OSError, ValueError, IndexError): continue
         rows.append(dict(pid=pid, name=name[:80], cpu=round(max(0, ticks-first[pid][1])/TICKS/elapsed*100, 1), memory=round(rss/1048576)))
     notices = []
     if cpu >= 85: notices.append('CPU ocupada nesta amostra. Revise os processos com maior uso antes de alterar o perfil de energia.')
@@ -105,16 +105,14 @@ def details():
     summary += f"\nTemperatura {temperature:.0f} °C" if temperature else '\nTemperatura indisponível'
     summary += f' · Disco livre {disk.free/1073741824:.1f} GiB'
     if profile: summary += ' · Perfil ' + profile
-    return dict(summary=summary, notices=notices, cpu_rows=sorted(rows, key=lambda r: -r['cpu'])[:7], memory_rows=sorted(rows, key=lambda r: -r['memory'])[:7], actions=available_actions())
+    return dict(summary=summary, notices=notices, cpu_rows=heapq.nsmallest(7,rows,key=lambda r:(-r['cpu'],r['pid'])), memory_rows=heapq.nsmallest(7,rows,key=lambda r:(-r['memory'],r['pid'])), actions=available_actions())
 
 def launch(identifier):
     action = next((a for a in available_actions() if a['id'] == identifier), None)
     if not action: raise ValueError('Ação indisponível.')
     if identifier == 'startup':
         (Path(os.environ.get('XDG_CONFIG_HOME', str(Path.home()/'.config'))) / 'autostart').mkdir(parents=True, exist_ok=True)
-    command = action['command']
-    script = 'printf "%s\\n" ' + shlex.quote(action['name']+'\n'+action['effect']+'\n\n'+command) + '; printf "\\nEnter para executar; Ctrl+C para cancelar: "; read -r reply || exit; ' + command + '; result=$?; printf "\\nCódigo de saída: %s\\nEnter para fechar: " "$result"; read -r reply'
-    subprocess.Popen(['gnome-terminal', '--', 'bash', '-c', script], start_new_session=True)
+    launch_terminal(action['name'], action['command'], action['effect'])
 
 if '--details' in sys.argv:
     print('AZCLOCK_PROCESSES:' + json.dumps(details(), ensure_ascii=False))
@@ -129,7 +127,7 @@ time.sleep(1)
 second = snapshot()
 elapsed = time.monotonic() - start
 rows = []
-for pid, (name, ticks, birth) in second.items():
+for pid, (name, ticks, birth, rss) in second.items():
     if pid == os.getpid() or pid not in first or first[pid][2] != birth:
         continue
     cpu = max(0, ticks - first[pid][1]) / TICKS / elapsed * 100

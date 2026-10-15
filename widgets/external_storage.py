@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
 from pathlib import Path
-from widget_runtime import load, save
+from widget_runtime import load, save, run as bounded_run
 import json
 import shutil
-import subprocess
-from widget_runtime import run as bounded_run
 
 def bar(percent):
     filled = min(10, max(0, int(percent / 10 + 0.5)))
@@ -22,6 +20,7 @@ def valid_devices(devices, depth=0):
     for device in devices:
         if not isinstance(device, dict): return False
         if any(device.get(key) is not None and not isinstance(device[key], str) for key in ('name', 'label', 'tran')): return False
+        if any(device.get(key) is not None and (type(device[key]) not in (bool,int) or device[key] not in (0,1)) for key in ('rm','hotplug')): return False
         points = device.get('mountpoints') or []
         if not isinstance(points, list) or any(point is not None and (not isinstance(point, str) or len(point) > 4096) for point in points): return False
         if not valid_devices(device.get('children') or [], depth+1): return False
@@ -39,7 +38,7 @@ def walk(devices, external=False):
             system = point == '/' or point.startswith(('/boot', '/snap/', '/var/', '/usr/', '/home'))
             if (external_here or desktop) and not system:
                 yield device, point
-        yield from walk(device.get('children', []), external_here)
+        yield from walk(device.get('children') or [], external_here)
 
 def external_usage():
     signature = Path('/proc/self/mountinfo').read_text()

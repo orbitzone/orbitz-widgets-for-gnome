@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """One persistent process for sampled CPU, process and traffic widgets."""
-import contextlib,io,json,runpy,sys,time
+import contextlib,io,json,sys,time
 from pathlib import Path
 SCRIPTS={'cpu':'cpu-ram-widget.py','processes':'processos-widget.py','network':'rede-widget.py'}
 
@@ -9,7 +9,8 @@ def main():
     for argument in sys.argv[1:]:
         mode,interval=argument.split(':',1)
         if mode not in SCRIPTS or not 2<=float(interval)<=3600:raise ValueError('Amostragem inválida')
-        jobs[mode]={'interval':float(interval),'next':0}
+        path=Path(__file__).parent/SCRIPTS[mode]
+        jobs[mode]={'interval':float(interval),'next':0,'path':str(path),'code':compile(path.read_text(),str(path),'exec')}
     heartbeat=time.monotonic()
     while jobs:
         if time.monotonic()-heartbeat >= 10:
@@ -22,7 +23,7 @@ def main():
             cpu_start=time.process_time()
             try:
                 with contextlib.redirect_stdout(output):
-                    runpy.run_path(str(Path(__file__).parent/SCRIPTS[mode]),run_name='__main__')
+                    exec(job['code'], {'__name__':'__main__','__file__':job['path']})
                 text=output.getvalue().strip()
                 if len(text.encode())>8192:raise ValueError('Saída excedida')
             except Exception:text='Leitura indisponível'

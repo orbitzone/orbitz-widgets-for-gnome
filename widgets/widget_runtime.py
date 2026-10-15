@@ -1,10 +1,14 @@
 """Bounded subprocesses and validated private caches shared by widgets."""
-import json, os, selectors, signal, stat, subprocess, tempfile, time
+import json, math, os, selectors, signal, stat, subprocess, tempfile, time
 from pathlib import Path
 
 
 def run(args, capture_output=True, text=True, timeout=5, check=False, limit=262144):
-    with subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True) as proc:
+    if not math.isfinite(timeout) or timeout <= 0 or limit < 1:
+        raise ValueError('Limites do subprocesso inválidos')
+    # A native watchdog survives abrupt collector cancellation and bounds orphan lifetime.
+    guarded = ['/usr/bin/timeout', '--signal=KILL', str(timeout) + 's', *args]
+    with subprocess.Popen(guarded, stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True) as proc:
         selector = selectors.DefaultSelector()
         output = {proc.stdout: bytearray(), proc.stderr: bytearray()}
         for stream in output:
@@ -34,6 +38,8 @@ def run(args, capture_output=True, text=True, timeout=5, check=False, limit=2621
             raise
         finally:
             selector.close()
+        if proc.returncode in (-signal.SIGKILL, 124):
+            raise subprocess.TimeoutExpired(args, timeout)
         stdout, stderr = (bytes(output[s]).decode('utf-8', errors='replace') for s in (proc.stdout, proc.stderr))
         result = subprocess.CompletedProcess(args, proc.returncode, stdout, stderr)
         if check: result.check_returncode()
@@ -41,6 +47,8 @@ def run(args, capture_output=True, text=True, timeout=5, check=False, limit=2621
 
 
 def cache_path(name):
+    if not isinstance(name,str) or Path(name).name != name or name in ('', '.', '..'):
+        raise ValueError('Nome de cache inválido')
     return Path(os.environ.get('XDG_CACHE_HOME', Path.home()/'.cache'))/'orbitz-widgets'/name
 
 
@@ -52,7 +60,7 @@ def load(name, age=60):
             raw=stream.read(262145)
         if len(raw)>262144: return None
         item=json.loads(raw)
-        if not isinstance(item,dict) or not isinstance(item.get('saved'),(int,float)) or not 0 <= time.time()-item['saved'] <= age: return None
+        if not isinstance(item,dict) or type(item.get('saved')) not in (int,float) or not math.isfinite(item['saved']) or not 0 <= time.time()-item['saved'] <= age: return None
         return item.get('data')
     except (OSError,ValueError,TypeError): return None
 
@@ -61,13 +69,13 @@ def save(name,data):
     path=cache_path(name)
     temp=None
     try:
-        encoded=json.dumps({'saved':time.time(),'data':data}).encode()
+        encoded=json.dumps({'saved':time.time(),'data':data},allow_nan=False).encode()
         if len(encoded)>262144: return
         path.parent.mkdir(parents=True,exist_ok=True)
         fd,temp=tempfile.mkstemp(prefix='widget-',dir=path.parent)
         with os.fdopen(fd,'wb') as stream: stream.write(encoded)
         os.replace(temp,path)
-    except OSError: pass
+    except (OSError,ValueError,TypeError): pass
     finally:
         if temp and os.path.exists(temp): os.unlink(temp)
 
@@ -80,3 +88,15 @@ def read_json(path):
             data=stream.read(262145)
         return json.loads(data) if len(data)<=262144 else None
     except (OSError,ValueError,TypeError): return None
+
+
+def launch_terminal(name, command, effect=''):
+    """Display command as data and require successful input before execution."""
+    import shlex
+    if not isinstance(command,str) or not command or '\x00' in command:
+        raise ValueError('Comando inválido')
+    message='\n'.join(part for part in (name, effect, command) if part)
+    script=('printf "%s\\n" '+shlex.quote(message)+
+            '; printf "\\nEnter para executar; Ctrl+C para cancelar: "; read -r reply || exit 0; '+command+
+            '; result=$?; printf "\\nCódigo de saída: %s\\nEnter para fechar: " "$result"; read -r reply || true')
+    subprocess.Popen(['gnome-terminal','--','bash','-c',script],start_new_session=True)

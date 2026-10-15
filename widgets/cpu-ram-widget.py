@@ -20,7 +20,7 @@ first = cpu()
 time.sleep(1)
 second = cpu()
 delta = second[0] - first[0]
-usage = 100 * (1 - (second[1] - first[1]) / delta) if delta else 0
+usage = max(0, min(100, 100 * (1 - (second[1] - first[1]) / delta))) if delta > 0 else 0
 memory = {}
 for line in Path('/proc/meminfo').read_text().splitlines():
     key, value = line.split(':', 1)

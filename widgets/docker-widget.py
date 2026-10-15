@@ -15,24 +15,25 @@ def valid_url(url):
     except (ValueError,TypeError):return False
 
 def collect(details=False):
-    result=run(['docker','ps','-q','--no-trunc'],timeout=6,check=True)
+    result=run(['docker','ps','-q','--no-trunc'],timeout=3,check=True)
     ids=[line for line in result.stdout.splitlines() if line]
     if any(len(x)!=64 or any(c not in '0123456789abcdef' for c in x) for x in ids):raise ValueError('IDs inválidos')
-    payload={'text':f'Docker Cotainers: {len(ids)}','items':[],'omitted':0}
+    payload={'text':f'Docker Containers: {len(ids)}','items':[],'omitted':0,'skipped_containers':0}
     if not details:return payload
     overrides=read_json(Path(os.environ.get('XDG_CONFIG_HOME', Path.home()/'.config'))/'orbitz-widgets'/'docker-urls.json')
     if not isinstance(overrides,dict):overrides={}
     local=not os.environ.get('DOCKER_HOST','').startswith(('tcp:','ssh:','http:','https:'))
-    context=run(['docker','context','inspect','--format','{{.Endpoints.docker.Host}}'],timeout=3,check=True).stdout.strip()
+    context=run(['docker','context','inspect','--format','{{.Endpoints.docker.Host}}'],timeout=2,check=True).stdout.strip()
     local=local and context.startswith('unix:')
-    count=0
+    payload['skipped_containers']=max(0,len(ids)-MAX_ROWS)
+    ids=ids[:MAX_ROWS]
     fmt='{"name":{{json .Name}},"running":{{json .State.Running}},"ports":{{json .NetworkSettings.Ports}},"mode":{{json .HostConfig.NetworkMode}}}'
     for offset in range(0,len(ids),50):
-        result=run(['docker','inspect','--type','container','--format',fmt,*ids[offset:offset+50]],timeout=5)
+        result=run(['docker','inspect','--type','container','--format',fmt,*ids[offset:offset+50]],timeout=3,check=True)
         for line in result.stdout.splitlines():
             item=json.loads(line)
             if not isinstance(item,dict) or item.get('running') is not True:continue
-            name=item['name'].lstrip('/')[:128];count+=1;rows=[];seen=set()
+            name=item['name'].lstrip('/')[:128];rows=[];seen=set()
             for private,bindings in (item.get('ports') or {}).items():
                 internal,protocol=private.split('/')
                 if not internal.isdigit() or protocol not in ('tcp','udp','sctp'):continue
@@ -54,11 +55,12 @@ def collect(details=False):
             for row in rows:
                 if len(payload['items'])<MAX_ROWS:payload['items'].append(row)
                 else:payload['omitted']+=1
-    payload['text']=f'Docker Cotainers: {count}'
+    # The ps snapshot counts all containers, including those skipped for detail.
+    payload['text']+=(' · detalhes parciais' if payload['skipped_containers'] else '')
     return payload
 
 if __name__=='__main__':
     try:payload=collect('--details' in sys.argv)
     except (OSError,ValueError,KeyError,TypeError,AttributeError,subprocess.SubprocessError):
-        payload={'text':'Docker Cotainers: indisponível','items':[],'error':'Não foi possível consultar o Docker. Verifique o serviço e o acesso da sua conta.'}
+        payload={'text':'Docker Containers: indisponível','items':[],'error':'Não foi possível consultar o Docker. Verifique o serviço e o acesso da sua conta.'}
     print('AZCLOCK_DOCKER:'+json.dumps(payload,ensure_ascii=False))

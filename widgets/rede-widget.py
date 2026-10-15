@@ -7,7 +7,7 @@ def interface():
     candidates = []
     for line in routes:
         fields = line.split()
-        if fields[1] == '00000000' and int(fields[3], 16) & 1:
+        if len(fields) >= 8 and fields[1] == '00000000' and int(fields[3], 16) & 1:
             candidates.append((int(fields[6]), fields[0]))
     if candidates:
         return min(candidates)[1]

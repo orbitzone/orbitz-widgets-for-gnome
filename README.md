@@ -374,3 +374,19 @@ The **Atualizações** widget (`atualizacoes-widget.py`, Ubuntu) groups APT, Sna
 Actions open GNOME Terminal, display the command and wait for Enter before execution. APT update, upgrade, full-upgrade, autoclean, autoremove, Snap refresh, Flatpak update and update/upgrade/autoclean are separate choices. APT retains its normal confirmations; no passwords are stored. After completing an action, click **Reler lista**.
 
 Custom buttons are defined in `~/.config/orbitz-widgets/update-actions.json`, a JSON array of up to ten objects with `name` and `command` strings. Example: `[{"name":"Atualizar APT","command":"sudo apt update && sudo apt upgrade"}]`. Commands run only through an explicit click and terminal confirmation.
+
+Click the CPU/GPU temperature widget to view available temperature sensors grouped by component in a single row of four fixed columns: CPU, GPU, RAM and storage on the left two; auxiliary sensors on the right two, with manual refresh. Groups share columns, with headings and spacing only inside each column. Repeated driver labels are moved to the help tooltip to save space. Readings above 80 °C are red in the summary and details. Unavailable or invalid sensor values are hidden from the detail panel and reappear after a successful refresh. Each sensor has a question-mark button with a brief description shown on hover, focus or click. Unknown SMC locations are explicitly labeled as unidentified. The detail panel uses fixed columns without pagination or vertical scrolling. The configured summary polling interval is unchanged.
+
+## Regression checks
+
+Run `python3 -m unittest discover -s tests -v` and `node tests/test_temperature_layout.js` after widget changes. The [individual audit](docs/auditoria-widgets-2026-10-14.md) records fixes, measurements and validation limits. Bounded subprocesses also use the coreutils `timeout` watchdog.
+
+## Manual widget controller
+
+The extension starts paused after every login or enable. The control has an explicit 40×36-pixel size and a 24-pixel custom SVG icon on a transparent button: white when stopped and lime green when running. Only the floating Play control is added just below the top panel, at the upper-right corner of the monitor containing the most saved widget positions (primary monitor fallback); only saved positions are read before Play; full configuration validation, widget construction and collector startup wait for an explicit click. Play becomes Stop while widgets are running.
+
+Stop destroys widget actors and dialogs, removes timers and subscriptions, cancels in-flight reads, and terminates owned collector process trees, including subprocesses in separate sessions or started by worker threads. Play is disabled during cleanup. The Python helper `extension/stop-collectors.py` verifies user ownership and process start time before signaling a process. Keep this helper installed alongside `extension.js`.
+
+Configuration or widget-construction failures roll back startup and leave the controller available. The switch does not isolate syntax/module-loading errors in the extension itself or faults in GNOME. User-launched external applications and explicitly confirmed terminal actions have their own lifecycle; Stop does not terminate system services or interrupt package installation.
+
+Controller regression checks: `node tests/test_widget_controller.js` and `python3 -m unittest discover -s tests -v`. The lifecycle test uses mocked GNOME actors; process-tree termination is tested with real child processes. Visual verification in GNOME is still required.

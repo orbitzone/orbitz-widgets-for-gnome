@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Bounded package queries and explicit terminal actions for Ubuntu."""
-import json,os,re,sys,subprocess,shutil,time,shlex
+import json,math,os,re,sys,subprocess,shutil,time
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
-from widget_runtime import run as bounded_run,load,save,read_json
+from widget_runtime import run as bounded_run,load,save,read_json,launch_terminal
 
 def run(args, **kwargs):
     return bounded_run(['/usr/bin/env', 'LC_ALL=C', *args], **kwargs)
@@ -47,6 +47,10 @@ def query(source):
         return {'source':source,'items':items,'state':'OK','checked':time.time()}
     except (OSError,ValueError,subprocess.SubprocessError):
         previous=load('updates-'+source+'.json',86400)
+        if previous is not None and (not isinstance(previous,dict) or not isinstance(previous.get('items'),list) or
+                any(not isinstance(item,dict) or any(not isinstance(item.get(k),str) or len(item[k])>512 for k in ('name','installed','version')) for item in previous['items']) or
+                type(previous.get('checked',0)) not in (int,float) or not math.isfinite(previous.get('checked',0))):
+            previous=None
         return {'source':source,'items':previous.get('items',[]) if isinstance(previous,dict) else [],'state':'Falha na consulta; dados anteriores' if previous else 'Consulta indisponível','checked':previous.get('checked',0) if isinstance(previous,dict) else 0}
 
 def collect():
@@ -58,7 +62,11 @@ def collect():
         stamp=time.strftime('%d/%m %H:%M',time.localtime(g['checked'])) if g.get('checked') else '—'
         notices.append(f"{g['source']}: {g['state']} · consulta {stamp}")
         for item in g['items']:items.append({**item,'source':g['source']})
-    timestamps=[p.stat().st_mtime for p in Path('/var/lib/apt/lists').glob('*InRelease') if p.is_file()]
+    timestamps=[]
+    for path in Path('/var/lib/apt/lists').glob('*InRelease'):
+        try:
+            if path.is_file():timestamps.append(path.stat().st_mtime)
+        except OSError:continue
     oldest=min(timestamps) if timestamps else 0
     index=time.strftime('%d/%m %H:%M',time.localtime(oldest)) if oldest else 'indisponível'
     if not oldest or time.time()-oldest>86400:notices.append('Índice APT antigo ou ausente; use Buscar atualizações.')
@@ -71,11 +79,9 @@ def collect():
     return {'text':text,'items':items[:100],'omitted':max(0,len(items)-100),'reboot':reboot,'index_updated':index,'error':'','notices':notices,'actions':actions()}
 
 def launch(identifier):
-    action=next(a for a in actions() if a['id']==identifier)
-    command=action['command']
-    # Command text is displayed as data; execution requires Enter in the terminal.
-    script='printf "%s\\n" '+shlex.quote(action['name']+'\n\n'+command)+'; printf "\\nEnter para executar; Ctrl+C para cancelar: "; read -r reply; '+command+'; result=$?; printf "\\nCódigo de saída: %s\\nEnter para fechar: " "$result"; read -r reply'
-    subprocess.Popen(['gnome-terminal','--','bash','-c',script],start_new_session=True)
+    action=next((a for a in actions() if a['id']==identifier),None)
+    if not action:raise ValueError('Ação indisponível.')
+    launch_terminal(action['name'],action['command'])
 
 if __name__=='__main__':
     if '--action' in sys.argv:launch(sys.argv[sys.argv.index('--action')+1])

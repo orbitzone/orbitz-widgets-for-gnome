@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Incremental, bounded UFW pattern analysis. No firewall rule changes."""
-import collections
+import math
 import datetime
 import fcntl
 import ipaddress
@@ -27,6 +27,34 @@ DISCOVERY = {'137', '138', '1900', '5353', '5355'}
 def empty():
     return dict(version=2, cursor='', sources={}, totals={}, partial=False, limited_until=0, updated=0)
 
+def valid_state(data):
+    def number(value):return type(value) in (int,float) and math.isfinite(value) and value>=0
+    def count(value):return type(value) is int and value>=0
+    def bucket_key(value):return isinstance(value,str) and value.isdecimal() and len(value)<=12
+    if not isinstance(data,dict) or data.get('version')!=2:return False
+    if not isinstance(data.get('cursor'),str) or len(data['cursor'])>4096 or type(data.get('partial')) is not bool:return False
+    if not all(number(data.get(k)) for k in ('updated','limited_until')):return False
+    sources=data.get('sources');totals=data.get('totals')
+    if not isinstance(sources,dict) or len(sources)>MAX_SOURCES or not isinstance(totals,dict) or len(totals)>300:return False
+    for key,total in totals.items():
+        if not bucket_key(key) or not isinstance(total,dict) or not count(total.get('count')) or not count(total.get('noise')) or total['noise']>total['count']:return False
+    for source,group in sources.items():
+        try:ipaddress.ip_address(source)
+        except (ValueError,TypeError):return False
+        if not isinstance(group,dict) or not number(group.get('last')):return False
+        buckets=group.get('buckets');samples=group.get('samples')
+        if not isinstance(buckets,dict) or not 1<=len(buckets)<=300 or not isinstance(samples,list) or len(samples)>5:return False
+        for key,bucket in buckets.items():
+            if not bucket_key(key) or not isinstance(bucket,dict) or not count(bucket.get('count')) or bucket['count']<1:return False
+            if not number(bucket.get('first')) or not number(bucket.get('last')) or bucket['first']>bucket['last']:return False
+            for field,limit,size in [('ports',64,8),('destinations',16,45),('protocols',8,16),('interfaces',4,32)]:
+                values=bucket.get(field)
+                if not isinstance(values,list) or len(values)>limit or any(not isinstance(x,str) or len(x)>size for x in values):return False
+            if not bucket['destinations']:return False
+        for sample in samples:
+            if not isinstance(sample,dict) or not number(sample.get('time')) or not isinstance(sample.get('message'),str) or len(sample['message'])>1024:return False
+    return True
+
 def load():
     try:
         fd=os.open(CACHE, os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK)
@@ -35,7 +63,7 @@ def load():
             raw=f.read(MAX_CACHE+1)
         if len(raw)>MAX_CACHE: raise ValueError('Cache grande')
         data=json.loads(raw)
-        if data.get('version')!=2 or not isinstance(data.get('sources'),dict) or not isinstance(data.get('totals'),dict): raise ValueError('Cache antigo')
+        if not valid_state(data): raise ValueError('Cache inválido')
         return data
     except (OSError, ValueError, TypeError, AttributeError): return empty()
 
@@ -56,7 +84,7 @@ def save(data):
 def journal_batch(cursor):
     args=['journalctl','_TRANSPORT=kernel','--since','24 hours ago','--no-tail',r'--grep=\[UFW (BLOCK|REJECT)\]', '-o','json','--output-fields=MESSAGE,__REALTIME_TIMESTAMP,__CURSOR','--no-pager','-q']
     if cursor: args+=['--after-cursor',cursor]
-    records=[]; stderr=bytearray(); pending=bytearray(); partial=False
+    records=[]; stderr=bytearray(); pending=bytearray(); partial=False; collected_bytes=0
     with subprocess.Popen(args,stdout=subprocess.PIPE,stderr=subprocess.PIPE) as proc:
         sel=selectors.DefaultSelector()
         for stream in (proc.stdout,proc.stderr):
@@ -75,6 +103,8 @@ def journal_batch(cursor):
                     while b'\n' in pending:
                         line,_,rest=pending.partition(b'\n');pending=bytearray(rest)
                         if len(line)>65536:raise ValueError('Registro do journal grande demais.')
+                        if collected_bytes+len(line)>4194304:partial=True;break
+                        collected_bytes+=len(line)
                         records.append(line)
                         if len(records)>=BATCH:partial=True;break
                     if partial:break
@@ -181,7 +211,9 @@ def payload(data,now=None):
 
 def collect():
     CACHE.parent.mkdir(parents=True,exist_ok=True)
-    with open(CACHE.parent/'firewall-patterns.lock','a') as lock:
+    fd=os.open(CACHE.parent/'firewall-patterns.lock',os.O_CREAT|os.O_RDWR|os.O_NOFOLLOW|os.O_NONBLOCK,0o600)
+    with os.fdopen(fd,'r+') as lock:
+        if not stat.S_ISREG(os.fstat(lock.fileno()).st_mode):raise ValueError('Lock inválido')
         try:fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
         except BlockingIOError:
             p=payload(load());p['scope']+='\nOutra consulta está em andamento.';return p

@@ -39,7 +39,12 @@ def valid_weather(data):
     current = ('temperature_2m', 'relative_humidity_2m', 'apparent_temperature', 'weather_code', 'is_day')
     daily = ('temperature_2m_min', 'temperature_2m_max', 'precipitation_probability_max')
     return (all(number(c.get(k)) for k in current) and
-            all(isinstance(d.get(k), list) and d[k] and number(d[k][0]) for k in daily))
+            all(isinstance(d.get(k), list) and d[k] and number(d[k][0]) for k in daily) and
+            0 <= c['relative_humidity_2m'] <= 100 and c['is_day'] in (0, 1) and
+            0 <= c['weather_code'] <= 99 and
+            all(-100 <= c[k] <= 100 for k in ('temperature_2m','apparent_temperature')) and
+            -100 <= d['temperature_2m_min'][0] <= d['temperature_2m_max'][0] <= 100 and
+            0 <= d['precipitation_probability_max'][0] <= 100)
 
 def load_cache():
     try:
@@ -89,7 +94,7 @@ def main():
                 save_cache(data)
             except OSError:
                 pass
-        except Exception:
+        except (OSError, ValueError, TimeoutError):
             if not cached:
                 print('Brasília, DF · Clima indisponível')
                 return
