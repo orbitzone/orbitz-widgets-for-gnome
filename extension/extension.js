@@ -288,6 +288,8 @@ function getClockDate(widgetIndex, elementIndex, origDate) {
     }
 }
 
+const PANEL_TITLE_STYLE = 'font-family: sans-serif; font-size: 15px; font-weight: bold; color: white; padding-bottom: 4px;';
+
 var DesktopWidget = GObject.registerClass(
 class AzClockDesktopWidget extends St.Widget {
     _init(index) {
@@ -312,7 +314,7 @@ class AzClockDesktopWidget extends St.Widget {
         this.connect('notify::hover', () => this._onHover());
         this.connect('destroy', () => this._onDestroy());
 
-        if (!Utils.getData(WIDGETDATA, index, WIDGET_DATA_INDEX, 'Lock_Widget', 'bool'))
+        if (!WIDGETDATA[index][0].Parent_Id && !Utils.getData(WIDGETDATA, index, WIDGET_DATA_INDEX, 'Lock_Widget', 'bool'))
             this.makeDraggable();
 
         this.createElements();
@@ -321,7 +323,14 @@ class AzClockDesktopWidget extends St.Widget {
     }
 
     _getStableWidth() {
+        if (this._grouped) return this._groupWidth || 280;
         const configured = Number(getData(this._widgetIndex, WIDGET_DATA_INDEX, 'Box_Width'));
+        const meta = WIDGETDATA[this._widgetIndex][0];
+        if (meta.Box_IsGroup === 'true') {
+            const columns = Math.max(1, Math.min(4, Number(meta.Group_Columns) || 1));
+            return Math.max(Number.isFinite(configured) ? Math.max(0, Math.min(2000, configured)) : 320,
+                columns * 180 + (columns - 1) * (Number(meta.Box_Spacing) || 8) + 2 * (Number(meta.Box_Padding) || 0) + 2 * (Number(meta.Box_BorderWidth) || 0));
+        }
         if (Number.isFinite(configured) && configured >= 80 && configured <= 2000)
             return configured;
         const elements = WIDGETDATA[this._widgetIndex].slice(1);
@@ -342,7 +351,7 @@ class AzClockDesktopWidget extends St.Widget {
     }
 
     vfunc_allocate(box) {
-        if (this._isDragging) {
+        if (this._isDragging || this._grouped) {
             super.vfunc_allocate(box);
             return;
         }
@@ -376,6 +385,9 @@ class AzClockDesktopWidget extends St.Widget {
         this._digitalClocks = [];
         this._textLabels = [];
         this._commandLabels = [];
+
+        if (clockData[0].Panel_Title)
+            this.add_child(new St.Label({text: clockData[0].Panel_Title, style: PANEL_TITLE_STYLE}));
 
         // skip first element as that stores widget layout/style data, not widget elements
         for (let i = 1; i < clockData.length; i++) {
@@ -449,6 +461,8 @@ class AzClockDesktopWidget extends St.Widget {
             try {
             this.setStyle();
             this.setElementsStyle();
+            if (this._grouped) this.setStyle();
+            if (this._subwidgetBox) this.layout_manager.orientation = Clutter.Orientation.VERTICAL;
             this._refreshCommands();
             this.queue_relayout();
             this.setPositionFromSettings();
@@ -460,6 +474,7 @@ class AzClockDesktopWidget extends St.Widget {
     }
 
     setPositionFromSettings() {
+        if (this._grouped) return;
         const x = getData(this._widgetIndex, WIDGET_DATA_INDEX, 'Location_X', 'int');
         const y = getData(this._widgetIndex, WIDGET_DATA_INDEX, 'Location_Y', 'int');
         debugLog(`set pos from settings - (${x}, ${y})`);
@@ -492,12 +507,22 @@ class AzClockDesktopWidget extends St.Widget {
                       border-color: ${borderColor};`;
         }
 
+        if (this._grouped) {
+            style = `padding: 12px; background-color: rgba(20,24,28,0.82); border: 1px solid rgba(190,200,210,0.22); border-radius: 10px;`;
+            for (const label of [...this._commandLabels, ...this._textLabels]) {
+                label.setStyle();
+                label.x_align = Clutter.ActorAlign.FILL;
+                label.style = label.style.replace(/text-align\s*:[^;]+;?/g, '') + '; text-align: left; font-family: sans-serif; color: white;';
+                label.clutter_text.set_line_alignment(Pango.Alignment.LEFT);
+            }
+        }
         this.style = style;
 
         this.z_position = WIDGETDATA.length - this._widgetIndex;
     }
 
     vfunc_button_press_event() {
+        if (this._grouped) return Clutter.EVENT_PROPAGATE;
         const event = Clutter.get_current_event();
 
         if (event.get_button() === 1) {
@@ -578,7 +603,9 @@ class AzClockDesktopWidget extends St.Widget {
     }
 
     makeDraggable() {
-        this._draggable = DND.makeDraggable(this);
+        this._draggable = DND.makeDraggable(this, {manualMode: true});
+        this.connect('button-press-event', (actor, event) => this._grouped ? Clutter.EVENT_PROPAGATE : this._draggable._onButtonPress(actor, event));
+        this.connect('touch-event', (actor, event) => this._grouped ? Clutter.EVENT_PROPAGATE : this._draggable._onTouchEvent(actor, event));
         this._draggable._dragActorDropped = () => {
             this._draggable._animationInProgress = true;
             this._draggable._dragCancellable = false;
@@ -864,7 +891,9 @@ class AzClockLabel extends St.Label {
 
         const textAlignmentX = getData(this.widgetIndex, index, 'Text_AlignmentX', 'clutter_align');
         const textAlignmentY = getData(this.widgetIndex, index, 'Text_AlignmentY', 'clutter_align');
-        const textLineAlignment = getData(this.widgetIndex, index, 'Text_LineAlignment', 'align');
+        const grouped = !!WIDGETDATA[this.widgetIndex][0].Parent_Id;
+        const compact = grouped && (getData(this.widgetIndex, index, 'Text_Command') || '').includes('/cpu-ram-widget.py');
+        const textLineAlignment = grouped ? 'left' : getData(this.widgetIndex, index, 'Text_LineAlignment', 'align');
 
         const marginTop = getData(this.widgetIndex, index, 'Element_Margin_Top', 'int');
         const marginLeft = getData(this.widgetIndex, index, 'Element_Margin_Left', 'int');
@@ -909,7 +938,7 @@ class AzClockLabel extends St.Label {
         if (textLineAlignment)
             textStyle += `text-align: ${textLineAlignment}`;
 
-        this.style = `font-size: ${textSize}pt; font-feature-settings: "tnum";${textStyle}`;
+        this.style = `font-size: ${compact ? '10px' : grouped ? '15px' : textSize + 'pt'}; font-feature-settings: "tnum";${textStyle}`;
 
         this.x_align = textAlignmentX;
         this.y_align = textAlignmentY;
@@ -1040,6 +1069,16 @@ class AzClockCommandLabel extends Label {
         scheduleNetworkClicks();
     }
 
+    _storageTarget(pointer) {
+        const [ok, , localY] = this.clutter_text.transform_stage_point(pointer[0], pointer[1]);
+        if (!ok) return null;
+        const [, index] = this.clutter_text.get_layout().xy_to_index(0, Math.round(localY * Pango.SCALE));
+        const text = this.clutter_text.get_text();
+        const before = new TextDecoder().decode(new TextEncoder().encode(text).slice(0, index));
+        const line = text.split('\n')[before.split('\n').length - 1] || '';
+        return /^!?\s*SSD\b/.test(line) ? 'ssd' : /^!?\s*EXT\b/.test(line) ? 'external' : null;
+    }
+
     _checkNetworkClick(pointer) {
         if (this._networkDestroyed)
             return false;
@@ -1054,6 +1093,11 @@ class AzClockCommandLabel extends Label {
             const [sx, sy] = this._networkClickStart;
             if (Math.abs(px - sx) < 8 && Math.abs(py - sy) < 8) {
                 try {
+                if (metricMode(getData(this.widgetIndex, this.elementIndex, 'Text_Command')) === 'cpu') {
+                    const target = this._storageTarget(pointer);
+                    if (!target || target !== this._storageTarget([sx, sy])) { this._networkClickHeld = false; this._networkClickStart = null; return false; }
+                    this._storageExternal = target === 'external';
+                }
                 this._openNetworkDialog();
                 } catch (error) {
                 logError(error, 'Desktop Clock network click');
@@ -1090,6 +1134,10 @@ class AzClockCommandLabel extends Label {
     }
 
     async _refreshNetworkDialog() {
+        if (this._trafficDialog && this._speedtestProcess) {
+            this._networkRefreshStatus.text = 'Aguarde o teste de velocidade terminar.';
+            return;
+        }
         if (this._networkDestroyed || !this._networkDialog?.visible)
             return;
         if (this._networkRefreshRun) {
@@ -1106,6 +1154,7 @@ class AzClockCommandLabel extends Label {
         try {
             const command = getData(this.widgetIndex, this.elementIndex, 'Text_Command');
             const [, argv] = GLib.shell_parse_argv(command);
+            if (this._storageExternal) argv.push('--external');
             proc = Gio.Subprocess.new(['/usr/bin/setsid', ...argv, '--details'], Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE);
             this._networkRefreshProcess = proc;
             run.proc = proc;
@@ -1117,6 +1166,18 @@ class AzClockCommandLabel extends Label {
             const [stdout] = await readCommandOutput(run);
             if (this._networkDestroyed || run.cancelled || run.generation !== this._networkGeneration || !this._networkDialog.visible)
                 return;
+            if (command.includes('/armazenamento-widget.py') || command.includes('/cpu-ram-widget.py')) {
+                if (!proc.get_successful() || !stdout.startsWith('AZCLOCK_STORAGE:')) throw new Error('Falha ao consultar armazenamento.');
+                this._renderStorage(JSON.parse(stdout.slice('AZCLOCK_STORAGE:'.length)));
+                this._networkRefreshStatus.text = 'Consultado às ' + GLib.DateTime.new_now_local().format('%H:%M');
+                return;
+            }
+            if (command.includes('/rede-widget.py')) {
+                if (!proc.get_successful() || !stdout.startsWith('AZCLOCK_QUALITY:')) throw new Error('Não foi possível testar a qualidade.');
+                this._renderQuality(JSON.parse(stdout.slice('AZCLOCK_QUALITY:'.length)));
+                this._networkRefreshStatus.text = 'Consultado às ' + GLib.DateTime.new_now_local().format('%H:%M');
+                return;
+            }
             if (command.includes('/servicos-widget.py')) {
                 if (!proc.get_successful() || !stdout.startsWith('AZCLOCK_SERVICES:'))
                     throw new Error('Não foi possível consultar os serviços.');
@@ -1225,6 +1286,7 @@ class AzClockCommandLabel extends Label {
             this._networkDialog.add_child(this._updatesRows);
         } else {
             const scroll = new St.ScrollView({style: 'width: 720px; height: 300px;', reactive: true});
+            this._updatesScroll = scroll;
             scroll.set_policy(St.PolicyType.NEVER, St.PolicyType.AUTOMATIC);
             scroll.add_actor(this._updatesRows);
             this._networkDialog.add_child(scroll);
@@ -1481,6 +1543,120 @@ class AzClockCommandLabel extends Label {
             note.clutter_text.set_ellipsize(Pango.EllipsizeMode.NONE);
             column.add_child(note);
             columns.add_child(column);
+        }
+        this._updatesRows.add_child(columns);
+    }
+
+    _buildStorageDialog() {
+        this._storageDialog = true;
+        this._buildUpdatesDialog();
+        this._updatesHeading.text = 'Armazenamento · espaço e saúde';
+        this._updatesNote.text = 'Espaço disponível por volume · SMART quando acessível · detalhes nos tooltips';
+        this._networkRefreshButton.set_child(new St.Label({text: 'Atualizar'}));
+    }
+
+    _renderStorage(data) {
+        const numeric = value => Number.isFinite(value) && value >= 0;
+        if (!data || typeof data.text !== 'string' || data.text.length > 160 || typeof data.error !== 'string' || data.error.length > 256 ||
+            !Number.isInteger(data.omitted) || data.omitted < 0 || !Array.isArray(data.items) || data.items.length > 12 ||
+            !Array.isArray(data.disks) || data.disks.length > 16 || data.items.some(item => !item ||
+                ['device', 'disk', 'mount'].some(key => typeof item[key] !== 'string' || item[key].length > 512) ||
+                !Array.isArray(item.files) || item.files.length > 30 || item.files.some(name => typeof name !== 'string' || name.length > 162) ||
+                typeof item.content_error !== 'string' || item.content_error.length > 256 || typeof item.more !== 'boolean' ||
+                !['total', 'available', 'percent'].every(key => numeric(item[key])) || item.percent > 100 ||
+                (item.inodes !== null && (!numeric(item.inodes) || item.inodes > 100))) ||
+            data.disks.some(disk => !disk || typeof disk.name !== 'string' || disk.name.length > 512 ||
+                typeof disk.model !== 'string' || disk.model.length > 100 || !disk.health ||
+                !['ok', 'alert', 'unavailable'].includes(disk.health.state) ||
+                typeof disk.health.note !== 'string' || disk.health.note.length > 256 ||
+                ['temperature', 'wear'].some(key => disk.health[key] !== null && !numeric(disk.health[key]))))
+            throw new Error('Resposta de armazenamento inválida.');
+        this._updatesRows.destroy_all_children();
+        if (this._updatesScroll) this._updatesScroll.style = `width: 720px; height: ${Math.min(420, Math.max(160, Math.ceil(data.items.length / 3) * (this._storageExternal ? 360 : 180) + (data.error ? 30 : 0)))}px;`;
+        this._updatesHeading.text = this._storageExternal ? 'EXT · volumes e conteúdo' : 'SSD · armazenamento e saúde';
+        const size = bytes => `${(bytes / 1073741824).toFixed(1)} GiB`;
+        let row;
+        for (const [index, item] of data.items.entries()) {
+            if (index % 3 === 0) { row = new St.BoxLayout({style: 'spacing: 10px;'}); this._updatesRows.add_child(row); }
+            const alert = item.percent >= 95 || item.inodes >= 95;
+            const color = alert ? '#ff6b6b' : item.percent >= 90 || item.inodes >= 90 ? '#ffd479' : '#9fdf9f';
+            const card = new St.Button({reactive: true, can_focus: true, style: 'width: 210px; padding: 10px; background-color: #292929; border-radius: 6px;'});
+            const content = new St.BoxLayout({vertical: true, style: 'spacing: 6px;'});
+            const title = new St.Label({text: item.mount, style: 'font-weight: bold;'});
+            title.clutter_text.set_ellipsize(Pango.EllipsizeMode.END);
+            content.add_child(title);
+            content.add_child(new St.Label({text: `${size(item.available)} livres`,  style: `color: ${color}; font-size: 18px;`}));
+            content.add_child(new St.Label({text: `Capacidade: ${size(item.total)}`, style: 'color: #c8c8c8;'}));
+            const blocks = Math.round(item.percent / 10);
+            content.add_child(new St.Label({text: '━'.repeat(blocks) + '┄'.repeat(10 - blocks) + ` ${item.percent.toFixed(0)}%`, style: `color: ${color};`}));
+            const disk = data.disks.find(disk => disk.name === item.disk);
+            const health = disk?.health;
+            content.add_child(new St.Label({text: health?.state === 'ok' ? 'SMART: sem alerta' : health?.state === 'alert' ? 'SMART: atenção' : 'SMART: indisponível',
+                style: `color: ${health?.state === 'alert' ? '#ff6b6b' : '#aaaaaa'};`}));
+            if (this._storageExternal) {
+                for (const filename of (item.files || []).slice(0, 6)) {
+                    const file = new St.Label({text: filename});
+                    file.clutter_text.set_ellipsize(Pango.EllipsizeMode.END);
+                    content.add_child(file);
+                }
+                content.add_child(new St.Label({text: item.content_error || (!item.files?.length ? 'Volume vazio' : item.files.length > 6 || item.more ? 'Mais itens no tooltip' : '')}));
+            }
+            card.set_child(content);
+            this._attachActionTooltip(card, `${this._storageExternal ? (item.files || []).join('\n') + (item.more ? '\nLista limitada aos primeiros 30 itens.' : '') + '\n' : ''}${item.mount}\n${item.device} · ${disk?.model || item.disk}\nCapacidade: ${size(item.total)} · Uso: ${item.percent}%\nInodes usados: ${item.inodes === null ? 'N/D' : item.inodes + '%'}\n${health?.note || 'Saúde não consultada.'}\nTemperatura: ${health?.temperature == null ? 'N/D' : health.temperature + ' °C'} · Vida útil consumida: ${health?.wear == null ? 'N/D' : health.wear + '%'}\nEspaço: atenção ≥ 90%, crítico ≥ 95%. SMART sem alerta não garante ausência de falhas.`);
+            row.add_child(card);
+        }
+        if (data.error || !data.items.length || data.omitted)
+            this._updatesRows.add_child(new St.Label({text: data.error || (!data.items.length ? 'Nenhum volume disponível.' : `+ ${data.omitted} volumes não exibidos`)}));
+    }
+
+    _buildTrafficDialog() {
+        this._buildUpdatesDialog(true);
+        this._trafficDialog = true;
+        this._updatesHeading.text = 'Rede · velocidade e qualidade';
+        this._updatesNote.text = 'Qualidade: 5 pings por destino · testes somente nesta modal';
+        this._networkRefreshButton.set_child(new St.Label({text: 'Testar qualidade'}));
+        this._networkRefreshButton.accessible_name = 'Testar qualidade da conexão';
+        this._attachActionTooltip(this._networkRefreshButton, 'Envia 5 pacotes ICMP ao gateway IPv4 e a 1.1.1.1 (Cloudflare). Uma amostra curta; ausência de resposta pode ser bloqueio de ICMP, não queda da internet.');
+            const speedColumn = new St.BoxLayout({
+                vertical: true,
+                style: 'spacing: 10px; padding: 10px; background-color: #292929; border-radius: 6px;',
+            });
+            speedColumn.add_child(new St.Label({text: 'Velocidade da internet', style: 'font-weight: bold; color: #ededed;'}));
+            this._speedtestButton = new St.Button({
+                label: 'Testar velocidade', reactive: true, can_focus: true,
+                style: 'background-color: #315d85; color: white; border-radius: 6px; padding: 10px;',
+            });
+            this._speedtestButton.connect('clicked', () => this._startSpeedtest());
+            speedColumn.add_child(this._speedtestButton);
+            this._speedtestResult = new St.Label({text: '', visible: false, style: 'font-size: 15px;'});
+            speedColumn.add_child(this._speedtestResult);
+            this._speedtestStatus = new St.Label({text: '', visible: false, style: 'font-size: 12px; color: #c8c8c8;'});
+            this._speedtestStatus.clutter_text.set_line_wrap(true);
+            this._speedtestStatus.clutter_text.set_ellipsize(Pango.EllipsizeMode.NONE);
+            speedColumn.add_child(this._speedtestStatus);
+        this._networkDialog.add_child(speedColumn);
+        this._attachActionTooltip(this._speedtestButton, 'Executa o Speedtest da Ookla. Transmite dados e pode consumir bastante banda. Latência e perda podem aumentar durante o teste.');
+    }
+
+    _renderQuality(data) {
+        if (!data || !Array.isArray(data.items) || data.items.length !== 2 || data.items.some(item =>
+            !item || ['name', 'target', 'error'].some(key => typeof item[key] !== 'string' || item[key].length > 256) ||
+            ['loss', 'latency', 'jitter'].some(key => item[key] !== null && (!Number.isFinite(item[key]) || item[key] < 0)) ||
+            (item.loss !== null && item.loss > 100))) throw new Error('Resposta de qualidade inválida.');
+        this._updatesRows.destroy_all_children();
+        const columns = new St.BoxLayout({style: 'spacing: 12px;'});
+        for (const [index, item] of data.items.entries()) {
+            const bad = item.loss !== null && item.loss >= 20;
+            const attention = item.loss > 0 || item.latency > (index === 0 ? 20 : 100);
+            const color = item.error ? '#aaaaaa' : bad ? '#ff6b6b' : attention ? '#ffd479' : '#9fdf9f';
+            const card = new St.Button({reactive: true, can_focus: true, style: 'padding: 12px; width: 326px; background-color: #292929; border-radius: 6px;'});
+            const content = new St.BoxLayout({vertical: true, style: 'spacing: 8px;'});
+            content.add_child(new St.Label({text: item.name, style: `font-weight: bold; color: ${color};`}));
+            content.add_child(new St.Label({text: item.error ? 'Leitura indisponível' : item.latency === null ? 'Sem resposta ICMP' : `${item.latency.toFixed(1)} ms`, style: `font-size: 22px; color: ${color};`}));
+            content.add_child(new St.Label({text: item.loss === null ? 'Perda: N/D' : `Perda: ${item.loss.toFixed(0)}% · 5 pacotes`}));
+            card.set_child(content);
+            this._attachActionTooltip(card, `${item.target || 'Gateway não identificado'}\n${item.error || 'Latência média; perda na amostra de 5 pacotes.'}\nVariação (mdev): ${item.jitter === null ? 'N/D' : item.jitter.toFixed(1) + ' ms'}\nCores indicativas: perda > 0% ou latência > 20 ms no roteador / 100 ms na internet; vermelho com perda ≥ 20%. ICMP pode ser limitado pelo destino. Não identifica sozinho a causa de lentidão.`);
+            columns.add_child(card);
         }
         this._updatesRows.add_child(columns);
     }
@@ -1867,6 +2043,12 @@ class AzClockCommandLabel extends Label {
             this._closeNetworkDialog();
             return;
         }
+        if (metricMode(getData(this.widgetIndex, this.elementIndex, 'Text_Command')) === 'cpu' && !this._networkDialog)
+            this._buildStorageDialog();
+        if (getData(this.widgetIndex, this.elementIndex, 'Text_Command').includes('/armazenamento-widget.py') && !this._networkDialog)
+            this._buildStorageDialog();
+        if (getData(this.widgetIndex, this.elementIndex, 'Text_Command').includes('/rede-widget.py') && !this._networkDialog)
+            this._buildTrafficDialog();
         if (getData(this.widgetIndex, this.elementIndex, 'Text_Command').includes('/servicos-widget.py') && !this._networkDialog)
             this._buildServicesDialog();
         if (getData(this.widgetIndex, this.elementIndex, 'Text_Command').includes('/temperaturas-widget.py') && !this._networkDialog)
@@ -1921,24 +2103,6 @@ class AzClockCommandLabel extends Label {
             this._networkDialogLabel = buildColumn('Portas locais', 130);
             this._networkConnectionsBox = buildColumn('Conexões externas · destino / porta', null, true);
             this._networkConnectionSignature = null;
-            const speedColumn = new St.BoxLayout({
-                vertical: true,
-                style: 'width: 220px; spacing: 12px; padding-left: 12px; border-left: 1px solid #606060;',
-            });
-            speedColumn.add_child(new St.Label({text: 'Velocidade da internet', style: 'font-weight: bold; color: #ededed;'}));
-            this._speedtestButton = new St.Button({
-                label: 'Testar velocidade', reactive: true, can_focus: true,
-                style: 'background-color: #315d85; color: white; border-radius: 6px; padding: 10px;',
-            });
-            this._speedtestButton.connect('clicked', () => this._startSpeedtest());
-            speedColumn.add_child(this._speedtestButton);
-            this._speedtestResult = new St.Label({text: '', visible: false, style: 'font-size: 15px;'});
-            speedColumn.add_child(this._speedtestResult);
-            this._speedtestStatus = new St.Label({text: '', visible: false, style: 'font-size: 12px; color: #c8c8c8;'});
-            this._speedtestStatus.clutter_text.set_line_wrap(true);
-            this._speedtestStatus.clutter_text.set_ellipsize(Pango.EllipsizeMode.NONE);
-            speedColumn.add_child(this._speedtestStatus);
-            columns.add_child(speedColumn);
             this._networkDialog.add_child(columns);
             const footer = new St.BoxLayout({style: 'spacing: 8px;'});
             this._networkRefreshButton = new St.Button({
@@ -1981,6 +2145,11 @@ class AzClockCommandLabel extends Label {
     }
 
     async _startSpeedtest() {
+        if (this._networkRefreshRun) {
+            this._speedtestStatus.text = 'Aguarde o teste de qualidade terminar.';
+            this._speedtestStatus.show();
+            return;
+        }
         if (this._networkDestroyed || !this._networkDialog?.visible || this._speedtestProcess)
             return;
         this._speedtestButton.reactive = false;
@@ -2247,7 +2416,7 @@ class AzClockCommandLabel extends Label {
         if (!widgetsEnabled || this._networkDestroyed) return;
         const command = getData(this.widgetIndex, this.elementIndex, 'Text_Command');
         if (metricMode(command)) {
-            if (metricMode(command) === 'processes')
+            if (['cpu', 'processes', 'network'].includes(metricMode(command)))
                 this._scheduleNetworkClick();
             this._cancelCommand();
             if (this._mediaSubscriptions)
@@ -2345,6 +2514,13 @@ class AzClockCommandLabel extends Label {
             }
 
             let displayText = response;
+            if (command.includes('/armazenamento-widget.py') && response.startsWith('AZCLOCK_STORAGE:')) {
+                const payload = JSON.parse(response.slice('AZCLOCK_STORAGE:'.length));
+                if (typeof payload.text !== 'string' || payload.text.length > 160) throw new Error('Resumo de armazenamento inválido.');
+                displayText = GLib.markup_escape_text(payload.text, -1);
+                this._scheduleNetworkClick();
+            }
+
             if (command.includes('/servicos-widget.py') && response.startsWith('AZCLOCK_SERVICES:')) {
                 const payload = JSON.parse(response.slice('AZCLOCK_SERVICES:'.length));
                 if (typeof payload.text !== 'string' || payload.text.length > 160) throw new Error('Resumo de serviços inválido.');
@@ -2482,6 +2658,7 @@ class AzClock {
             const scores = new Map();
             for (const widget of data.slice(0, 100)) {
                 const box = Array.isArray(widget) ? widget[0] : null;
+                if (box?.Parent_Id && data.some(widget => widget[0]?.Widget_Id === box.Parent_Id && widget[0]?.Box_IsGroup === 'true')) continue;
                 if (!box || box.Location_X === undefined || box.Location_Y === undefined) continue;
                 const anchor = Number(box.Box_AnchorPoint) || 0;
                 const x = Number(box.Location_X) + (anchor === 2 || anchor === 3 ? -0.5 : 0.5);
@@ -2602,7 +2779,60 @@ class AzClock {
         widget.destroy();
     }
 
+    _detachWidgetGroups() {
+        for (const widget of this.widgets || []) {
+            if (!widget._grouped) continue;
+            widget.get_parent()?.remove_child(widget);
+            Main.layoutManager._backgroundGroup.add_child(widget);
+            widget._grouped = false;
+            widget._groupWidth = null;
+
+        }
+        for (const widget of this.widgets || []) {
+            widget._subwidgetBox?.destroy();
+            widget._subwidgetBox = null;
+        }
+    }
+
+    _applyWidgetGroups() {
+        for (const widget of this.widgets || []) {
+            if (!widget.setStyle) continue;
+            widget.setStyle();
+            widget.setElementsStyle();
+            widget.setPositionFromSettings();
+            if (!widget._draggable && !getData(widget.widgetIndex, 0, 'Lock_Widget', 'bool')) widget.makeDraggable();
+        }
+        if (!WIDGETDATA?.some(widget => widget[0].Parent_Id || widget[0].Box_IsGroup === 'true')) return;
+        const groups = Me.imports.grouping.planGroups(WIDGETDATA);
+        for (const [index, members] of groups) {
+            const parent = this.widgets[index], meta = WIDGETDATA[index][0];
+            const columns = Math.max(1, Math.min(4, Number(meta.Group_Columns) || 1));
+            const width = parent._getStableWidth();
+            const spacing = Math.max(0, Math.min(50, Number(meta.Box_Spacing) || 8));
+            parent.layout_manager.orientation = Clutter.Orientation.VERTICAL;
+            const box = new St.BoxLayout({vertical: true, style: `spacing: ${spacing}px;`});
+            box.add_child(new St.Label({text: meta.Name || 'Sistema', style: PANEL_TITLE_STYLE}));
+            parent.add_child(box);
+            parent._subwidgetBox = box;
+            let row;
+            for (const [position, childIndex] of members.entries()) {
+                if (position % columns === 0) {
+                    row = new St.BoxLayout({style: `spacing: ${spacing}px;`}); box.add_child(row);
+                }
+                const child = this.widgets[childIndex];
+                child.get_parent()?.remove_child(child);
+                child._grouped = true;
+                child._groupWidth = Math.max(100, (width - 2 * (Number(meta.Box_Padding) || 0) - 2 * (Number(meta.Box_BorderWidth) || 0) - (columns - 1) * spacing) / columns);
+                child.set_position(0, 0);
+                row.add_child(child);
+                child.setStyle();
+            }
+            parent.queue_relayout();
+        }
+    }
+
     _destroyWidgets() {
+        this._detachWidgetGroups();
         const widgets = this.widgets || [];
         this.widgets = [];
         for (const widget of widgets) {
@@ -2628,6 +2858,7 @@ class AzClock {
             const widget = this._createWidget(i);
             this.widgets.push(widget);
         }
+        this._applyWidgetGroups();
 
     }
 
@@ -2675,6 +2906,7 @@ class AzClock {
     }
 
     _widgetDataChangedEvent() {
+        this._detachWidgetGroups();
         const changedData = Me.settings.get_value('changed-data').deep_unpack();
         const widgetIndex = /^\d+$/.test(changedData['WidgetIndex'] || '') ? Number(changedData['WidgetIndex']) : NaN;
         const elementIndex_ = /^\d+$/.test(changedData['ElementIndex'] || '') ? Number(changedData['ElementIndex']) : NaN;
@@ -2734,6 +2966,8 @@ class AzClock {
             this.widgets[widgetIndex].updateComponents();
         }
 
+        this._detachWidgetGroups();
+        this._applyWidgetGroups();
         this._removeClockTimer();
         this._startClockTimer();
         Me.settings.set_value('changed-data', new GLib.Variant('a{ss}', {}));

@@ -173,7 +173,7 @@
   ],
   [
     {
-      "Name": "Proc",
+      "Name": "Desempenho",
       "Widget_Type": "Widget_Box",
       "Lock_Widget": "false",
       "Location_X": "550",
@@ -185,9 +185,11 @@
       "Box_BorderRadius": "20",
       "Box_BorderColor": "rgb(255,255,255)",
       "Box_Spacing": "8",
-      "Box_Padding": "25",
+      "Box_Padding": "16",
       "Box_VerticalLayout": "true",
-      "Box_AnchorPoint": "0"
+      "Box_AnchorPoint": "0",
+      "Panel_Title": "Desempenho",
+      "Box_Width": "250"
     },
     {
       "Name": "Processos",
@@ -225,7 +227,7 @@
   ],
   [
     {
-      "Name": "Stats",
+      "Name": "Uso de recursos",
       "Widget_Type": "Widget_Box",
       "Lock_Widget": "false",
       "Location_X": "855",
@@ -239,7 +241,9 @@
       "Box_Spacing": "8",
       "Box_Padding": "0",
       "Box_VerticalLayout": "true",
-      "Box_AnchorPoint": "0"
+      "Box_AnchorPoint": "0",
+      "Widget_Id": "81d28fca-c3c2-49fb-b35c-8fe8ed2f323e",
+      "Parent_Id": "f81683c9-63e7-4ba1-9f10-468932bbd881"
     },
     {
       "Name": "Command Label",
@@ -277,7 +281,7 @@
   ],
   [
     {
-      "Name": "Sensors",
+      "Name": "Temperaturas",
       "Widget_Type": "Widget_Box",
       "Lock_Widget": "false",
       "Location_X": "855",
@@ -291,7 +295,9 @@
       "Box_Spacing": "8",
       "Box_Padding": "25",
       "Box_VerticalLayout": "true",
-      "Box_AnchorPoint": "0"
+      "Box_AnchorPoint": "0",
+      "Widget_Id": "8814f829-e848-4fbf-868a-7032ef79e974",
+      "Parent_Id": "f81683c9-63e7-4ba1-9f10-468932bbd881"
     },
     {
       "Name": "Temp",
@@ -343,7 +349,9 @@
       "Box_Spacing": "8",
       "Box_Padding": "25",
       "Box_VerticalLayout": "true",
-      "Box_AnchorPoint": "0"
+      "Box_AnchorPoint": "0",
+      "Widget_Id": "system-child-0",
+      "Parent_Id": "system-panel"
     },
     {
       "Name": "Rede",
@@ -395,7 +403,9 @@
       "Box_Spacing": "8",
       "Box_Padding": "25",
       "Box_VerticalLayout": "true",
-      "Box_AnchorPoint": "0"
+      "Box_AnchorPoint": "0",
+      "Widget_Id": "system-child-1",
+      "Parent_Id": "system-panel"
     },
     {
       "Name": "Segurança",
@@ -447,7 +457,9 @@
       "Box_Spacing": "8",
       "Box_Padding": "25",
       "Box_VerticalLayout": "true",
-      "Box_AnchorPoint": "0"
+      "Box_AnchorPoint": "0",
+      "Widget_Id": "system-child-2",
+      "Parent_Id": "system-panel"
     },
     {
       "Name": "Eventos bloqueados",
@@ -499,7 +511,9 @@
       "Box_Spacing": "8",
       "Box_Padding": "25",
       "Box_VerticalLayout": "true",
-      "Box_AnchorPoint": "0"
+      "Box_AnchorPoint": "0",
+      "Widget_Id": "system-child-3",
+      "Parent_Id": "system-panel"
     },
     {
       "Name": "Containers",
@@ -551,7 +565,9 @@
       "Box_Spacing": "8",
       "Box_Padding": "25",
       "Box_VerticalLayout": "true",
-      "Box_AnchorPoint": "0"
+      "Box_AnchorPoint": "0",
+      "Widget_Id": "system-child-4",
+      "Parent_Id": "system-panel"
     },
     {
       "Name": "Atualizações",
@@ -603,7 +619,9 @@
       "Box_Spacing": "8",
       "Box_Padding": "25",
       "Box_VerticalLayout": "true",
-      "Box_AnchorPoint": "0"
+      "Box_AnchorPoint": "0",
+      "Widget_Id": "system-child-5",
+      "Parent_Id": "system-panel"
     },
     {
       "Name": "Serviços com falha",
@@ -637,6 +655,54 @@
       "Text_AlignmentX": "Center",
       "Text_AlignmentY": "Center",
       "Text_LineAlignment": "Center"
+    }
+  ],
+  [
+    {
+      "Name": "Sistema",
+      "Widget_Type": "Widget_Box",
+      "Lock_Widget": "false",
+      "Location_X": "550",
+      "Location_Y": "300",
+      "Box_BackgroundEnabled": "true",
+      "Box_BackgroundColor": "rgba(0,0,0,0.2)",
+      "Box_BorderEnabled": "true",
+      "Box_BorderWidth": "3",
+      "Box_BorderRadius": "20",
+      "Box_BorderColor": "rgb(255,255,255)",
+      "Box_Spacing": "8",
+      "Box_Padding": "16",
+      "Box_VerticalLayout": "true",
+      "Box_AnchorPoint": "0",
+      "Widget_Id": "system-panel",
+      "Parent_Id": "",
+      "Box_IsGroup": "true",
+      "Group_Columns": "2",
+      "Box_Width": "520"
+    }
+  ],
+  [
+    {
+      "Name": "Hardware",
+      "Widget_Type": "Widget_Box",
+      "Lock_Widget": "false",
+      "Location_X": "820",
+      "Location_Y": "50",
+      "Box_BackgroundEnabled": "true",
+      "Box_BackgroundColor": "rgba(0,0,0,0.2)",
+      "Box_BorderEnabled": "true",
+      "Box_BorderWidth": "3",
+      "Box_BorderRadius": "20",
+      "Box_BorderColor": "rgb(255,255,255)",
+      "Box_Spacing": "8",
+      "Box_Padding": "16",
+      "Box_VerticalLayout": "true",
+      "Box_AnchorPoint": "0",
+      "Widget_Id": "f81683c9-63e7-4ba1-9f10-468932bbd881",
+      "Parent_Id": "",
+      "Box_IsGroup": "true",
+      "Group_Columns": "1",
+      "Box_Width": "250"
     }
   ]
 ]

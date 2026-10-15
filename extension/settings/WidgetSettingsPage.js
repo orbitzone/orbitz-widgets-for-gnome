@@ -131,13 +131,21 @@ var WidgetSettingsPage = GObject.registerClass({
                 transient_for: this.get_root(),
                 modal: true,
             });
+            const deleteChildren = new Gtk.CheckButton({label: 'Excluir também os subwidgets', active: false,
+                visible: widgetData[0].Box_IsGroup === 'true'});
+            dialog.get_message_area().append(deleteChildren);
             dialog.connect('response', (widget, response) => {
                 if (response === Gtk.ResponseType.YES) {
-                    const modifiedWidgetData = this._settings.get_value('widget-data').deep_unpack();
+                    let modifiedWidgetData = this._settings.get_value('widget-data').deep_unpack();
+                    const parentId = modifiedWidgetData[this.widget_index][0].Widget_Id;
+                    const removeIds = deleteChildren.active ? new Set(modifiedWidgetData.filter(child => child[0].Parent_Id === parentId).map(child => child[0].Widget_Id)) : new Set();
+                    for (const child of modifiedWidgetData) if (parentId && child[0].Parent_Id === parentId) child[0].Parent_Id = '';
                     modifiedWidgetData.splice(this.widget_index, 1);
+                    if (removeIds.size) modifiedWidgetData = modifiedWidgetData.filter(child => !removeIds.has(child[0].Widget_Id));
                     this._settings.set_value('changed-data', new GLib.Variant('a{ss}', {
                         'WidgetIndex': this.widget_index.toString(),
                         'WidgetDeleted': 'true',
+                        ...(removeIds.size ? {'WidgetIndex': '-1'} : {}),
                     }));
                     this._settings.set_value('widget-data', new GLib.Variant('aaa{ss}', modifiedWidgetData));
                     WidgetsData.data = modifiedWidgetData;
@@ -209,6 +217,25 @@ var WidgetSettingsPage = GObject.registerClass({
                 }
             });
         });
+        const subwidgetButton = new Gtk.Button({label: 'Criar subwidget', valign: Gtk.Align.CENTER,
+            sensitive: !widgetData[0].Parent_Id});
+        subwidgetButton.connect('clicked', () => {
+            const data = this._settings.get_value('widget-data').deep_unpack();
+            const parent = data[this.widget_index][0];
+            if (parent.Parent_Id || data.length >= 100) return;
+            parent.Widget_Id = parent.Widget_Id || GLib.uuid_string_random();
+            parent.Box_IsGroup = 'true';
+            parent.Group_Columns = parent.Group_Columns || '1';
+            const child = JSON.parse(JSON.stringify(Utils.EmptyWidgetSettings));
+            child[0] = {...child[0], Name: 'Novo subwidget', Widget_Id: GLib.uuid_string_random(), Parent_Id: parent.Widget_Id};
+            data.push(child);
+            this._settings.set_value('changed-data', new GLib.Variant('a{ss}', {}));
+            this._settings.set_value('widget-data', new GLib.Variant('aaa{ss}', data));
+            WidgetsData.data = data;
+            this._homePage.createRows();
+            this.close();
+        });
+        actionBar.pack_end(subwidgetButton);
         actionBar.pack_end(addButton);
         actionBar.pack_end(deleteElementButton);
         actionBar.pack_start(deleteWidgetButton);

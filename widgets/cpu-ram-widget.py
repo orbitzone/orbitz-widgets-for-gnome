@@ -13,8 +13,14 @@ def cpu():
     return total, idle
 
 def bar(percent):
-    filled = min(10, max(0, int(percent / 10 + 0.5)))
-    return '█' * filled + '░' * (10 - filled)
+    filled = min(8, max(0, int(percent * 8 / 100 + 0.5)))
+    return '█' * filled + '░' * (8 - filled)
+
+import sys
+if '--details' in sys.argv:
+    import runpy
+    runpy.run_path(str(Path(__file__).with_name('armazenamento-widget.py')), run_name='__main__')
+    sys.exit(0)
 
 first = cpu()
 time.sleep(1)
@@ -26,22 +32,28 @@ for line in Path('/proc/meminfo').read_text().splitlines():
     key, value = line.split(':', 1)
     memory[key] = int(value.split()[0])
 ram = 100 * (1 - memory['MemAvailable'] / memory['MemTotal'])
-print('<span font_family="monospace">')
-print(f'CPU  {bar(usage)}  {usage:3.0f}%')
-print()
-print(f'RAM  {bar(ram)}  {ram:3.0f}%')
-ssd = load('disk-usage.json', 60)
+rows = [f'  CPU  {bar(usage)}  {usage:3.0f}%', f'  RAM  {bar(ram)}  {ram:3.0f}%']
+ssd = load('disk-usage-available.json', 60)
 if type(ssd) not in (int, float) or not 0 <= ssd <= 100:
     disk = shutil.disk_usage(Path.home())
-    ssd = disk.used / disk.total * 100
-    save('disk-usage.json', ssd)
-print()
-print(f'SSD  {bar(ssd)}  {ssd:3.0f}%')
+    ssd = disk.used / (disk.used + disk.free) * 100 if disk.used + disk.free else 0
+    save('disk-usage-available.json', ssd)
+storage_alert = load('internal-storage-alert.json', 60)
+if type(storage_alert) is not bool:
+    try:
+        import runpy
+        inventory = runpy.run_path(str(Path(__file__).with_name('armazenamento-widget.py')))['collect']()
+        storage_alert = any(item['percent'] >= 90 or (item['inodes'] is not None and item['inodes'] >= 90) for item in inventory['items'])
+        save('internal-storage-alert.json', storage_alert)
+    except (OSError, ValueError, KeyError, subprocess.SubprocessError):
+        storage_alert = ssd >= 90
+marker = '<span foreground="#ffd479">!</span> ' if storage_alert else '  '
+rows.append(f'{marker}SSD  {bar(ssd)}  {ssd:3.0f}%')
 try:
     external = external_usage()
 except (OSError, ValueError, KeyError, subprocess.SubprocessError):
     external = None
 if external is not None:
-    print()
-    print(f'EXT  {bar(external)}  {external:3.0f}%')
-print('</span>')
+    marker = '<span foreground="#ffd479">!</span> ' if external >= 90 else '  '
+    rows.append(f'{marker}EXT  {bar(external)}  {external:3.0f}%')
+print('<span font_family="monospace" size="7680" line_height="1.5">' + '\n'.join(rows) + '</span>')

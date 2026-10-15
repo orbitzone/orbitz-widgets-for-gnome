@@ -8,7 +8,7 @@ class Actor {
 }
 const context = {St: {BoxLayout: Actor, Label: Actor}, Pango: {EllipsizeMode: {NONE: 0}}};
 vm.createContext(context);
-vm.runInContext('this.render = function' + source.slice(source.indexOf('    _renderPressure(data) {') + '    _renderPressure'.length, source.indexOf('    _buildServicesDialog()')), context);
+vm.runInContext('this.render = function' + source.slice(source.indexOf('    _renderPressure(data) {') + '    _renderPressure'.length, source.indexOf('    _buildStorageDialog()')), context);
 const host = {_updatesRows: new Actor({})};
 const data = {text: 'Sem pressão relevante', items: ['cpu','memory','io'].map(resource => ({resource, name: resource, suggestion: 'Revisar', averages: [0,1,2], full: null, level: 'normal'}))};
 context.render.call(host, data);

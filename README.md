@@ -49,7 +49,7 @@ Clock/weather, processes, CPU/RAM/storage, temperatures and separate traffic, se
 
 ### Security panel
 
-Local TCP listeners, remote destinations and the optional speed test. Opening the panel or clicking refresh collects a new snapshot.
+Local TCP listeners and remote destinations. Opening the panel or clicking refresh collects a new snapshot. Speed testing is available separately by clicking the download/upload traffic widget.
 
 ![Security panel with TCP listeners, remote connections and manual refresh](docs/images/network-panel.png)
 
@@ -85,7 +85,7 @@ Playback status, artist and title, followed by a small Spotify or Chrome icon id
 | **Weather** — `clima-widget.py` | Shows current conditions, temperature, feels-like temperature, humidity, daily low/high and precipitation probability through Open-Meteo. Defaults to Brasília, Brazil. |
 | **Docker** — `docker-widget.py` | Counts running containers; opens a panel with names, published ports and browser links for web services. |
 
-The network panel also includes an optional **Ookla Speedtest CLI** integration for download/upload speed in Mbps, latency in ms and the last test time. Results appear after a successful test. Speed tests run only when requested.
+The download/upload traffic widget opens a dedicated quality and speed panel with an optional **Ookla Speedtest CLI** integration for download/upload speed in Mbps, latency in ms and the last test time. Results appear after a successful test. Speed tests run only when requested.
 
 **Language:** this README is in English. Widget labels and panel messages currently remain in Portuguese. Script filenames are preserved for compatibility.
 
@@ -276,7 +276,7 @@ To generate the eight absolute command paths for your account:
 
 ```bash
 for script in cpu-ram-widget.py processos-widget.py rede-widget.py \
-  seguranca-widget.py temperaturas-widget.py clima-widget.py firewall-widget.py docker-widget.py servicos-widget.py; do
+  seguranca-widget.py temperaturas-widget.py clima-widget.py firewall-widget.py docker-widget.py servicos-widget.py armazenamento-widget.py; do
   printf 'python3 "%s/.local/share/orbitz-widgets/%s"\n' "$HOME" "$script"
 done
 ```
@@ -483,3 +483,27 @@ The services widget requires `systemctl` (from Ubuntu's `systemd` package), a ru
 Use `python3 /path/to/widgets/servicos-widget.py` with a 60000 ms polling interval. The widget is included in the settings template and follows the master start/stop control. A summary uses two bounded queries; opening or manually refreshing the panel adds at most one batched detail query per scope. Each query has a two-second timeout and an output cap. Up to six services per scope are displayed, with the remaining count indicated.
 
 Tooltips show systemd's `Result`, `ExecMainStatus` and `StateChangeTimestamp`, when available. The timestamp is the last state change, not a guaranteed failure time; a result or exit status alone does not establish the root cause. This widget does not read journal messages, use sudo, restart services or reset failure records. Detailed log investigation remains available through `journalctl -b -u UNIT` (or `journalctl --user -b -u UNIT`) according to your session's permissions.
+
+### Connection quality and traffic panel
+
+Click the download/upload widget (`rede-widget.py`) to open quality cards and the manual Ookla speed test. The external-connections panel now focuses only on listeners and remote connections. Quality is measured on opening this panel or clicking **Testar qualidade**, never by the background traffic collector. Closing the panel or stopping the widget suite cancels active tests. Quality and speed tests cannot run simultaneously.
+
+Install **`iputils-ping`** for ICMP probes and **`iproute2`** for IPv4 gateway discovery (`sudo apt install iputils-ping iproute2`). The quality feature requires both; traffic counters still work without them. Install `network_quality.py` beside `rede-widget.py`. Each quality sample sends five numeric-address ICMP probes to the default IPv4 gateway and five to **1.1.1.1 (Cloudflare)**. Gateway discovery is capped at one second; each probe process at four seconds, with bounded output. A VPN or IPv6-only connection may not expose an IPv4 gateway.
+
+Cards show average round-trip time and sample packet loss; tooltips identify the destination and timing variation (ping mdev). Color thresholds are illustrative: yellow for any loss or latency over 20 ms locally / 100 ms externally, red for at least 20% loss. Five packets provide only a short sample. ICMP filtering or rate limiting can produce nonresponses without an internet outage; one external destination does not characterize every application or diagnose the cause. The optional speed test transfers substantially more data and starts only when its button is clicked.
+
+### Storage space and disk health
+
+Storage is integrated into the **Stats** widget (`cpu-ram-widget.py`): click the **SSD** line for internal volumes or **EXT** for removable/desktop-mounted volumes. There is no separate storage widget. A `!` before SSD indicates at least one internal volume at 90% space/inode usage. Disk usage and the internal alert inventory are cached for 60 seconds. `armazenamento-widget.py` is the shared details helper. The panel uses a three-column card grid with available space, usage bars and SMART status. Tooltips show capacity, inode usage, device/model, temperature and NVMe estimated life consumed when available. Volumes mounted multiple times are deduplicated by filesystem device ID. Unmounted partitions, loop/Snap filesystems and network filesystems are outside the block-device inventory. Up to twelve filesystems are displayed; truncation is indicated.
+
+Requires `lsblk` from `util-linux`. **SMART health additionally requires `smartctl` from `smartmontools`, compatible hardware and existing read permission** (`sudo apt install smartmontools` installs the package, but does not grant device access). Without SMART, filesystem space remains functional and health is explicitly unavailable. The widget does not invoke sudo, change permissions, wake standby disks intentionally, mount filesystems or start disk self-tests. SMART is queried only when opening/refreshing details, at most four devices, two seconds each; inventory has a three-second timeout and bounded output. A SMART pass is not a guarantee against failure.
+
+Space/inode usage is yellow at 90% and red at 95%. NVMe critical warnings, reported SMART failure or estimated life consumed at least 100% mark disk health for attention. A healthy space indicator does not assert healthy hardware. The master widget control starts and stops the collector as with the other command widgets.
+
+EXT details show capacity and free space plus a first-level directory listing (six entries per card, up to thirty in its tooltip). Subdirectories and file contents are not opened, symlinks are not traversed, and permission errors are shown. SSD cards also display total filesystem capacity explicitly. Volumes on USB/removable devices or mounted under `/media`, `/run/media`, or `/mnt` are treated as external. The SSD usage percentage accounts for space unavailable to the current user (including filesystem reservations), matching the details card. Install the storage helper alongside `cpu-ram-widget.py`.
+
+### Parent widgets and automatic layout
+
+Choose **Add Widget → Widget pai · painel** to create a panel, or enable **Usar como widget pai** in an existing widget. In each existing widget's configuration, **Widget pai · mover para** moves it into the selected panel; selecting **Desktop · sem pai** detaches it. **Criar subwidget** creates an empty child for adding elements through its configuration page. Grouped widgets are marked with ↳ in the list; panels use ▦. The list order controls child order, and the parent controls the grid's one to four columns, spacing, padding, background and position. Width expands to accommodate a minimum card width rather than overlapping columns.
+
+Children retain their commands, sampling intervals and click-open panels, while the container provides consistent card styling and text alignment. Their saved desktop coordinates are retained and ignored while grouped. Move the whole panel rather than aligning individual rows. Deleting a parent returns its children to their saved desktop positions by default; the confirmation also offers deleting its children. Disabling panel mode always releases the children. Cloning a panel creates a fresh ID and does not steal its children. One grouping level is supported; invalid or missing parent relationships fall back to the desktop. No new polling loop or collector is added for layout. The master start/stop control destroys all child actors and their collectors normally.

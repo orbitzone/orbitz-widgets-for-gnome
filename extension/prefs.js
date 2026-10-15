@@ -16,6 +16,7 @@ const WidgetType = {
     DIGITAL: 0,
     ANALOG: 1,
     CUSTOM: 2,
+    GROUP: 3,
 };
 
 function init() {
@@ -90,7 +91,11 @@ class azClockHomePage extends Adw.PreferencesPage {
 
         const widgetsData = WidgetsData.data;
 
-        for (let i = 0; i < widgetsData.length; i++) {
+        const grouping = Me.imports.grouping;
+        this._rowParents = new Map();
+        for (const [parent, members] of grouping.planGroups(widgetsData))
+            for (const child of members) this._rowParents.set(child, widgetsData[parent][0].Name);
+        for (const i of grouping.settingsOrder(widgetsData)) {
             const widgetRow = this._createWidgetRow(i);
             this.clocksGroup.add(widgetRow);
         }
@@ -99,10 +104,12 @@ class azClockHomePage extends Adw.PreferencesPage {
     _createWidgetRow(widgetIndex) {
         const widgetData = WidgetsData.data[widgetIndex];
         const widgetSettings = widgetData[0];
+        const parentName = this._rowParents.get(widgetIndex);
         // Data for the widget is always the first element in array.
         const widgetRow = new WidgetRow(this, {
-            title: `<b>${GLib.markup_escape_text(widgetSettings['Name'], -1)}</b>`,
+            title: `<b>${parentName !== undefined ? '↳ ' : widgetSettings.Box_IsGroup === 'true' ? '▦ ' : ''}${GLib.markup_escape_text(widgetSettings['Name'], -1)}</b>`,
             widget_index: widgetIndex,
+            subtitle: parentName === undefined ? '' : `Subwidget de ${GLib.markup_escape_text(parentName, -1)}`,
         });
         widgetRow.use_markup = true;
 
@@ -213,8 +220,8 @@ var WidgetRow = GObject.registerClass({
         dropTarget.connect('drop', (_self, gdkDrop) => {
             const parent = this.get_parent();
             const dragRow = parent.dragRow; // The row being dragged.
-            const dragRowStartIndex = dragRow.get_index();
-            const dragRowNewIndex = this.get_index();
+            const dragRowStartIndex = dragRow.widget_index;
+            const dragRowNewIndex = this.widget_index;
 
             gdkDrop.read_value_async(AzClockWidgetRow, 1, null, () => gdkDrop.finish(Gdk.DragAction.MOVE));
 
@@ -282,6 +289,7 @@ class AzClockAddWidgetsDialog extends DialogWindow {
         this.pageGroup.title = _('Preset Widgets');
         this.pageGroup.add(this.addPresetWidget(_('Digital Clock Widget'), WidgetType.DIGITAL));
         this.pageGroup.add(this.addPresetWidget(_('Analog Clock Widget'), WidgetType.ANALOG));
+        this.pageGroup.add(this.addPresetWidget('Widget pai · painel', WidgetType.GROUP, 'Alinha subwidgets automaticamente'));
         this.pageGroup.add(this.addPresetWidget(_('Custom Widget'), WidgetType.CUSTOM,
             _('Add your own custom elements')));
 
@@ -310,8 +318,16 @@ class AzClockAddWidgetsDialog extends DialogWindow {
                 data.push(Utils.AnalogClockSettings);
             else if (widgetType === WidgetType.CUSTOM)
                 data.push(Utils.EmptyWidgetSettings);
-            else
-                data.push(widgetType);
+            else if (widgetType === WidgetType.GROUP) {
+                const group = JSON.parse(JSON.stringify(Utils.EmptyWidgetSettings));
+                group[0] = {...group[0], Name: 'Sistema', Widget_Id: GLib.uuid_string_random(), Box_IsGroup: 'true', Group_Columns: '1', Box_Width: '320', Box_Padding: '16', Box_Spacing: '8', Box_BackgroundEnabled: 'true', Box_BackgroundColor: 'rgba(0,0,0,0.2)', Box_BorderEnabled: 'true', Box_BorderWidth: '3', Box_BorderColor: 'rgb(255,255,255)', Box_BorderRadius: '20'};
+                data.push(group);
+            } else {
+                const clone = JSON.parse(JSON.stringify(widgetType));
+                clone[0].Widget_Id = GLib.uuid_string_random();
+                clone[0].Parent_Id = '';
+                data.push(clone);
+            }
 
             this._settings.set_value('changed-data', new GLib.Variant('a{ss}', {
                 'WidgetIndex': (data.length - 1).toString(),

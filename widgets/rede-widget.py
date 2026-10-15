@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 import time
+import sys
+import json
 from pathlib import Path
 
 def interface():
@@ -34,6 +36,11 @@ def rate(value):
         if value < 1024 or unit == 'GiB/s':
             return f'{value:.1f} {unit}'
         value /= 1024
+
+if '--details' in sys.argv:
+    from network_quality import collect
+    print('AZCLOCK_QUALITY:' + json.dumps(collect(), ensure_ascii=False))
+    sys.exit(0)
 
 try:
     name = interface()
