@@ -29,6 +29,7 @@ Orbitz combines nine standalone Python widget scripts and shared runtime modules
 - [Enable optional speed testing](#enable-optional-speed-testing)
 - [Optional Now Playing widget: Spotify and Chrome/Chromium](#optional-now-playing-widget-spotify-and-chromechromium)
 - [Per-widget requirements checklist](#per-widget-requirements-checklist)
+- [Manual startup and stop control](#manual-widget-controller)
 - [Docker widget](#docker-widget)
 - [Firewall event widget](#firewall-event-widget)
 - [Reliability, security and performance](#reliability-security-and-performance)
@@ -144,17 +145,58 @@ sudo apt install git python3 bash util-linux procps iproute2 libc-bin \
 
 The standard Ubuntu Desktop session supplies GNOME Shell, St, Clutter and the session D-Bus. Run the widgets as your desktop user, not with `sudo`.
 
-### Optional packages
+### Additional packages by feature
+
+Install the packages for the features you intend to use. The following adds the complete temperature list, terminal actions, process/startup tools and hostname display support:
 
 ```bash
-sudo apt install lm-sensors libpsl5 gir1.2-gweather-4.0
+sudo apt install lm-sensors gnome-terminal gnome-system-monitor \
+  gnome-startup-applications xdg-utils libpsl5 gir1.2-gweather-4.0
 ```
 
-- `lm-sensors`: temperature fallback/diagnostics; run `sensors` to inspect available readings. A package cannot create a sensor your hardware/driver does not expose. Direct temperature handling is for Intel coretemp and AMDGPU; NVIDIA and other hardware may remain unavailable.
-- `libpsl5`: shortened registrable-domain display for network hostnames; the full hostname is still copied on click.
-- `gir1.2-gweather-4.0`: the upstream preferences' location/time-zone helper. This is separate from the Python weather widget, which uses Open-Meteo and the standard library.
+| Feature | Package / dependency | Purpose |
+|---|---|---|
+| Full temperature sensor panel | **`lm-sensors`**, which supplies **`sensors`** | `sensors -j` enumerates temperature readings, including Apple SMC sensors on supported hardware. The collector also reads Linux `/sys/class/hwmon` and thermal zones as a fallback. |
+| NVIDIA temperature, when available | Matching NVIDIA driver providing `nvidia-smi` | Optional GPU query; use the driver appropriate for your hardware. `lm-sensors` alone does not supply this command. |
+| Terminal actions | `gnome-terminal` | Displays the selected command and requires Enter before executing update or process actions. |
+| Process inspection | `gnome-system-monitor` | Graphical process monitor. If absent, the action falls back to `top`, supplied by the required `procps` package. |
+| Startup application review | `gnome-startup-applications` | Supplies `gnome-session-properties`. If absent, the action uses `xdg-open` to open the user's autostart folder. |
+| Open startup folders and links | `xdg-utils` and a configured browser/file manager | Supplies `xdg-open` for the startup-folder fallback. Desktop links also use the session's default URI handler. |
+| Power-profile actions | `power-profiles-daemon` | Supplies `powerprofilesctl`. Buttons appear only for profiles supported by the service and hardware. |
+| Shortened network hostnames | `libpsl5` | Optional registrable-domain display; full hostnames are preserved for inspection/copy. |
+| Preferences location/time-zone helper | `gir1.2-gweather-4.0` | Optional upstream preferences binding; independent of the Python Open-Meteo weather widget. |
+| UFW pattern analysis | `ufw`, systemd journal and permission to read kernel logs | `journalctl` is supplied by `systemd` on the supported Ubuntu desktop. Logging must already be configured; installing a package alone does not enable collection. |
+| Docker panel | Docker CLI and a running, accessible Docker daemon | Reads `docker ps`, `docker context inspect` and `docker inspect`. Docker access must be available to the desktop account. |
+| Snap updates | `snapd` and its service | Supplies `snap`; only needed when monitoring/managing Snap packages. |
+| Flatpak updates | `flatpak` and configured remotes | Only needed when monitoring/managing Flatpak applications. |
+| APT updates | `apt` | Included with Ubuntu; used to inspect local indexes and open explicitly confirmed maintenance commands. |
+| Internet speed test | Official **Ookla Speedtest CLI** | Separate optional installation described below. The Python package/command `speedtest-cli` is not the executable used by this integration. |
+| Downloading the optional speed-test archive | `curl`, `tar` | Used only by the manual installation example below. |
+| Controller and collector shutdown | `python3`, `coreutils`, `util-linux`; bundled `extension/stop-collectors.py` | Native `timeout`, `kill` and `setsid`, plus the owned-process-tree shutdown helper. No additional Python library or pip dependency is required. |
 
-Internet access is required for package downloads, weather and speed tests; DNS lookup depends on your resolver. CPU/RAM/storage monitoring works locally.
+Optional Ubuntu packages for the corresponding features:
+
+```bash
+# Install only the features you use; these are not prerequisites for every widget.
+sudo apt install power-profiles-daemon
+sudo apt install ufw
+sudo apt install snapd flatpak
+
+# If Docker is not already installed: Ubuntu's packaged Docker distribution.
+# Existing Docker Engine/CLI installations can be used instead.
+sudo apt install docker.io
+```
+
+For sensors, verify the command before opening the temperature panel:
+
+```bash
+sensors
+sensors -j
+```
+
+Only temperatures actually exposed by the hardware and loaded drivers can be displayed. Invalid or inaccessible readings are omitted. Installing `lm-sensors` does not create unavailable sensors; the widget does not automatically run `sensors-detect`, load kernel modules or alter fan controls.
+
+Internet access is required for package downloads, weather and speed tests; DNS lookup depends on your resolver. CPU/RAM/storage and temperature monitoring work locally. The built-in Now Playing integration uses MPRIS over the session D-Bus and **does not require `playerctl`**, even though its compatibility command label contains that name.
 
 ## Download and install
 
@@ -292,7 +334,7 @@ Package names were checked against Ubuntu 22.04 sources and the development mach
 
 ## Docker widget
 
-Configure a separate command widget with `python3 /home/YOUR_USER/.local/share/orbitz-widgets/docker-widget.py`. Its label is **Docker Cotainers: N**, preserving the configured spelling. Use a 15000 ms interval for the summary. Click it to open a panel listing running containers and their published host ports; refresh is manual.
+Configure a separate command widget with `python3 /home/YOUR_USER/.local/share/orbitz-widgets/docker-widget.py`. Its label is **Docker Containers: N**. Use a 15000 ms interval for the summary. Click it to open a panel listing running containers and their published host ports; refresh is manual.
 
 The collector uses read-only `docker ps` and projected `docker inspect` queries. It does not start or stop containers, alter firewall rules or change socket permissions. A TCP listener list alone does not necessarily show Docker NAT mappings, which is why Docker has its own widget.
 
@@ -383,10 +425,22 @@ Run `python3 -m unittest discover -s tests -v` and `node tests/test_temperature_
 
 ## Manual widget controller
 
-The extension starts paused after every login or enable. The control has an explicit 40×36-pixel size and a 24-pixel custom SVG icon on a transparent button: white when stopped and lime green when running. Only the floating Play control is added just below the top panel, at the upper-right corner of the monitor containing the most saved widget positions (primary monitor fallback); only saved positions are read before Play; full configuration validation, widget construction and collector startup wait for an explicit click. Play becomes Stop while widgets are running.
+The controller is a separate extension component, not one of the configured desktop widgets. Its purpose is to **reduce the risk of desktop freezes or login-session failures caused by automatically starting a faulty widget or dependency during Linux startup**: after every login or extension enable, the widget suite starts **paused** and waits for an explicit click. This is a manual startup gate, not a guarantee against every system failure.
 
-Stop destroys widget actors and dialogs, removes timers and subscriptions, cancels in-flight reads, and terminates owned collector process trees, including subprocesses in separate sessions or started by worker threads. Play is disabled during cleanup. The Python helper `extension/stop-collectors.py` verifies user ownership and process start time before signaling a process. Keep this helper installed alongside `extension.js`.
+The transparent 40×36-pixel control uses a 24-pixel SVG icon:
 
-Configuration or widget-construction failures roll back startup and leave the controller available. The switch does not isolate syntax/module-loading errors in the extension itself or faults in GNOME. User-launched external applications and explicitly confirmed terminal actions have their own lifecycle; Stop does not terminate system services or interrupt package installation.
+- **White:** widgets are stopped; click to start the suite.
+- **Lime green:** widgets are running; click to stop the suite. The control remains unavailable while shutdown finishes.
+- **Position:** upper-right corner of the monitor containing the most saved widget positions; primary monitor fallback. Only saved-position metadata is read before activation. Full configuration validation, widget construction, collectors and polling timers wait for the start click.
 
-Controller regression checks: `node tests/test_widget_controller.js` and `python3 -m unittest discover -s tests -v`. The lifecycle test uses mocked GNOME actors; process-tree termination is tested with real child processes. Visual verification in GNOME is still required.
+Stopping destroys widget actors and dialogs, removes timers and subscriptions, cancels in-flight reads, and terminates owned collector process trees, including subprocesses in separate sessions or created by worker threads. The control remains available for another start. Configuration and cache files remain on disk without executing code. The active state is not restored automatically on the next login.
+
+Configuration or widget-construction failures roll back startup and leave the control available. The switch cannot isolate syntax/module-loading errors in the extension itself, kernel/driver faults or failures in GNOME. External applications and terminal actions explicitly opened by the user have their own lifecycle: stopping the widgets does not interrupt package installation or shut down system services.
+
+Implementation files:
+
+- [`extension/extension.js`](extension/extension.js), class `AzClock`: control, monitor selection, manual startup and teardown.
+- [`extension/stop-collectors.py`](extension/stop-collectors.py): verifies process ownership and start time before stopping collector trees. Keep this file installed alongside `extension.js`.
+- [`extension/media/controls/`](extension/media/controls/): white and lime SVG assets; keep this directory in the installed extension.
+
+Controller regression checks: `node tests/test_widget_controller.js` and `python3 -m unittest discover -s tests -v`. The lifecycle test uses mocked GNOME actors; process-tree termination is tested with real child processes. See the individual audit for the validation limits.
