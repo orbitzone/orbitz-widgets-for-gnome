@@ -113,32 +113,37 @@ def launch(identifier):
         (Path(os.environ.get('XDG_CONFIG_HOME', str(Path.home()/'.config'))) / 'autostart').mkdir(parents=True, exist_ok=True)
     launch_terminal(action['name'], action['command'], action['effect'])
 
-if '--details' in sys.argv:
-    print('AZCLOCK_PROCESSES:' + json.dumps(details(), ensure_ascii=False))
-    sys.exit(0)
-if '--action' in sys.argv:
-    launch(sys.argv[sys.argv.index('--action')+1])
-    sys.exit(0)
+def main():
+    if '--details' in sys.argv:
+        print('AZCLOCK_PROCESSES:' + json.dumps(details(), ensure_ascii=False))
+        sys.exit(0)
+    if '--action' in sys.argv:
+        launch(sys.argv[sys.argv.index('--action')+1])
+        sys.exit(0)
 
-first = snapshot()
-start = time.monotonic()
-time.sleep(1)
-second = snapshot()
-elapsed = time.monotonic() - start
-rows = []
-for pid, (name, ticks, birth, rss) in second.items():
-    if pid == os.getpid() or pid not in first or first[pid][2] != birth:
-        continue
-    cpu = max(0, ticks - first[pid][1]) / TICKS / elapsed * 100
-    rows.append((cpu, pid, name))
-rows = heapq.nsmallest(7, rows, key=lambda row: (-row[0], row[1]))
-# All lines need equal width: GNOME may center each line independently.
-formatted_rows = [(name[:18], f'{cpu:.1f}%') for cpu, _pid, name in rows]
-cpu_width = max([6] + [len(cpu) for _name, cpu in formatted_rows])
-lines = [f'{"PROCESSO":18} {"CPU":>{cpu_width}}']
-lines.extend(f'{name:18} {cpu:>{cpu_width}}' for name, cpu in formatted_rows)
-print('<span font_family="monospace">' + html.escape('\n'.join(lines)) + '</span>')
-pressure = pressure_snapshot()
-color = '#ff6b6b' if any(i['level'] == 'high' for i in pressure['items']) else '#ffd479' if any(i['level'] == 'attention' for i in pressure['items']) else '#c8c8c8'
-print()  # Separate the pressure summary from the process list.
-print(f"<span foreground=\"{color}\">{html.escape(pressure['text'])}</span>")
+    first = snapshot()
+    start = time.monotonic()
+    time.sleep(1)
+    second = snapshot()
+    elapsed = time.monotonic() - start
+    rows = []
+    for pid, (name, ticks, birth, rss) in second.items():
+        if pid == os.getpid() or pid not in first or first[pid][2] != birth:
+            continue
+        cpu = max(0, ticks - first[pid][1]) / TICKS / elapsed * 100
+        rows.append((cpu, pid, name))
+    rows = heapq.nsmallest(7, rows, key=lambda row: (-row[0], row[1]))
+    # All lines need equal width: GNOME may center each line independently.
+    formatted_rows = [(name[:18], f'{cpu:.1f}%') for cpu, _pid, name in rows]
+    cpu_width = max([6] + [len(cpu) for _name, cpu in formatted_rows])
+    lines = [f'{"PROCESSO":18} {"CPU":>{cpu_width}}']
+    lines.extend(f'{name:18} {cpu:>{cpu_width}}' for name, cpu in formatted_rows)
+    print('<span font_family="monospace">' + html.escape('\n'.join(lines)) + '</span>')
+    pressure = pressure_snapshot()
+    color = '#ff6b6b' if any(i['level'] == 'high' for i in pressure['items']) else '#ffd479' if any(i['level'] == 'attention' for i in pressure['items']) else '#c8c8c8'
+    print()  # Separate the pressure summary from the process list.
+    print(f"<span foreground=\"{color}\">{html.escape(pressure['text'])}</span>")
+
+
+if __name__ == '__main__':
+    main()

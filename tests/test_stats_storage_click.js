@@ -5,7 +5,7 @@ vm.runInContext('this.target = function'+source.slice(source.indexOf('    _stora
 const lines=['CPU ███ 30%','','RAM ██ 20%','','! SSD █████ 93%','','! EXT1 ⏏ ██ 95%'];const text=lines.join('\n');
 let line=0;
 const host={clutter_text:{transform_stage_point:(x)=>[true,x,line*15],get_text:()=>text,get_layout:()=>({xy_to_index:(x)=>[true,x>0 ? new TextEncoder().encode(text.slice(0,text.indexOf('⏏'))).length : new TextEncoder().encode(lines.slice(0,line).join('\n')+(line?'\n':'')).length,0]})}};
-for(const [index,expected] of [[0,null],[2,null],[4,'ssd'],[6,'external:1'],[3,null]]){line=index;assert.equal(context.target.call(host,[0,0]),expected);}
-console.log('OK: Stats activates storage only on SSD/EXT lines, including UTF-8 bars and alert prefix.');
+for(const [index,expected] of [[0,'cpu'],[2,'ram'],[4,'ssd'],[6,'external:1'],[3,null]]){line=index;assert.equal(context.target.call(host,[0,0]),expected);}
+console.log('OK: Stats selects CPU/RAM/SSD/EXT panels, including UTF-8 bars and alert prefix.');
 
 line=6;assert.equal(context.target.call(host,[10,0]),'eject:1');

@@ -1,7 +1,6 @@
 const assert = require('assert');
 const fs = require('fs');
 const vm = require('vm');
-const source = fs.readFileSync(require('path').join(__dirname, '../extension/extension.js'), 'utf8');
 class Label {
     constructor(props = {}) { Object.assign(this, props); this.signals = {}; this.clutter_text = {set_line_wrap() {}, set_line_wrap_mode() {}, set_ellipsize() {}}; }
     connect(signal, callback) {
@@ -17,9 +16,7 @@ class Button extends Label {}
 const tooltips = [];
 const context = {St: {Label, Button}, Pango: {WrapMode: {WORD_CHAR: 0}, EllipsizeMode: {NONE: 0}}, Main: {uiGroup: {add_child(actor) {tooltips.push(actor);}}}};
 vm.createContext(context);
-const start = source.indexOf('    _attachActionTooltip(button, command) {');
-const end = source.indexOf('    _buildTemperaturesDialog()', start);
-vm.runInContext('this.attach = function' + source.slice(start + '    _attachActionTooltip'.length, end).trim(), context);
+context.attach = require('./helpers/command_panels').load(context)._attachActionTooltip;
 for (const actor of [new Label(), new Button()]) {
     const host = {_networkDialog: new Label({visible: true})};
     context.attach.call(host, actor, 'Details');

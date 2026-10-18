@@ -7,13 +7,13 @@ import json
 import os
 from pathlib import Path
 import sys
-import tempfile
 import uuid
 import shutil
 import hashlib
 import re
 from timesheet import clock_minutes,activity_minutes,validate_activity
 import timesheet
+import atomic_json
 
 DATA=Path(os.environ.get('XDG_DATA_HOME') or Path.home()/'.local/share')/'orbitz-widgets'/'notes.json'
 
@@ -37,20 +37,10 @@ def write(data,path=DATA):
         snapshot=backups/(datetime.now().strftime('%Y%m%d-%H%M%S-%f')+'-'+uuid.uuid4().hex[:8]+'.json')
         shutil.copyfile(path,snapshot);snapshot.chmod(0o600)
         with snapshot.open('rb') as stream:os.fsync(stream.fileno())
-    fd,name=tempfile.mkstemp(prefix='.notes-',suffix='.tmp',dir=path.parent)
-    try:
-        with os.fdopen(fd,'w',encoding='utf-8') as stream:
-            os.fchmod(stream.fileno(),0o600)
-            json.dump(data,stream,ensure_ascii=False,indent=2);stream.flush();os.fsync(stream.fileno())
-        os.replace(name,path)
-        directory=os.open(path.parent,os.O_RDONLY)
-        try:os.fsync(directory)
-        finally:os.close(directory)
-        # Keep the most recent 60 snapshots. Retention cannot invalidate a save.
-        with contextlib.suppress(OSError):
-            for old in sorted((path.parent/'planner-backups').glob('*.json'))[:-60]:old.unlink()
-    finally:
-        with contextlib.suppress(FileNotFoundError):os.unlink(name)
+    atomic_json.write(path, data, prefix='.notes-', suffix='.tmp', indent=2, encoding='utf-8')
+    # Retention cannot invalidate a save; backups remain specific to this store.
+    with contextlib.suppress(OSError):
+        for old in sorted((path.parent/'planner-backups').glob('*.json'))[:-60]:old.unlink()
 
 def fingerprint(data):
     return hashlib.sha256(json.dumps(data,sort_keys=True,ensure_ascii=False).encode()).hexdigest()

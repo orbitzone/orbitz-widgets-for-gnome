@@ -185,31 +185,4 @@ class AzClockDigitalClockSubPage extends SubPage {
         const borderRadiusRow = this.createSpinRow(_('Background Radius'), 'Text_BorderRadius', 0, 999);
         widgetBackgroundRow.add_row(borderRadiusRow);
     }
-
-    createComboRow(title, setting) {
-        const value = this.getClockElementData(setting);
-        const stringList = new Gtk.StringList();
-        stringList.append(_('Start'));
-        stringList.append(_('Center'));
-        stringList.append(_('End'));
-
-        let selectedValue = 0;
-
-        if (value === 'Start')
-            selectedValue = 0;
-        else if (value === 'Center')
-            selectedValue = 1;
-        else if (value === 'End')
-            selectedValue = 2;
-
-        const comboRow = new Adw.ComboRow({
-            title: _(title),
-            model: stringList,
-            selected: selectedValue,
-        });
-        comboRow.connect('notify::selected', widget => {
-            this.setClockElementData(setting, widget.selected_item.string);
-        });
-        return comboRow;
-    }
 });

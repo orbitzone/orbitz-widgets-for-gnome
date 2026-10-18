@@ -1,5 +1,6 @@
 """Small durable UI preferences/drafts, separate from historical records."""
-import contextlib,fcntl,json,os,tempfile
+import fcntl,json,os
+import atomic_json
 from pathlib import Path
 PATH=Path(os.environ.get('XDG_DATA_HOME') or Path.home()/'.local/share')/'orbitz-widgets'/'planner-ui.json'
 
@@ -22,13 +23,4 @@ def set(key,value):
         fcntl.flock(lock,fcntl.LOCK_EX);data=read()
         if value is None:data.pop(key,None)
         else:data[key]=value
-        fd,name=tempfile.mkstemp(prefix='.planner-ui-',dir=PATH.parent)
-        try:
-            with os.fdopen(fd,'w') as stream:
-                os.fchmod(stream.fileno(),0o600);json.dump(data,stream,ensure_ascii=False);stream.flush();os.fsync(stream.fileno())
-            os.replace(name,PATH)
-            directory=os.open(PATH.parent,os.O_RDONLY)
-            try:os.fsync(directory)
-            finally:os.close(directory)
-        finally:
-            with contextlib.suppress(FileNotFoundError):os.unlink(name)
+        atomic_json.write(PATH, data, prefix='.planner-ui-')

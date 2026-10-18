@@ -1,6 +1,10 @@
 # Stack dos widgets Orbitz
 
-Inventário do código e da instalação local em **17/10/2026**.
+Inventário inicial em **17/10/2026**, atualizado em **18/10/2026** após RF-01 e atualização local.
+
+## Estado atual das fontes e instalação
+
+A instalação local já usa os módulos refatorados e os coletores em `~/.local/share/orbitz-widgets/collectors`; o atualizador confirmou zero arquivos/comandos pendentes na conferência de 18/10/2026. Os mapas de pastas históricas abaixo descrevem a origem anterior, preservada para referência e rollback; não são mais os caminhos configurados dos dez comandos migrados. Instalação em máquina limpa ainda não foi validada. Suíte completa atual: 71 testes Python, 17 arquivos Node.js e GJS/PangoCairo aprovados; clique RAM e validação visual/interativa permanecem pendentes conforme README/backlog.
 
 ## Visão geral
 
@@ -249,3 +253,13 @@ Esses caminhos fazem parte da instalação atual: mover ou remover as pastas exi
 - A interface dos widgets roda no GNOME Shell; os aplicativos e coletores rodam em processos separados.
 - Os aplicativos GTK são iniciados com `GDK_BACKEND=x11`, inclusive em sessões Wayland com XWayland.
 - As ferramentas opcionais são necessárias apenas para seus respectivos recursos; o manifesto GNOME não garante compatibilidade com versões posteriores à 44.
+
+## Modularização das fontes — RF-01 (18/10/2026)
+
+O backend do checkout passou a separar `extension/planner/calendar_events.py` (iCalendar/recorrências/VALARM), `credential_vault.py` (acesso tardio a libsecret) e `atomic_json.py` (substituição JSON durável). Apple/ICS reutilizam a normalização; store, external_store e ui_state reutilizam a escrita mantendo locks e políticas próprias. `widgets/firewall_patterns.py` contém análise pura UFW, separada de journal/cache/CLI. Cinco coletores têm `main()`/guarda de execução, mantendo o contrato do worker. Não foram acrescentadas dependências externas.
+
+Este registro descreve fontes refatoradas, não a instalação ativa. Os quatro módulos novos devem acompanhar os chamadores ao preparar distribuição futura. Evidências específicas: `docs/audits/2026-10-18-backend-refactor.md`; auditoria integrada concluída, com limites no relatório.
+
+O frontend do checkout separa composição (`extension/commandPanels.js`) e oito módulos de painéis em `extension/panels/`: common, updates, temperatures, storage, resources, network, docker e firewall. A composição ocorre antes de `GObject.registerClass`. `settings/TimeZoneDialog.js`, `planner/task_timesheet_ui.py`, `sticky-notes/card.py` e `youtube-widget/{youtube_api,youtube_server}.py` isolam responsabilidades antes nos pontos de entrada. Esses 14 módulos frontend também são necessários na distribuição futura, sem novas dependências externas declaradas. Relatório: `docs/audits/2026-10-18-frontend-refactor.md`. Validações específicas não comprovam execução gráfica; captura Broadway foi bloqueada por permissões do ambiente.
+
+Auditoria integrada RF-01 concluída: `docs/audits/2026-10-18-integrated-audit.md`; verificações locais/importações aprovadas, sem regressão impeditiva reproduzida no escopo revisado. A validação gráfica/interativa permanece pendente e nenhum ganho de desempenho foi medido.

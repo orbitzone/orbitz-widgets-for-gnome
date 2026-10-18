@@ -2,11 +2,9 @@ const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const source = fs.readFileSync(path.join(__dirname, '../extension/extension.js'), 'utf8');
 const context = {};
 vm.createContext(context);
-vm.runInContext('this.Panel = class {' + source.slice(source.indexOf('    _temperatureCategory('), source.indexOf('    _renderTemperatures(')) + '}', context);
-const panel = new context.Panel();
+const panel = require('./helpers/command_panels').load(context);
 const sensors = [
     ...Array.from({length: 16}, (_, i) => ({group: 'coretemp', name: 'Core ' + i, value: 60})),
     {group: 'amdgpu', name: 'edge', value: 81},

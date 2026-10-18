@@ -1,7 +1,6 @@
 const assert = require('assert');
 const fs = require('fs');
 const vm = require('vm');
-const source = fs.readFileSync(require('path').join(__dirname, '../extension/extension.js'), 'utf8');
 class Actor {
     constructor(props = {}) { Object.assign(this, props); this.children = []; this.clutter_text = {set_ellipsize() {}, set_line_wrap() {}}; }
     add_child(child) { this.children.push(child); }
@@ -10,7 +9,7 @@ class Actor {
 }
 const context = {St:{BoxLayout:Actor, Label:Actor, Button:Actor}, Pango:{EllipsizeMode:{END:0}}};
 vm.createContext(context);
-vm.runInContext('this.render = function' + source.slice(source.indexOf('    _renderServices(data) {') + '    _renderServices'.length, source.indexOf('    _buildProcessesDialog()')), context);
+context.render = require('./helpers/command_panels').load(context)._renderServices;
 const tips=[];
 const host={_updatesRows:new Actor(),_attachActionTooltip(actor,text){tips.push(text);}};
 const item={name:'test.service',description:'Test service',result:'exit-code',status:'1',changed:'Today'};

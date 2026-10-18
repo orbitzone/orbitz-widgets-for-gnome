@@ -1,5 +1,7 @@
 """External calendar accounts and caches; no credentials or task data."""
-import contextlib,fcntl,json,os,tempfile
+import fcntl,json,os
+import atomic_json
+from credential_vault import Vault  # Existing callers use external_store.Vault.
 from pathlib import Path
 PATH=Path(os.environ.get('XDG_DATA_HOME') or Path.home()/'.local/share')/'orbitz-widgets'/'external-calendars.json'
 
@@ -13,16 +15,7 @@ def update(callback):
     PATH.parent.mkdir(parents=True,exist_ok=True)
     with open(str(PATH)+'.lock','a') as lock:
         fcntl.flock(lock,fcntl.LOCK_EX);data=read();callback(data)
-        fd,tmp=tempfile.mkstemp(prefix='.external-',dir=PATH.parent)
-        try:
-            with os.fdopen(fd,'w') as out:
-                os.fchmod(out.fileno(),0o600);json.dump(data,out,ensure_ascii=False);out.flush();os.fsync(out.fileno())
-            os.replace(tmp,PATH)
-            fd=os.open(PATH.parent,os.O_RDONLY)
-            try:os.fsync(fd)
-            finally:os.close(fd)
-        finally:
-            with contextlib.suppress(FileNotFoundError):os.unlink(tmp)
+        atomic_json.write(PATH, data, prefix='.external-')
     return data
 
 def add_account(account):
@@ -46,21 +39,3 @@ def put_cache(account_id,calendar,month,events,updated):
         if account and any(c['id']==calendar['id'] for c in account['calendars']):
             data['cache'][cache_key(account_id,calendar['id'],month)]={'events':events,'updated':updated}
     return update(save)
-
-class Vault:
-    """Passwords live exclusively in the desktop Secret Service."""
-    def _service(self):
-        import gi
-        gi.require_version('Secret','1');from gi.repository import Secret
-        schema=Secret.Schema.new('io.orbitz.Calendar.iCloud',Secret.SchemaFlags.NONE,{'account':Secret.SchemaAttributeType.STRING})
-        return Secret,schema
-    def put(self,identity,password):
-        Secret,schema=self._service()
-        if not Secret.password_store_sync(schema,{'account':identity},Secret.COLLECTION_DEFAULT,'Orbitz · Calendário iCloud',password,None):
-            raise ValueError('Não foi possível guardar a senha no cofre do sistema.')
-    def get(self,identity):
-        Secret,schema=self._service();password=Secret.password_lookup_sync(schema,{'account':identity},None)
-        if not password:raise ValueError('A senha do calendário não está disponível no cofre. Desbloqueie o cofre ou reconecte a conta.')
-        return password
-    def delete(self,identity):
-        Secret,schema=self._service();Secret.password_clear_sync(schema,{'account':identity},None)

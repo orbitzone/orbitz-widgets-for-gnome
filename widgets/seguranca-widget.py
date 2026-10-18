@@ -89,55 +89,60 @@ def hostnames(ips):
                 os.unlink(name)
     return {ip: cache.get(ip, {}).get('name', '') for ip in ips}
 
-try:
-    external = 0
-    peers = []
-    for fields in sockets('established'):
-        if len(fields) < 4:
-            continue
-        host, port = address(fields[3])
-        host = host.split('%', 1)[0]
-        try:
-            ip = ipaddress.ip_address(host)
-            if ip.version == 6 and ip.ipv4_mapped:
-                ip = ip.ipv4_mapped
-            if not ip.is_loopback and not ip.is_unspecified:
-                external += 1
-                peers.append((str(ip), port))
-        except ValueError:
-            continue
-    ports = set()
-    for fields in sockets('listening'):
-        if len(fields) < 3:
-            continue
-        host, port = address(fields[2])
-        try:
-            ip = ipaddress.ip_address(host.split('%', 1)[0])
-            if ip.version == 6 and ip.ipv4_mapped:
-                ip = ip.ipv4_mapped
-            if ip.is_loopback:
+def main():
+    try:
+        external = 0
+        peers = []
+        for fields in sockets('established'):
+            if len(fields) < 4:
                 continue
-        except ValueError:
-            if host != '*':
+            host, port = address(fields[3])
+            host = host.split('%', 1)[0]
+            try:
+                ip = ipaddress.ip_address(host)
+                if ip.version == 6 and ip.ipv4_mapped:
+                    ip = ip.ipv4_mapped
+                if not ip.is_loopback and not ip.is_unspecified:
+                    external += 1
+                    peers.append((str(ip), port))
+            except ValueError:
                 continue
-        ports.add(port)
-    if '--summary' in sys.argv:
+        ports = set()
+        for fields in sockets('listening'):
+            if len(fields) < 3:
+                continue
+            host, port = address(fields[2])
+            try:
+                ip = ipaddress.ip_address(host.split('%', 1)[0])
+                if ip.version == 6 and ip.ipv4_mapped:
+                    ip = ip.ipv4_mapped
+                if ip.is_loopback:
+                    continue
+            except ValueError:
+                if host != '*':
+                    continue
+            ports.add(port)
+        if '--summary' in sys.argv:
+            text = f'Conexões externas: {external}\nEscutando portas: {len(ports)}'
+            print('AZCLOCK_NETWORK:' + json.dumps({'text': text}, ensure_ascii=False))
+            sys.exit(0)
+        ordered = sorted(ports, key=int)
+        details = '\n'.join(f'{port}/TCP' for port in ordered)
+        tooltip = details or 'Nenhuma porta escutando'
+        resolved = hostnames({ip for ip, port in peers})
+        connection_rows = []
+        connection_items = []
+        for ip, port in sorted(peers):
+            name = resolved.get(ip)
+            connection_items.append({'hostname': name or '', 'display': display_hostname(name), 'ip': ip, 'port': port})
+            name_part = f'<span foreground="#82cfff">{html.escape(name)}</span> ' if name else ''
+            connection_rows.append(name_part + f'<span foreground="#c8c8c8">({html.escape(ip)})</span> — <span foreground="#ffd479">{html.escape(port)}</span>')
+        connections = '\n'.join(connection_rows) or 'Nenhuma conexão externa'
         text = f'Conexões externas: {external}\nEscutando portas: {len(ports)}'
-        print('AZCLOCK_NETWORK:' + json.dumps({'text': text}, ensure_ascii=False))
-        sys.exit(0)
-    ordered = sorted(ports, key=int)
-    details = '\n'.join(f'{port}/TCP' for port in ordered)
-    tooltip = details or 'Nenhuma porta escutando'
-    resolved = hostnames({ip for ip, port in peers})
-    connection_rows = []
-    connection_items = []
-    for ip, port in sorted(peers):
-        name = resolved.get(ip)
-        connection_items.append({'hostname': name or '', 'display': display_hostname(name), 'ip': ip, 'port': port})
-        name_part = f'<span foreground="#82cfff">{html.escape(name)}</span> ' if name else ''
-        connection_rows.append(name_part + f'<span foreground="#c8c8c8">({html.escape(ip)})</span> — <span foreground="#ffd479">{html.escape(port)}</span>')
-    connections = '\n'.join(connection_rows) or 'Nenhuma conexão externa'
-    text = f'Conexões externas: {external}\nEscutando portas: {len(ports)}'
-    print('AZCLOCK_NETWORK:' + json.dumps({'text': text, 'tooltip': tooltip, 'connections': connections, 'connection_items': connection_items}, ensure_ascii=False))
-except (OSError, ValueError, subprocess.SubprocessError):
-    print('Leitura indisponível')
+        print('AZCLOCK_NETWORK:' + json.dumps({'text': text, 'tooltip': tooltip, 'connections': connections, 'connection_items': connection_items}, ensure_ascii=False))
+    except (OSError, ValueError, subprocess.SubprocessError):
+        print('Leitura indisponível')
+
+
+if __name__ == '__main__':
+    main()

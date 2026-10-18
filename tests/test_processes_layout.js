@@ -1,7 +1,6 @@
 const assert = require('assert');
 const fs = require('fs');
 const vm = require('vm');
-const source = fs.readFileSync(require('path').join(__dirname, '../extension/extension.js'), 'utf8');
 class Actor {
     constructor(props = {}) { Object.assign(this, props); this.children = []; this.clutter_text = {set_ellipsize() {}, set_line_wrap() {}}; }
     add_child(child) { this.children.push(child); }
@@ -11,7 +10,7 @@ class Actor {
 }
 const context = {Clutter: {ActorAlign: {CENTER: 0}}, St: {BoxLayout: Actor, Label: Actor, Button: Actor, Icon: Actor}, Pango: {EllipsizeMode: {END: 1}}};
 vm.createContext(context);
-vm.runInContext('this.render = function' + source.slice(source.indexOf('    _renderProcesses(data) {') + '    _renderProcesses'.length, source.indexOf('    _buildDockerDialog()')), context);
+context.render = require('./helpers/command_panels').load(context)._renderProcesses;
 const tooltips = [];
 const host = {_updatesRows: new Actor(), _updatesActions: new Actor(), _renderPressure() {}, _attachActionTooltip(actor, text) {tooltips.push(text);}};
 const rows = Array.from({length:7}, (_,i) => ({pid:i+1, name:'Process '+i, cpu:i*10, memory:i*100}));

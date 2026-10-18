@@ -5,6 +5,7 @@ from urllib.parse import urlsplit,urlunsplit,urljoin
 from urllib.request import Request,build_opener
 from urllib.error import HTTPError,URLError
 import apple_client as apple
+from calendar_events import ZONE, normalize_events
 MAX=16*1024*1024
 
 def subscription_url(value):
@@ -44,9 +45,9 @@ def fetch(url):
 
 def parse(raw,account_id,calendar_id,month):
     first=date.fromisoformat(month+'-01');last=(first.replace(day=28)+timedelta(days=4)).replace(day=1)
-    a=datetime.combine(first,datetime.min.time(),apple.ZONE)-timedelta(days=2)
-    b=datetime.combine(last,datetime.min.time(),apple.ZONE)+timedelta(days=2)
-    return apple.normalize_events(raw,account_id,calendar_id,a,b)
+    a=datetime.combine(first,datetime.min.time(),ZONE)-timedelta(days=2)
+    b=datetime.combine(last,datetime.min.time(),ZONE)+timedelta(days=2)
+    return normalize_events(raw,account_id,calendar_id,a,b)
 
 def events(url,account_id,calendar_id,month):return parse(fetch(url),account_id,calendar_id,month)
 

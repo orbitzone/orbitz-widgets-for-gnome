@@ -12,6 +12,7 @@ class Actor {
     connect(name, callback) { this.events[name] = callback; }
     destroy() { this.destroyed = true; }
 }
+let postitCloses = 0;
 let created = 0, destroyed = 0, settingsRead = 0, stopped = 0, fail = -1, failValidation = false;
 const timers = new Map();
 const settings = {
@@ -19,6 +20,7 @@ const settings = {
     get_value() { return {deep_unpack: () => ({})}; }, set_value() {},
 };
 const context = {
+    Calendar: {enable() {}, disable() {}},
     Meta: {WindowType:{DESKTOP:1}},
     widgetsEnabled: false, dragWidgets: new Set(), widgetDragController: null, activeCommandRuns: new Set(), pendingStops: new Set(),
     metricLabels: new Set(), networkClickLabels: new Set(), metricRestart: null, networkClickTimer: null,
@@ -28,7 +30,11 @@ const context = {
     Utils: {unpackData() { return [[{Widget_Type:'Widget_Box'}, {Element_Type:'Digital_Clock'}],[{Widget_Type:'Widget_Box'}],[{Widget_Type:'Widget_Box'}]]; }},
     Main: {panel: {height:28, addToStatusArea() {}}, layoutManager: {addChrome(actor, params) { actor.inputTracked = params; }, primaryMonitor: {x:0,y:0,width:1920,height:1080}, disconnectObject() {}, connectObject() {}, _backgroundGroup: {add_child() {}}}, notifyError() {}},
     PanelMenu: {Button: Actor}, St: {Button: Actor, Label: Actor, Icon: Actor}, Clutter: {ActorAlign: {CENTER:0}},
-    Gio: {icon_new_for_string: value => value},
+    Gio: {icon_new_for_string: value => value, DBusCallFlags: {NO_AUTO_START: 1},
+        DBus: {session: {call(name, object, iface, method, params, resultType, flags, timeout, cancel, callback) {
+            assert.equal(name, 'io.orbitz.Postits'); assert.equal(method, 'Activate');
+            assert.equal(flags, 1); postitCloses++; callback({call_finish() {}}, {});
+        }}}},
     GLib: {build_filenamev: parts => parts.join('/'), Variant: class {}, PRIORITY_DEFAULT:0, SOURCE_CONTINUE: true, SOURCE_REMOVE:false,
         timeout_add(priority, delay, fn) { const id = timers.size + 1; timers.set(id,fn); return id; },
         source_remove(id) { timers.delete(id); }},
@@ -80,7 +86,7 @@ vm.runInContext(source.slice(source.indexOf('class AzClock {')) + 'this.Controll
     settings.get_value=originalGet; controller._positionController();
     controller._controller.events.clicked();
     assert.equal(created, 3); assert.equal(controller.widgets.length, 3); assert(timers.size > 0);
-    assert.equal(controller._controllerIcon.gicon, '/extension/media/controls/widgets-active.svg');
+    assert.equal(controller._controllerIcon.gicon, '/extension/media/controls/widgets-white.svg');
     const run = {}; context.activeCommandRuns.add(run);
     let release; const pending = new Promise(resolve => { release = resolve; }); context.pendingStops.add(pending);
     const stopping = controller._stopWidgets();
@@ -104,6 +110,6 @@ vm.runInContext(source.slice(source.indexOf('class AzClock {')) + 'this.Controll
     controller._startWidgets(); await controller._stopping; assert.equal(created, 10);
     controller.disable(); await controller._stopping;
     assert.equal(controller._controllerButton, null);
-    assert(stopped > 0);
+    assert(stopped > 0); assert(postitCloses > 0);
     console.log('OK: startup without widgets/collectors/timers, metadata-only monitor selection; Play/Stop; repeated cycles; cancelled runs; rollback on widget/config failure.');
 })().catch(error => { console.error(error); process.exitCode = 1; });

@@ -1,7 +1,7 @@
 const assert = require('assert');
 const fs = require('fs');
 const vm = require('vm');
-const source = fs.readFileSync(require('path').join(__dirname, '../extension/extension.js'), 'utf8');
+const source = fs.readFileSync(require('path').join(__dirname, '../extension/extension.js'), 'utf8') + require('./helpers/command_panels').source();
 const pattern = /this\._networkBackdrop\.connect\('button-press-event', (\(_actor, event\) => \{[\s\S]*?return Clutter\.EVENT_STOP;\s*\})\);/g;
 let count = 0;
 for (const match of source.matchAll(pattern)) {

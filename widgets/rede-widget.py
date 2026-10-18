@@ -37,21 +37,26 @@ def rate(value):
             return f'{value:.1f} {unit}'
         value /= 1024
 
-if '--details' in sys.argv:
-    from network_quality import collect
-    print('AZCLOCK_QUALITY:' + json.dumps(collect(), ensure_ascii=False))
-    sys.exit(0)
+def main():
+    if '--details' in sys.argv:
+        from network_quality import collect
+        print('AZCLOCK_QUALITY:' + json.dumps(collect(), ensure_ascii=False))
+        sys.exit(0)
 
-try:
-    name = interface()
-    if not name:
-        print('Rede desconectada')
-    else:
-        first = counters(name)
-        start = time.monotonic()
-        time.sleep(1)
-        second = counters(name)
-        elapsed = time.monotonic() - start
-        print(f'↓ {rate((second[0]-first[0])/elapsed)}   ↑ {rate((second[1]-first[1])/elapsed)}')
-except (OSError, ValueError, IndexError):
-    print('Rede indisponível')
+    try:
+        name = interface()
+        if not name:
+            print('Rede desconectada')
+        else:
+            first = counters(name)
+            start = time.monotonic()
+            time.sleep(1)
+            second = counters(name)
+            elapsed = time.monotonic() - start
+            print(f'↓ {rate((second[0]-first[0])/elapsed)}   ↑ {rate((second[1]-first[1])/elapsed)}')
+    except (OSError, ValueError, IndexError):
+        print('Rede indisponível')
+
+
+if __name__ == '__main__':
+    main()

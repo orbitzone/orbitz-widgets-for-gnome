@@ -4,6 +4,16 @@ Documentação da instalação local revisada em **17/10/2026**, a partir do có
 
 Orbitz reúne widgets de desktop, monitoramento do sistema, calendário, tarefas, timesheets e Sticky Notes. A base é uma personalização do **Desktop Clock / azclock v7**, de Andrew Zaech, mantendo o identificador `azclock@azclock.gitlab.com`. Não é uma versão oficial do upstream.
 
+## Estado atual — 18/10/2026
+
+Refatoração modular, contratos da equipe, atualização local reversível e restauro do padrão Hardware estão implementados. A instalação local foi conferida novamente com o atualizador: nenhum arquivo ou comando pendente de migração. O usuário confirmou CPU e SSD funcionando após a correção do roteamento CLI.
+
+A última verificação completa passou: **71 testes Python, 17 arquivos de teste Node.js e o teste GJS/PangoCairo**. Resultados de 62 Python/16 JS nos relatórios anteriores pertencem ao alvo auditado naquele momento. Persistem pendências explícitas: clique da RAM não abre no teste manual reportado (ainda sem confirmação após o restauro visual), comparação visual/interativa completa e diferenças históricas de dispositivos externos/alertas (BUG-02). Este estado pode ser versionado com limitações documentadas; não representa uma versão integralmente validada do desktop.
+
+## Desenvolvimento no Codex
+
+As instruções do projeto ficam em [AGENTS.md](AGENTS.md). O papel do agente responsável por documentação, requisitos e coordenação está em [docs/agents/project-owner.md](docs/agents/project-owner.md). O cadastro da pasta como projeto é feito na interface do Codex; esses arquivos preservam as responsabilidades entre conversas.
+
 ## Estado do projeto e compatibilidade
 
 - Ambiente local: Ubuntu 22.04, GNOME Shell **42.9**, GJS **1.72.4** e Python **3.10.12**.
@@ -197,6 +207,16 @@ A integração iCloud usa cliente HTTP/XML próprio e libsecret; os pacotes Pyth
 
 Os caminhos acima fazem parte da configuração atual. **Mover ou apagar essas pastas exige atualizar os comandos no GSettings e preservar os módulos auxiliares.** Cópias em outras pastas não são necessariamente as executadas pela extensão.
 
+## Organização das fontes após a refatoração RF-01
+
+No checkout de desenvolvimento, a agenda separa normalização iCalendar em `extension/planner/calendar_events.py`, acesso ao cofre em `credential_vault.py` e substituição JSON durável em `atomic_json.py`. `apple_client.py` mantém os helpers públicos anteriores por reexportação; `external_store.py` mantém `Vault`. Locks, backups e retenção continuam nos respectivos chamadores. A análise pura UFW fica em `widgets/firewall_patterns.py`; journal, cache e CLI continuam em `firewall-widget.py`.
+
+CPU/RAM, processos, rede, conexões e temperaturas têm entradas `main()` protegidas, preservando execução direta e pelo worker. Os módulos novos devem acompanhar seus chamadores em qualquer instalação futura. Este mapa descreve as fontes; o mapa da instalação histórica acima não é atualizado automaticamente.
+
+O frontend compõe os painéis a partir de `extension/commandPanels.js` e dos oito módulos em `extension/panels/`, antes do registro GObject. O diálogo de fuso está em `extension/settings/TimeZoneDialog.js`; o fluxo tarefa→timesheet em `extension/planner/task_timesheet_ui.py`; o cartão das notas em `sticky-notes/card.py`. YouTube separa API/cache em `youtube_api.py` e HTTP em `youtube_server.py`, mantendo `youtube-widget.py` como ponto de entrada GTK/WebKit. Esses módulos também devem acompanhar os chamadores em distribuição futura.
+
+Inventários e testes específicos: [backend](docs/audits/2026-10-18-backend-refactor.md) e [frontend](docs/audits/2026-10-18-frontend-refactor.md). Ambos declararam suas áreas estáveis; a [auditoria integrada](docs/audits/2026-10-18-integrated-audit.md) concluiu as verificações locais sem regressão impeditiva reproduzida no escopo revisado. Validação gráfica permanece pendente por bloqueio dos sockets Broadway no ambiente isolado; não há alegação de ganho de desempenho. Errata de 18/10/2026: o auditor reconciliou a baseline local — eram **11 de 14 arquivos JS aprovados**, com três falhas, e não 12/15. O número 12/15 abaixo preserva o relato recebido na publicação e está corrigido por esta errata; não é evidência de uma execução separada com 15 arquivos. Na suíte integrada RF-01, o auditor informou **62 testes Python e 16 arquivos de teste JS aprovados**; o relatório integrado confirma 102 verificações de sintaxe e mantém a validação visual/interativa pendente.
+
 ## Configuração e operação
 
 Abra as preferências pelo aplicativo Extensões do GNOME ou execute:
@@ -271,3 +291,11 @@ Os créditos originais dos recursos do Desktop Clock são preservados abaixo.
 **@[Etamuk](https://gitlab.com/Etamuk) - German** | **@[Ser82-png](https://gitlab.com/Ser82-png) - Russian** | **@[Vistaus](https://gitlab.com/Vistaus) - Dutch**
 
 -----
+
+### Correção de roteamento após teste manual — hardware
+
+Em 18/10/2026 o teste do usuário encontrou falhas CPU/SSD e abertura RAM. A migração para coletores do repositório expôs ausência preexistente dos desvios CLI `--hardware`, `--details` e `--eject` no snapshot, presentes no coletor histórico. O repositório corrigido restaura os protocolos esperados pelos painéis; a aplicação local dessa correção foi conferida e o usuário confirmou CPU e SSD funcionando. O sintoma específico de clique RAM ainda não foi reproduzido em ambiente gráfico. Registros e pendências: `docs/backlog.md`, BUG-01/BUG-02.
+
+### Padrão mantido do resumo Hardware
+
+Conforme confirmação do usuário e coletor histórico, o resumo CPU/RAM/SSD usa fonte monospace com `size="7680"` (7,5 pt em unidades Pango), `line_height="1.5"`, barras de oito células e linhas sem vazios intercalados. Padding/margens da configuração existente são preservados; não ajustar escala global nem outros widgets para compensar. Requisito RC-12 e parecer UX em `docs/design/2026-10-18-hardware-restoration.md`. O markup restaurado coincide com a instalação no último plano conferido; é necessário reiniciar os widgets pelo controlador para recriar o worker após uma atualização, sem necessidade de logout quando apenas o coletor mudou. O clique RAM continua pendente de validação na sessão real.
