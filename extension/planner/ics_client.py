@@ -1,0 +1,57 @@
+"""Read-only subscription feeds, including Apple holiday calendars."""
+from datetime import date,datetime,timedelta
+import gzip,hashlib,io,ipaddress,socket
+from urllib.parse import urlsplit,urlunsplit,urljoin
+from urllib.request import Request,build_opener
+from urllib.error import HTTPError,URLError
+import apple_client as apple
+MAX=16*1024*1024
+
+def subscription_url(value):
+    value=value.strip()
+    if value.lower().startswith('webcal://'):value='https://'+value[9:]
+    parsed=urlsplit(value)
+    if parsed.scheme!='https' or not parsed.hostname or parsed.username or parsed.password or parsed.port not in (None,443):raise apple.CalendarError('Informe um link HTTPS ou webcal de assinatura de calendário.')
+    return urlunsplit((parsed.scheme,parsed.netloc,parsed.path,parsed.query,''))
+
+def public_host(url):
+    try:
+        host=urlsplit(url).hostname
+        for result in socket.getaddrinfo(host,443,type=socket.SOCK_STREAM):
+            if not ipaddress.ip_address(result[4][0]).is_global:raise apple.CalendarError('O link precisa apontar para um serviço público de calendário.')
+    except socket.gaierror:raise apple.CalendarError('Não foi possível localizar o servidor da assinatura.') from None
+
+def fetch(url):
+    url=subscription_url(url);opener=build_opener(apple.NoRedirect())
+    for _ in range(5):
+        public_host(url)
+        try:
+            request=Request(url,headers={'User-Agent':'OrbitzCalendar/1.0','Accept':'text/calendar','Accept-Encoding':'gzip'})
+            with opener.open(request,timeout=20) as response:
+                raw=response.read(MAX+1)
+                if len(raw)>MAX:raise apple.CalendarError('O arquivo de calendário é grande demais.')
+                if raw[:2]==b'\x1f\x8b':
+                    with gzip.GzipFile(fileobj=io.BytesIO(raw)) as stream:raw=stream.read(MAX+1)
+                if len(raw)>MAX:raise apple.CalendarError('O arquivo de calendário é grande demais.')
+                if b'BEGIN:VCALENDAR' not in raw:raise apple.CalendarError('O endereço retornou uma página, e não uma assinatura iCalendar (.ics).')
+                return raw
+        except HTTPError as error:
+            if error.code in (301,302,303,307,308) and error.headers.get('Location'):
+                url=subscription_url(urljoin(url,error.headers['Location']));continue
+            raise apple.CalendarError('Não foi possível baixar a assinatura (HTTP '+str(error.code)+'). Confira se o link está correto.') from None
+        except (URLError,OSError,EOFError):raise apple.CalendarError('Não foi possível baixar a assinatura. Verifique a conexão e o link.') from None
+    raise apple.CalendarError('A assinatura redirecionou a conexão vezes demais.')
+
+def parse(raw,account_id,calendar_id,month):
+    first=date.fromisoformat(month+'-01');last=(first.replace(day=28)+timedelta(days=4)).replace(day=1)
+    a=datetime.combine(first,datetime.min.time(),apple.ZONE)-timedelta(days=2)
+    b=datetime.combine(last,datetime.min.time(),apple.ZONE)+timedelta(days=2)
+    return apple.normalize_events(raw,account_id,calendar_id,a,b)
+
+def events(url,account_id,calendar_id,month):return parse(fetch(url),account_id,calendar_id,month)
+
+def account(name,url):
+    name=name.strip()
+    if not 0<len(name)<=100:raise apple.CalendarError('Informe um nome de até 100 caracteres.')
+    url=subscription_url(url);digest=hashlib.sha256(url.encode()).hexdigest()
+    return dict(id='ics-'+digest,provider='ics',label=name,calendars=[dict(id=digest,url=url,name=name,color='#82cfff')])

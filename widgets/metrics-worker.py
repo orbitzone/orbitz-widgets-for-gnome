@@ -23,11 +23,14 @@ def main():
             cpu_start=time.process_time()
             try:
                 with contextlib.redirect_stdout(output):
-                    exec(job['code'], {'__name__':'__main__','__file__':job['path']})
+                    namespace = {'__name__':'__main__','__file__':job['path']}
+                    exec(job['code'], namespace)
                 text=output.getvalue().strip()
                 if len(text.encode())>8192:raise ValueError('Saída excedida')
-            except Exception:text='Leitura indisponível'
-            print(json.dumps({'mode':mode,'text':text,'cpu_seconds':round(time.process_time()-cpu_start,6)},ensure_ascii=False),flush=True)
+            except Exception:
+                text='Leitura indisponível'
+                namespace={}
+            print(json.dumps({'mode':mode,'text':text,'devices':namespace.get('EXTERNAL_DEVICES',[]),'cpu_seconds':round(time.process_time()-cpu_start,6)},ensure_ascii=False),flush=True)
             job['next']=now+job['interval']
         delay=min(job['next'] for job in jobs.values())-time.monotonic()
         time.sleep(max(.05,min(1,delay)))

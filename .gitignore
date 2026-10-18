@@ -5,3 +5,13 @@ work/
 .cache/
 speedtest
 *.zip
+
+# Local state and credentials
+*.backup-*
+*.sqlite3*
+.env
+external-calendars.json
+notes.json
+planner-ui.json
+reminder-state.json
+youtube.json

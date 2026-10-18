@@ -39,3 +39,34 @@ class StorageTests(unittest.TestCase):
             self.assertEqual(data['items'][0]['device'],'/dev/usb')
             self.assertEqual(len(data['items'][0]['files']),30)
             self.assertTrue(data['items'][0]['more'])
+
+    def test_unmounted_partition_without_usage(self):
+        raw='{"blockdevices":[{"name":"/dev/a","type":"disk","children":[{"name":"/dev/a2","type":"part","size":123456789,"fstype":"apfs","mountpoints":[null]}]}]}'
+        with patch.object(storage,'run',return_value=subprocess.CompletedProcess([],0,raw)),patch.object(storage,'health',return_value={'state':'unavailable','temperature':None,'wear':None,'note':'Unavailable'}):
+            data=storage.collect(True)
+        self.assertEqual(len(data['unmounted']),1)
+        self.assertIsNone(data['unmounted'][0]['available'])
+        self.assertEqual(data['unmounted'][0]['total'],123456789)
+        self.assertEqual(data['unmounted'][0]['fstype'],'apfs')
+
+    def test_unmounted_usb_is_only_in_external_view(self):
+        raw='{"blockdevices":[{"name":"/dev/sdz","type":"disk","tran":"usb","children":[{"name":"/dev/sdz7","type":"part","size":987654321,"fstype":"exfat","mountpoints":[null]}]}]}'
+        with patch.object(storage,'run',return_value=subprocess.CompletedProcess([],0,raw)),patch.object(storage,'health',return_value={'state':'unavailable','temperature':None,'wear':None,'note':'Unavailable'}):
+            internal=storage.collect(True,False)
+            external=storage.collect(True,True)
+        self.assertEqual(internal['unmounted'],[])
+        self.assertEqual(external['unmounted'][0]['device'],'/dev/sdz7')
+        self.assertEqual(external['unmounted'][0]['fstype'],'exfat')
+        self.assertEqual(external['unmounted'][0]['total'],987654321)
+
+    def test_selection_filters_by_device_and_rejects_stale_identity(self):
+        import external_storage
+        data={'items':[{'disk':'/dev/sda'},{'disk':'/dev/sdb'}],'unmounted':[{'disk':'/dev/sdb'}],'disks':[{'name':'/dev/sda'},{'name':'/dev/sdb'}],'omitted':0,'error':''}
+        with patch.object(external_storage,'device_identity',return_value='id'):
+            selected=storage.select_device(data,'sdb','id')
+        self.assertEqual(selected['items'],[{'disk':'/dev/sdb'}])
+        self.assertEqual(selected['disks'],[{'name':'/dev/sdb'}])
+        with patch.object(external_storage,'device_identity',return_value='new'):
+            selected=storage.select_device(selected,'sdb','old')
+        self.assertEqual(selected['items'],[])
+        self.assertTrue(selected['error'])

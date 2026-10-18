@@ -1,18 +1,23 @@
 /* eslint-disable jsdoc/require-jsdoc */
 const {
     Clutter, Gio, GLib, GObject,
-    Graphene, Meta, Pango, St,
+    Graphene, Meta, Pango, Shell, St,
 } = imports.gi;
 
-const DND = imports.ui.dnd;
 const ExtensionUtils = imports.misc.extensionUtils;
 const Main = imports.ui.main;
 const Me = ExtensionUtils.getCurrentExtension();
 const PopupMenu = imports.ui.popupMenu;
 let widgetsEnabled = false;
+let activeWidgetDrag = null;
+const dragWidgets = new Set();
+let widgetDragController = null;
+let widgetDragGrab = null;
+let widgetDragKeySignal = 0;
 const activeCommandRuns = new Set();
 const pendingStops = new Set();
 const Utils = Me.imports.utils;
+const Calendar = Me.imports.planner.calendar;
 
 const Gettext = imports.gettext.domain(Me.metadata['gettext-domain']);
 const _ = Gettext.gettext;
@@ -203,9 +208,14 @@ async function startMetrics() {
             if (generation !== metricGeneration)
                 break;
             for (const label of metricLabels) {
-                if (!label._networkDestroyed && metricMode(getData(label.widgetIndex, label.elementIndex, 'Text_Command')) === data.mode && label.text !== data.text) {
-                    label.text = data.text;
-                    label.clutter_text.set_markup(data.text);
+                if (!label._networkDestroyed && metricMode(getData(label.widgetIndex, label.elementIndex, 'Text_Command')) === data.mode) {
+                    if (data.mode === 'cpu') {
+                        if (!Array.isArray(data.devices) || data.devices.length > 8 || data.devices.some(device => !device ||
+                            typeof device.name !== 'string' || !/^[A-Za-z0-9_.-]{1,128}$/.test(device.name) ||
+                            typeof device.identity !== 'string' || device.identity.length > 100)) throw new Error('Mapa de dispositivos inválido.');
+                        label._externalDevices = data.devices;
+                    }
+                    if (label.text !== data.text) { label.text = data.text; label.clutter_text.set_markup(data.text); }
                 }
             }
         }
@@ -227,15 +237,133 @@ async function startMetrics() {
 
 const networkClickLabels = new Set();
 let networkClickTimer = null;
+let desktopInputRects = null;
+function releaseWidgetDragCapture() {
+    if (widgetDragKeySignal) { global.stage.disconnect(widgetDragKeySignal); widgetDragKeySignal = 0; }
+    if (widgetDragGrab) {
+        const grab = widgetDragGrab;
+        widgetDragGrab = null;
+        Main.popModal(grab);
+    }
+}
+
+function updateWidgetDrag(pointer) {
+    if (Main.sessionMode?.isLocked || Main.overview.visible) {
+        widgetDragController?.cancel();
+        return false;
+    }
+    if (!widgetDragController && dragWidgets.size) {
+        widgetDragController = new Me.imports.dragging.PointerDragController({
+            buttonMask: Clutter.ModifierType.BUTTON1_MASK,
+            superMask: Clutter.ModifierType.SUPER_MASK,
+            mod4Mask: Clutter.ModifierType.MOD4_MASK,
+            controlMask: Clutter.ModifierType.CONTROL_MASK,
+            widgets: () => [...dragWidgets].filter(widget => !widget._grouped && !widget._widgetDestroyed &&
+                widget.get_paint_visibility() && !getData(widget.widgetIndex, 0, 'Lock_Widget', 'bool'))
+                .sort((a,b) => a.widgetIndex - b.widgetIndex),
+            canStart: pointer => !desktopPointerBlocked(pointer),
+            begin: widget => {
+                try {
+                widgetDragGrab = Main.pushModal(Main.uiGroup);
+                widgetDragKeySignal = global.stage.connect('captured-event', (_stage,event) => {
+                    if (event.type() === Clutter.EventType.KEY_PRESS && event.get_key_symbol() === Clutter.KEY_Escape) {
+                        widgetDragController?.cancel();
+                        return Clutter.EVENT_STOP;
+                    }
+                    return Clutter.EVENT_PROPAGATE;
+                });
+                widget._onDragBegin();
+                } catch (error) { releaseWidgetDragCapture(); logError(error, 'Início do arraste'); return false; }
+            },
+            move: (widget,x,y) => widget.set_position(x,y),
+            finish: (widget,drop) => {
+                releaseWidgetDragCapture();
+                widget._acceptedDrop = drop;
+                widget._onDragEnd();
+                if (!drop && !widget._widgetDestroyed) widget.setPositionFromSettings();
+            },
+        });
+    }
+    return widgetDragController?.update(pointer) || false;
+}
+
+// Polling must obey the same occlusion rules as native window input.
+function desktopPointerBlocked(pointer) {
+    if (Main.sessionMode?.isLocked || Main.modalCount || Main.overview.visible) return true;
+    for (const label of networkClickLabels) {
+        if (label._networkBackdrop?.visible || label._networkDialog?.visible) return true;
+    }
+    const [x, y] = pointer;
+    let rects;
+    try { rects = desktopInputRects ?? desktopOccludingRects(); }
+    catch (error) { return true; } // Wait until window geometry is available again.
+    return rects.some(rect => x >= rect.x && x < rect.x + rect.width && y >= rect.y && y < rect.y + rect.height);
+}
+
+function desktopOccludingRects() {
+    const workspace = global.workspace_manager.get_active_workspace();
+    const rects = [];
+    for (const actor of global.get_window_actors()) {
+        const window = actor.meta_window;
+        if (!window || !actor.visible || window.get_window_type() === Meta.WindowType.DESKTOP ||
+            window.get_gtk_application_id?.() === 'com.rastersoft.ding' || window.customJS_ding?._keepAtBottom ||
+            !window.showing_on_its_workspace() || !window.located_on_workspace(workspace)) continue;
+        rects.push(window.get_frame_rect());
+    }
+    return rects;
+}
+
+function bindDesktopLauncher(button, launch) {
+    let held = false, start = null, lastLaunch = -Infinity;
+    const activate = () => {
+        if (!button.get_paint_visibility() || desktopPointerBlocked(global.get_pointer())) return;
+        const now = GLib.get_monotonic_time();
+        if (now - lastLaunch < 700000) return;
+        lastLaunch = now;
+        launch();
+    };
+    button.connect('clicked', activate);
+    button._checkNetworkClick = pointer => {
+        const [px, py, mask] = pointer;
+        const down = !!(mask & Clutter.ModifierType.BUTTON1_MASK);
+        const [x, y] = button.get_transformed_position();
+        const [width, height] = button.get_transformed_size();
+        const inside = button.get_paint_visibility() && px >= x && px < x + width && py >= y && py < y + height;
+        const blocked = desktopPointerBlocked(pointer) || activeWidgetDrag ||
+            ((mask & (Clutter.ModifierType.SUPER_MASK | Clutter.ModifierType.MOD4_MASK)) && (mask & Clutter.ModifierType.CONTROL_MASK));
+        if (blocked) start = null;
+        if (down && !held) start = inside && !blocked ? [px, py] : null;
+        if (!down && held && inside && !blocked && start && Math.abs(px - start[0]) < 8 && Math.abs(py - start[1]) < 8)
+            activate();
+        held = down;
+        if (!down) start = null;
+        return inside && !blocked;
+    };
+    networkClickLabels.add(button);
+    button.connect('destroy', () => networkClickLabels.delete(button));
+    scheduleNetworkClicks();
+}
+
 function scheduleNetworkClicks(delay = 250) {
-    if (networkClickTimer || !networkClickLabels.size)
+    if (networkClickTimer || (!networkClickLabels.size && !dragWidgets.size))
         return;
     networkClickTimer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, delay, () => {
         networkClickTimer = null;
         let active = false;
         const pointer = global.get_pointer();
-        for (const label of networkClickLabels)
-            active = label._checkNetworkClick(pointer) || active;
+        try { desktopInputRects = desktopOccludingRects(); }
+        catch (error) { desktopInputRects = null; logError(error, 'Janelas sobre os widgets'); }
+        try { active = updateWidgetDrag(pointer); }
+        catch (error) {
+            try { widgetDragController?.cancel(); } catch (_) { releaseWidgetDragCapture(); }
+            logError(error, 'Arraste dos widgets');
+        }
+        try {
+            for (const label of networkClickLabels) {
+                try { active = label._checkNetworkClick(pointer) || active; }
+                catch (error) { logError(error, 'Interação de um widget'); }
+            }
+        } finally { desktopInputRects = null; }
         scheduleNetworkClicks(active ? 25 : 250);
         return GLib.SOURCE_REMOVE;
     });
@@ -394,12 +522,37 @@ class AzClockDesktopWidget extends St.Widget {
             const clockType = getData(this._widgetIndex, i, 'Element_Type');
             if (clockType === DIGITAL_CLOCK) {
                 const digitalClock = new DigitalClock(this._widgetIndex, i);
-                this.add_child(digitalClock);
+                const clockButton = new St.Button({reactive:true,can_focus:true,child:digitalClock,
+                    accessible_name:'Abrir calendário e tarefas',style:'padding:0;'});
+                bindDesktopLauncher(clockButton,()=>Calendar.openCalendar());
+                this.add_child(clockButton);
                 this._digitalClocks.push(digitalClock);
             } else if (clockType === ANALOG_CLOCK) {
                 const analogClock = new AnalogClock(this._widgetIndex, i, clockData[i]);
                 this.add_child(analogClock);
                 this._analogClocks.push(analogClock);
+            } else if (clockType === TEXT_LABEL && ['youtube', 'gemini', 'btop', 'notes'].includes(clockData[i].Launcher_Action)) {
+                const notes = clockData[i].Launcher_Action === 'notes';
+                const gemini = clockData[i].Launcher_Action === 'gemini';
+                const btop = clockData[i].Launcher_Action === 'btop';
+                const name = notes ? 'Post-its Orbitz' : btop ? 'Monitor do sistema' : gemini ? 'Gemini' : 'YouTube';
+                const button = new St.Button({reactive: true, can_focus: true, accessible_name: `Abrir ${name}`,
+                    style: 'padding: 4px; border-radius: 8px;'});
+                button.set_child(new St.Icon({gicon: Gio.icon_new_for_string(GLib.build_filenamev([Me.path, notes ? 'notes-widget' : btop ? 'media' : gemini ? 'gemini-widget' : 'youtube-widget', notes ? 'notes.svg' : btop ? 'btop.png' : gemini ? 'gemini.svg' : 'youtube.svg'])), icon_size: 32}));
+                bindDesktopLauncher(button, async () => {
+                    try {
+                        const argv = notes ? ['/usr/bin/env', 'GDK_BACKEND=x11', '/usr/bin/python3', GLib.build_filenamev([GLib.get_user_data_dir(), 'orbitz-postits', 'app', 'postits.py'])] : btop ? ['/usr/bin/tilix', '-e', '/usr/bin/btop'] : gemini
+                            ? ['/usr/bin/google-chrome', '--app=https://gemini.google.com/', '--window-size=1100,900']
+                            : ['/usr/bin/python3', GLib.build_filenamev([Me.path, 'youtube-widget', 'youtube-widget.py'])];
+                        const proc = Gio.Subprocess.new(argv, Gio.SubprocessFlags.NONE);
+                        await proc.wait_async(null);
+                        if (!proc.get_successful()) throw new Error('O aplicativo encerrou com erro.');
+                    } catch (error) {
+                        logError(error, `Lançador ${name}`);
+                        Main.notify(name, 'Não foi possível abrir o aplicativo. Consulte os logs da sessão.');
+                    }
+                });
+                this.add_child(button);
             } else if (clockType === TEXT_LABEL) {
                 const label = new TextLabel(this._widgetIndex, i);
                 this.add_child(label);
@@ -525,7 +678,8 @@ class AzClockDesktopWidget extends St.Widget {
         if (this._grouped) return Clutter.EVENT_PROPAGATE;
         const event = Clutter.get_current_event();
 
-        if (event.get_button() === 1) {
+        const dragMask = Clutter.ModifierType.SUPER_MASK | Clutter.ModifierType.CONTROL_MASK;
+        if (event.get_button() === 1 && (event.get_state() & dragMask) !== dragMask) {
             this._setPopupTimeout();
         } else if (event.get_button() === 3) {
             this._popupMenu();
@@ -541,61 +695,39 @@ class AzClockDesktopWidget extends St.Widget {
     }
 
     _onDragBegin() {
-        if (this._menu)
-            this._menu.close(true);
+        this._menu?.close(true);
         this._removeMenuTimeout();
-
         this._isDragging = true;
-        this._dragMonitor = {
-            dragMotion: this._onDragMotion.bind(this),
-        };
-        DND.addDragMonitor(this._dragMonitor);
-
-        this._dragX = this.x;
-        this._dragY = this.y;
-    }
-
-    _onDragMotion(dragEvent) {
-        this.deltaX = dragEvent.x - (dragEvent.x - this._dragX);
-        this.deltaY = dragEvent.y - (dragEvent.y - this._dragY);
-
-        const [x, y] = this.allocation.get_origin();
-        this._dragX = x;
-        this._dragY = y;
-
-        return DND.DragMotionResult.CONTINUE;
+        this._acceptedDrop = null;
+        activeWidgetDrag = this;
+        for (const label of networkClickLabels) label._networkClickStart = null;
     }
 
     _onDragEnd() {
         this._isDragging = false;
-        if (this._dragMonitor) {
-            DND.removeDragMonitor(this._dragMonitor);
-            this._dragMonitor = null;
-        }
-
-        let [x, y] = [Math.round(this.deltaX), Math.round(this.deltaY)];
-        const width = this.get_width();
-        const height = this.get_height();
-        const newX = x + width;
-        const newY = y + height;
-
-        const anchorPoint = getData(this._widgetIndex, WIDGET_DATA_INDEX, 'Box_AnchorPoint', 'int');
-        if (anchorPoint === AnchorPoint.BOTTOM_LEFT) {
-            y = newY;
-        } else if (anchorPoint === AnchorPoint.TOP_RIGHT) {
-            x = newX;
-        } else if (anchorPoint === AnchorPoint.BOTTOM_RIGHT) {
-            x = newX;
-            y = newY;
-        }
-
+        if (activeWidgetDrag === this) activeWidgetDrag = null;
+        const drop = this._acceptedDrop;
+        this._acceptedDrop = null;
+        if (this._widgetDestroyed) return;
+        this.queue_relayout();
+        if (!drop) return;
+        const [px, py] = drop.pointer;
+        const monitor = Main.layoutManager.monitors.find(item => px >= item.x && px < item.x + item.width &&
+            py >= item.y && py < item.y + item.height) || Main.layoutManager.primaryMonitor;
+        if (!monitor) return;
+        const anchor = getData(this._widgetIndex, WIDGET_DATA_INDEX, 'Box_AnchorPoint', 'int');
+        const position = Me.imports.dragging.dropPosition(drop.x, drop.y, this.width, this.height, monitor, anchor);
+        const data = Me.settings.get_value('widget-data').deep_unpack();
+        if (!data[this._widgetIndex] || data[this._widgetIndex][0].Parent_Id) return;
+        data[this._widgetIndex][0].Location_X = String(position.x);
+        data[this._widgetIndex][0].Location_Y = String(position.y);
         Me.settings.set_value('changed-data', new GLib.Variant('a{ss}', {
-            'WidgetIndex': this._widgetIndex.toString(),
-            'WidgetMoved': 'true',
+            WidgetIndex: String(this._widgetIndex), WidgetMoved: 'true',
         }));
-        setData(this._widgetIndex, WIDGET_DATA_INDEX, 'Location_X', x);
-        setData(this._widgetIndex, WIDGET_DATA_INDEX, 'Location_Y', y);
-        debugLog(`drag end - (${x}, ${y})`);
+        Me.settings.set_value('widget-data', new GLib.Variant('aaa{ss}', data));
+        WIDGETDATA[this._widgetIndex][0].Location_X = String(position.x);
+        WIDGETDATA[this._widgetIndex][0].Location_Y = String(position.y);
+        this.setPositionFromSettings();
     }
 
     getDragActorSource() {
@@ -603,19 +735,9 @@ class AzClockDesktopWidget extends St.Widget {
     }
 
     makeDraggable() {
-        this._draggable = DND.makeDraggable(this, {manualMode: true});
-        this.connect('button-press-event', (actor, event) => this._grouped ? Clutter.EVENT_PROPAGATE : this._draggable._onButtonPress(actor, event));
-        this.connect('touch-event', (actor, event) => this._grouped ? Clutter.EVENT_PROPAGATE : this._draggable._onTouchEvent(actor, event));
-        this._draggable._dragActorDropped = () => {
-            this._draggable._animationInProgress = true;
-            this._draggable._dragCancellable = false;
-            this._draggable._dragState = DND.DragState.INIT;
-            this._draggable._onAnimationComplete(this._draggable._dragActor, Clutter.get_current_event().get_time());
-            return true;
-        };
-
-        this.dragBeginId = this._draggable.connect('drag-begin', this._onDragBegin.bind(this));
-        this.dragEndId = this._draggable.connect('drag-end', this._onDragEnd.bind(this));
+        this._draggable = true;
+        dragWidgets.add(this);
+        scheduleNetworkClicks();
     }
 
     _onHover() {
@@ -674,6 +796,11 @@ class AzClockDesktopWidget extends St.Widget {
     }
 
     _onDestroy() {
+        this._widgetDestroyed = true;
+        if (widgetDragController?.state?.widget === this) widgetDragController.cancel();
+        dragWidgets.delete(this);
+        if (activeWidgetDrag === this) activeWidgetDrag = null;
+        if (!dragWidgets.size && !networkClickLabels.size && networkClickTimer) { GLib.source_remove(networkClickTimer); networkClickTimer = null; }
         this._removeMenuTimeout();
         if (this._menu) {
             this._menuManager.removeMenu(this._menu);
@@ -686,10 +813,6 @@ class AzClockDesktopWidget extends St.Widget {
             this._updateClockId = null;
         }
 
-        if (this._dragMonitor) {
-            DND.removeDragMonitor(this._dragMonitor);
-            this._dragMonitor = null;
-        }
     }
 });
 
@@ -1030,10 +1153,11 @@ class AzClockCommandLabel extends Label {
                 }
             } else { scheduleMetrics(); }
             networkClickLabels.delete(this);
-            if (!networkClickLabels.size && networkClickTimer) {
+            if (!networkClickLabels.size && !dragWidgets.size && networkClickTimer) {
                 GLib.source_remove(networkClickTimer);
                 networkClickTimer = null;
             }
+            stopCommandRun(this._ejectRun);
             this._stopMedia();
             this._pendingCommand = null;
             this._cancelCommand();
@@ -1070,13 +1194,48 @@ class AzClockCommandLabel extends Label {
     }
 
     _storageTarget(pointer) {
-        const [ok, , localY] = this.clutter_text.transform_stage_point(pointer[0], pointer[1]);
+        const [ok, localX, localY] = this.clutter_text.transform_stage_point(pointer[0], pointer[1]);
         if (!ok) return null;
         const [, index] = this.clutter_text.get_layout().xy_to_index(0, Math.round(localY * Pango.SCALE));
         const text = this.clutter_text.get_text();
         const before = new TextDecoder().decode(new TextEncoder().encode(text).slice(0, index));
         const line = text.split('\n')[before.split('\n').length - 1] || '';
-        return /^!?\s*SSD\b/.test(line) ? 'ssd' : /^!?\s*EXT\b/.test(line) ? 'external' : null;
+        if (/^\s*CPU\b/.test(line)) return 'cpu';
+        if (/^\s*RAM\b/.test(line)) return 'ram';
+        if (/^!?\s*SSD\b/.test(line)) return 'ssd';
+        const external = line.match(/^[!⏏]?\s*EXT(\d*)\b/);
+        if (!external) return null;
+        const [, clicked] = this.clutter_text.get_layout().xy_to_index(Math.round(localX * Pango.SCALE), Math.round(localY * Pango.SCALE));
+        const character = new TextDecoder().decode(new TextEncoder().encode(text).slice(clicked));
+        return `${character.startsWith('⏏') ? 'eject' : 'external'}:${Number(external[1] || 0)}`;
+    }
+
+    async _ejectExternalDevice(device) {
+        if (this._ejectRun || this._networkDestroyed) return;
+        const run = {cancellable: new Gio.Cancellable(), proc: null};
+        this._ejectRun = run;
+        Main.notify(`${device.label} · ${device.name}`, 'Ejetando dispositivo. Aguarde a confirmação antes de desconectar.');
+        let timeout, timedOut = false;
+        try {
+            const [, argv] = GLib.shell_parse_argv(getData(this.widgetIndex, this.elementIndex, 'Text_Command'));
+            run.proc = Gio.Subprocess.new(['/usr/bin/setsid', ...argv, '--eject', '--device', device.name, '--identity', device.identity],
+                Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE);
+            timeout = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 25000, () => { timeout = null; timedOut = true; stopCommandRun(run); return GLib.SOURCE_REMOVE; });
+            const [stdout] = await readCommandOutput(run);
+            if (this._networkDestroyed) return;
+            if (run.cancelled) { if (timedOut) Main.notify('Ejeção não concluída', 'Tempo excedido. Não desconecte ainda.'); return; }
+            if (!run.proc.get_successful() || !stdout.startsWith('AZCLOCK_EJECT:')) throw new Error('Falha na ejeção. Não desconecte ainda.');
+            const result = JSON.parse(stdout.slice('AZCLOCK_EJECT:'.length));
+            if (typeof result.ok !== 'boolean' || typeof result.message !== 'string' || result.message.length > 256)
+                throw new Error('Resposta de ejeção inválida. Não desconecte ainda.');
+            Main.notify(`${device.label} · ${device.name}`, result.message);
+            if (result.ok) { stopMetrics(); scheduleMetrics(); }
+        } catch (error) {
+            if (!this._networkDestroyed) Main.notify('Ejeção não concluída', timedOut ? 'Tempo excedido. Não desconecte ainda.' : error.message);
+        } finally {
+            if (timeout) GLib.source_remove(timeout);
+            if (this._ejectRun === run) this._ejectRun = null;
+        }
     }
 
     _checkNetworkClick(pointer) {
@@ -1085,10 +1244,14 @@ class AzClockCommandLabel extends Label {
         const [px, py, modifiers] = pointer;
         const [x, y] = this.get_transformed_position();
         const [w, h] = this.get_transformed_size();
-        const inside = px >= x && px < x + w && py >= y && py < y + h;
+        const inside = this.get_paint_visibility() && px >= x && px < x + w && py >= y && py < y + h;
         const down = !!(modifiers & Clutter.ModifierType.BUTTON1_MASK);
-        if (down && !this._networkClickHeld)
-            this._networkClickStart = inside && !this._networkDialog?.visible ? [px, py] : null;
+        const moving = desktopPointerBlocked(pointer) || activeWidgetDrag || ((modifiers & (Clutter.ModifierType.SUPER_MASK | Clutter.ModifierType.MOD4_MASK)) && (modifiers & Clutter.ModifierType.CONTROL_MASK));
+        if (moving || !inside) this._networkClickStart = null;
+        if (down && !this._networkClickHeld) {
+            this._networkClickStart = inside && !moving && !this._networkDialog?.visible ? [px, py] : null;
+            this._networkClickDeviceMap = this._externalDevices;
+        }
         if (!down && this._networkClickHeld && inside && this._networkClickStart) {
             const [sx, sy] = this._networkClickStart;
             if (Math.abs(px - sx) < 8 && Math.abs(py - sy) < 8) {
@@ -1096,7 +1259,20 @@ class AzClockCommandLabel extends Label {
                 if (metricMode(getData(this.widgetIndex, this.elementIndex, 'Text_Command')) === 'cpu') {
                     const target = this._storageTarget(pointer);
                     if (!target || target !== this._storageTarget([sx, sy])) { this._networkClickHeld = false; this._networkClickStart = null; return false; }
-                    this._storageExternal = target === 'external';
+                    this._hardwareMode = ['cpu', 'ram'].includes(target) ? target : null;
+                    this._storageExternal = target.startsWith('external:') || target.startsWith('eject:');
+                    this._storageDevice = null;
+                    if (this._storageExternal) {
+                        const index = Number(target.split(':')[1]);
+                        const device = this._networkClickDeviceMap?.[index];
+                        if (!device) throw new Error('Dispositivo não disponível. Aguarde a próxima atualização.');
+                        this._storageDevice = {...device, label: index ? `EXT${index}` : 'EXT'};
+                        if (target.startsWith('eject:')) {
+                            this._ejectExternalDevice(this._storageDevice);
+                            this._networkClickStart = null; this._networkClickHeld = false;
+                            return false;
+                        }
+                    }
                 }
                 this._openNetworkDialog();
                 } catch (error) {
@@ -1107,7 +1283,7 @@ class AzClockCommandLabel extends Label {
         this._networkClickHeld = down;
         if (!down)
             this._networkClickStart = null;
-        return inside && !this._networkDialog?.visible;
+        return inside && !moving && !this._networkDialog?.visible;
     }
 
     _closeNetworkDialog() {
@@ -1116,6 +1292,8 @@ class AzClockCommandLabel extends Label {
             this._networkModalGrab = null;
         }
         this._cancelFirewallInspection();
+        this._networkInspecting = false;
+        this._networkConnectionSignature = null;
         this._networkGeneration++;
         this._networkRefreshPending = false;
         this._networkDialog?.hide();
@@ -1154,7 +1332,11 @@ class AzClockCommandLabel extends Label {
         try {
             const command = getData(this.widgetIndex, this.elementIndex, 'Text_Command');
             const [, argv] = GLib.shell_parse_argv(command);
-            if (this._storageExternal) argv.push('--external');
+            if (this._storageExternal) {
+                argv.push('--external');
+                if (this._storageDevice) argv.push('--device', this._storageDevice.name, '--identity', this._storageDevice.identity);
+            }
+            if (this._hardwareMode) argv.push('--hardware', this._hardwareMode);
             proc = Gio.Subprocess.new(['/usr/bin/setsid', ...argv, '--details'], Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE);
             this._networkRefreshProcess = proc;
             run.proc = proc;
@@ -1166,6 +1348,12 @@ class AzClockCommandLabel extends Label {
             const [stdout] = await readCommandOutput(run);
             if (this._networkDestroyed || run.cancelled || run.generation !== this._networkGeneration || !this._networkDialog.visible)
                 return;
+            if (this._hardwareMode) {
+                if (!proc.get_successful() || !stdout.startsWith('AZCLOCK_HARDWARE:')) throw new Error('Falha ao consultar o hardware.');
+                this._renderHardware(JSON.parse(stdout.slice('AZCLOCK_HARDWARE:'.length)));
+                this._networkRefreshStatus.text = 'Consultado às ' + GLib.DateTime.new_now_local().format('%H:%M');
+                return;
+            }
             if (command.includes('/armazenamento-widget.py') || command.includes('/cpu-ram-widget.py')) {
                 if (!proc.get_successful() || !stdout.startsWith('AZCLOCK_STORAGE:')) throw new Error('Falha ao consultar armazenamento.');
                 this._renderStorage(JSON.parse(stdout.slice('AZCLOCK_STORAGE:'.length)));
@@ -1555,10 +1743,98 @@ class AzClockCommandLabel extends Label {
         this._networkRefreshButton.set_child(new St.Label({text: 'Atualizar'}));
     }
 
+    _renderHardware(data, page = 0) {
+        if (!data || data.mode !== this._hardwareMode || typeof data.title !== 'string' || data.title.length > 160 ||
+            typeof data.note !== 'string' || data.note.length > 512 || typeof data.firmware_action !== 'boolean' ||
+            !Array.isArray(data.cards) || data.cards.length > 80 || data.cards.some(card => !card ||
+                typeof card.title !== 'string' || card.title.length > 256 || !Array.isArray(card.lines) ||
+                card.lines.length > 16 || card.lines.some(line => typeof line !== 'string' || line.length > 512)))
+            throw new Error('Inventário de hardware inválido.');
+        this._updatesHeading.text = data.title;
+        this._updatesNote.text = 'Passe o mouse no ? para ver explicações e detalhes completos.';
+        this._networkRefreshButton.label = 'Atualizar';
+        const monitor = Main.layoutManager.findMonitorForActor(this) || Main.layoutManager.primaryMonitor;
+        const available = Math.max(240, monitor.width - 80);
+        const columns = Math.max(1, Math.min(3, Math.floor(available / 250)));
+        const width = Math.min(900, available);
+        const cardWidth = Math.floor((width - (columns - 1) * 10) / columns) - 20;
+        const rowCount = monitor.height >= 850 ? 2 : 1;
+        const perPage = columns * rowCount;
+        const pages = Math.max(1, Math.ceil(data.cards.length / perPage));
+        page = Math.max(0, Math.min(pages - 1, page));
+        this._updatesScroll.set_policy(St.PolicyType.NEVER, St.PolicyType.NEVER);
+        this._updatesRows.style = `spacing: 10px; width: ${width}px;`;
+        this._updatesRows.destroy_all_children();
+        this._updatesActions.destroy_all_children();
+        let row;
+        const explanatory = /^(O total utilizável|Slots vazios|Leitura:|Confirme o limite|A presença da extensão|Use “|Tipo DDR, velocidades)/;
+        for (const [index, card] of data.cards.slice(page * perPage, (page + 1) * perPage).entries()) {
+            if (index % columns === 0) {
+                row = new St.BoxLayout({style: 'spacing: 10px;'});
+                this._updatesRows.add_child(row);
+            }
+            const box = new St.BoxLayout({vertical: true, style: `width: ${cardWidth}px; padding: 10px; spacing: 6px; background-color: #292929; border-radius: 6px;`});
+            const heading = new St.BoxLayout({style: 'spacing: 8px;'});
+            const title = new St.Label({text: card.title, x_expand: true, style: 'font-weight: bold; color: #82cfff;'});
+            title.clutter_text.set_ellipsize(Pango.EllipsizeMode.END);
+            heading.add_child(title);
+            const help = new St.Button({label: '?', reactive: true, can_focus: true,
+                accessible_name: `Mais informações: ${card.title}`,
+                style: 'padding: 0px 5px; border-radius: 5px; background-color: #40566c; color: #cde9ff;'});
+            heading.add_child(help);
+            box.add_child(heading);
+            const extra = card.title === 'Topologia' ? '\nNúcleos físicos são unidades de processamento. Threads são os processadores lógicos apresentados ao Linux.'
+                : card.title === 'Virtualização' ? '\nVT-x/AMD-V são recursos do processador. KVM depende do suporte do kernel, firmware e permissões da conta.'
+                : data.mode === 'ram' ? '\nValores informados pelo Linux ou pelo firmware. Para upgrades, confirme compatibilidade e acesso aos slots no manual do equipamento.'
+                : '\nIdentificação do processador informada pelo sistema.';
+            const showHelp = this._attachActionTooltip(help, card.title + '\n\n' + card.lines.join('\n') + extra);
+            help.connect('clicked', showHelp);
+            const lines = card.lines.filter(text => !explanatory.test(text));
+            if (!lines.length) lines.push('Leitura do firmware necessária');
+            for (const text of lines) {
+                const compact = text.replace('Processadores lógicos:', 'Threads:').replace('Threads por núcleo:', 'Threads/núcleo:')
+                    .replace('Extensão anunciada:', 'Extensão:').replace('Velocidade declarada:', 'Vel. declarada:').replace('Velocidade configurada:', 'Vel. configurada:');
+                const label = new St.Label({text: compact, style: 'font-size: 13px;'});
+                label.clutter_text.set_ellipsize(Pango.EllipsizeMode.END);
+                box.add_child(label);
+            }
+            row.add_child(box);
+        }
+        const [, height] = this._updatesRows.get_preferred_height(width);
+        this._updatesScroll.style = `width: ${width}px; height: ${Math.ceil(height)}px;`;
+        if (pages > 1) {
+            const navigation = new St.BoxLayout({style: 'spacing: 12px;'});
+            for (const [label, next, enabled] of [['← Anterior', page - 1, page > 0], ['Próxima →', page + 1, page + 1 < pages]]) {
+                const button = new St.Button({label, reactive: enabled, can_focus: enabled, style: 'padding: 6px; color: #82cfff;'});
+                button.connect('clicked', () => this._renderHardware(data, next));
+                navigation.add_child(button);
+            }
+            navigation.add_child(new St.Label({text: `${page + 1} / ${pages}`}));
+            this._updatesActions.add_child(navigation);
+        }
+        if (data.firmware_action) {
+            const button = new St.Button({label: 'Ler módulos de RAM · autorizar no terminal', reactive: true, can_focus: true,
+                style: 'padding: 10px; background-color: #315d80; border-radius: 6px;'});
+            button.connect('clicked', () => {
+                try {
+                    const [, argv] = GLib.shell_parse_argv(getData(this.widgetIndex, this.elementIndex, 'Text_Command'));
+                    const script = argv.find(arg => arg.endsWith('/cpu-ram-widget.py'));
+                    if (!script) throw new Error('Comando de hardware desconhecido.');
+                    Gio.Subprocess.new(['/usr/bin/python3', GLib.build_filenamev([GLib.path_get_dirname(script), 'hardware-details.py']), '--read-firmware'], Gio.SubprocessFlags.NONE);
+                    this._networkRefreshStatus.text = 'Autorize no terminal e clique em Atualizar após a leitura.';
+                } catch (error) { this._networkRefreshStatus.text = 'Não foi possível abrir a leitura do firmware.'; }
+            });
+            this._updatesActions.add_child(button);
+        }
+    }
+
     _renderStorage(data) {
         const numeric = value => Number.isFinite(value) && value >= 0;
         if (!data || typeof data.text !== 'string' || data.text.length > 160 || typeof data.error !== 'string' || data.error.length > 256 ||
             !Number.isInteger(data.omitted) || data.omitted < 0 || !Array.isArray(data.items) || data.items.length > 12 ||
+            !Array.isArray(data.unmounted) || data.unmounted.length > 12 || data.unmounted.some(item => !item ||
+                ['device', 'disk', 'fstype'].some(key => typeof item[key] !== 'string' || item[key].length > 512) ||
+                !numeric(item.total) || ['available', 'used'].some(key => item[key] !== null && (!numeric(item[key]) || item[key] > item.total))) ||
             !Array.isArray(data.disks) || data.disks.length > 16 || data.items.some(item => !item ||
                 ['device', 'disk', 'mount'].some(key => typeof item[key] !== 'string' || item[key].length > 512) ||
                 !Array.isArray(item.files) || item.files.length > 30 || item.files.some(name => typeof name !== 'string' || name.length > 162) ||
@@ -1571,13 +1847,32 @@ class AzClockCommandLabel extends Label {
                 typeof disk.health.note !== 'string' || disk.health.note.length > 256 ||
                 ['temperature', 'wear'].some(key => disk.health[key] !== null && !numeric(disk.health[key]))))
             throw new Error('Resposta de armazenamento inválida.');
+        this._updatesNote.text = 'Espaço disponível por volume · SMART quando acessível · detalhes nos tooltips';
+        this._networkRefreshButton.label = 'Atualizar';
+        this._updatesScroll.set_policy(St.PolicyType.NEVER, St.PolicyType.AUTOMATIC);
+        this._updatesRows.style = 'spacing: 10px; width: 720px;';
         this._updatesRows.destroy_all_children();
-        if (this._updatesScroll) this._updatesScroll.style = `width: 720px; height: ${Math.min(420, Math.max(160, Math.ceil(data.items.length / 3) * (this._storageExternal ? 360 : 180) + (data.error ? 30 : 0)))}px;`;
-        this._updatesHeading.text = this._storageExternal ? 'EXT · volumes e conteúdo' : 'SSD · armazenamento e saúde';
+        const volumes = [...data.items, ...data.unmounted.map(item => ({...item, unmounted: true}))];
+        if (this._updatesScroll) this._updatesScroll.style = `width: 720px; height: ${Math.min(420, Math.max(160, Math.ceil(volumes.length / 3) * (this._storageExternal ? 360 : 180) + (data.error ? 30 : 0)))}px;`;
+        this._updatesHeading.text = this._storageExternal ? `${this._storageDevice?.label || 'EXT'} · ${this._storageDevice?.name || ''} · volumes e conteúdo` : 'SSD · armazenamento e saúde';
         const size = bytes => `${(bytes / 1073741824).toFixed(1)} GiB`;
         let row;
-        for (const [index, item] of data.items.entries()) {
+        for (const [index, item] of volumes.entries()) {
             if (index % 3 === 0) { row = new St.BoxLayout({style: 'spacing: 10px;'}); this._updatesRows.add_child(row); }
+            if (item.unmounted) {
+                const card = new St.Button({reactive: true, can_focus: true, style: 'width: 210px; padding: 10px; background-color: #292929; border-radius: 6px;'});
+                const content = new St.BoxLayout({vertical: true, style: 'spacing: 6px;'});
+                content.add_child(new St.Label({text: item.device.split('/').pop(), style: 'font-weight: bold;'}));
+                content.add_child(new St.Label({text: 'Não montada', style: 'color: #aaaaaa; font-size: 18px;'}));
+                content.add_child(new St.Label({text: `Capacidade: ${size(item.total)}`}));
+                content.add_child(new St.Label({text: `Formato: ${item.fstype.toUpperCase()}`}));
+                content.add_child(new St.Label({text: item.available === null ? 'Livre: indisponível' : `Livre: ${size(item.available)}`}));
+                content.add_child(new St.Label({text: item.used === null ? 'Usado: indisponível' : `Usado: ${size(item.used)}`}));
+                card.set_child(content);
+                this._attachActionTooltip(card, `${item.device}\nPartição não montada. Capacidade é o tamanho da partição. Espaço livre/usado só aparece quando informado pelo sistema; sem leitura não é possível inferir o consumo. Nenhuma montagem ou reparo é executado.`);
+                row.add_child(card);
+                continue;
+            }
             const alert = item.percent >= 95 || item.inodes >= 95;
             const color = alert ? '#ff6b6b' : item.percent >= 90 || item.inodes >= 90 ? '#ffd479' : '#9fdf9f';
             const card = new St.Button({reactive: true, can_focus: true, style: 'width: 210px; padding: 10px; background-color: #292929; border-radius: 6px;'});
@@ -1605,8 +1900,27 @@ class AzClockCommandLabel extends Label {
             this._attachActionTooltip(card, `${this._storageExternal ? (item.files || []).join('\n') + (item.more ? '\nLista limitada aos primeiros 30 itens.' : '') + '\n' : ''}${item.mount}\n${item.device} · ${disk?.model || item.disk}\nCapacidade: ${size(item.total)} · Uso: ${item.percent}%\nInodes usados: ${item.inodes === null ? 'N/D' : item.inodes + '%'}\n${health?.note || 'Saúde não consultada.'}\nTemperatura: ${health?.temperature == null ? 'N/D' : health.temperature + ' °C'} · Vida útil consumida: ${health?.wear == null ? 'N/D' : health.wear + '%'}\nEspaço: atenção ≥ 90%, crítico ≥ 95%. SMART sem alerta não garante ausência de falhas.`);
             row.add_child(card);
         }
-        if (data.error || !data.items.length || data.omitted)
-            this._updatesRows.add_child(new St.Label({text: data.error || (!data.items.length ? 'Nenhum volume disponível.' : `+ ${data.omitted} volumes não exibidos`)}));
+        this._updatesActions.destroy_all_children();
+        if (!this._storageExternal && data.items.some(item => item.mount === '/')) {
+            const cleanup = new St.Button({label: 'Limpar caches do Linux · /', reactive: true, can_focus: true,
+                style: 'padding: 10px; border-radius: 6px; background-color: #315d80; color: white;'});
+            this._attachActionTooltip(cleanup, 'Abre análise no terminal: miniaturas e cache do pip antigos (30 dias), e pacotes baixados do APT. Mostra o espaço estimado e pede confirmação antes de apagar.');
+            cleanup.connect('clicked', () => {
+                try {
+                    const [, argv] = GLib.shell_parse_argv(getData(this.widgetIndex, this.elementIndex, 'Text_Command'));
+                    const script = argv.find(arg => arg.endsWith('/cpu-ram-widget.py') || arg.endsWith('/armazenamento-widget.py'));
+                    if (!script) throw new Error('Comando de armazenamento desconhecido.');
+                    const helper = GLib.build_filenamev([GLib.path_get_dirname(script), 'limpeza-linux.py']);
+                    Gio.Subprocess.new(['/usr/bin/python3', helper, '--launch'], Gio.SubprocessFlags.NONE);
+                    this._networkRefreshStatus.text = 'Analise e confirme no terminal. Após concluir, clique em Atualizar.';
+                } catch (error) {
+                    this._networkRefreshStatus.text = 'Não foi possível abrir a limpeza.';
+                }
+            });
+            this._updatesActions.add_child(cleanup);
+        }
+        if (data.error || !volumes.length || data.omitted)
+            this._updatesRows.add_child(new St.Label({text: data.error || (!volumes.length ? 'Nenhum volume disponível.' : `+ ${data.omitted} volumes não exibidos`)}));
     }
 
     _buildTrafficDialog() {
@@ -1974,23 +2288,41 @@ class AzClockCommandLabel extends Label {
         this._cancelFirewallInspection();
         const run = {proc: null, cancellable: new Gio.Cancellable(), generation: this._networkGeneration, timeout: null};
         this._firewallInspection = run;
-        this._firewallRows.destroy_all_children();
+        const connections = Boolean(this._networkConnectionsBox);
+        const rows = connections ? this._networkConnectionsBox : this._firewallRows;
+        if (connections) this._networkInspecting = true;
+        rows.destroy_all_children();
         const toolbar = new St.BoxLayout({style: 'spacing: 12px;'});
         const button = (text, action) => {
             const actor = new St.Button({label: text, reactive: true, can_focus: true, style: 'color: #82cfff; padding: 6px;'});
             actor.connect('clicked', action);
             toolbar.add_child(actor);
         };
-        button('← Voltar', () => this._renderFirewall(this._firewallData));
+        button('← Voltar', () => {
+            if (connections) {
+                this._cancelFirewallInspection();
+                this._networkInspecting = false;
+                this._networkConnectionSignature = null;
+                this._updateNetworkTooltip();
+            } else {
+                this._renderFirewall(this._firewallData);
+            }
+        });
         button('Copiar endereço / porta', () => St.Clipboard.get_default().set_text(St.ClipboardType.CLIPBOARD, target));
-        this._firewallRows.add_child(toolbar);
-        const label = new St.Label({text: 'Consultando…', style: 'width: 680px; font-family: monospace; font-size: 12px; padding: 8px;'});
+        rows.add_child(toolbar);
+        const label = new St.Label({text: 'Consultando…', style: `width: ${connections ? 480 : 680}px; font-family: monospace; font-size: 12px; padding: 8px;`});
         label.clutter_text.set_line_wrap(true);
         label.clutter_text.set_ellipsize(Pango.EllipsizeMode.NONE);
-        this._firewallRows.add_child(label);
+        rows.add_child(label);
         try {
             const command = getData(this.widgetIndex, this.elementIndex, 'Text_Command');
-            const [, argv] = GLib.shell_parse_argv(command);
+            let [, argv] = GLib.shell_parse_argv(command);
+            if (connections) {
+                const script = argv.find(arg => arg.endsWith('/seguranca-widget.py'));
+                if (!script) throw new Error('Comando de conexões desconhecido.');
+                argv = ['/usr/bin/python3', GLib.build_filenamev([GLib.path_get_dirname(script), 'conexoes-inspect.py'])];
+            }
+            const prefix = connections ? 'AZCLOCK_CONNECTION_INSPECT:' : 'AZCLOCK_FIREWALL:';
             const flag = kind === 'dns' ? '--dns' : (kind === 'port' ? '--inspect-port' : '--inspect-ip');
             run.proc = Gio.Subprocess.new(['/usr/bin/setsid', ...argv, flag, target], Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE);
             run.timeout = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 15000, () => {
@@ -2002,9 +2334,9 @@ class AzClockCommandLabel extends Label {
             const [stdout, stderr] = await readCommandOutput(run);
             if (this._firewallInspection !== run || run.cancelled || this._networkDestroyed || run.generation !== this._networkGeneration)
                 return;
-            if (!run.proc.get_successful() || !stdout.startsWith('AZCLOCK_FIREWALL:'))
+            if (!run.proc.get_successful() || !stdout.startsWith(prefix))
                 throw new Error(stderr.trim().slice(0, 300) || 'Falha ao inspecionar.');
-            const data = JSON.parse(stdout.slice('AZCLOCK_FIREWALL:'.length));
+            const data = JSON.parse(stdout.slice(prefix.length));
             if (typeof data.inspect !== 'string')
                 throw new Error('Resposta inválida.');
             const escaped = GLib.markup_escape_text(data.inspect, -1);
@@ -2014,7 +2346,7 @@ class AzClockCommandLabel extends Label {
             if (kind === 'ip') {
                 const notice = new St.Label({text: 'Consultas abaixo usam a rede e revelam o IP consultado ao provedor.', style: 'font-size: 12px; color: #ffd479;'});
                 notice.clutter_text.set_line_wrap(true);
-                this._firewallRows.add_child(notice);
+                rows.add_child(notice);
                 button('Consultar DNS (rede)', () => this._inspectFirewall('dns', target));
                 if (data.remote === true)
                     button('WHOIS / RDAP (externo)', () => {
@@ -2122,7 +2454,9 @@ class AzClockCommandLabel extends Label {
         }
         this._networkBackdrop.show();
         if (!this._networkModalGrab)
-            this._networkModalGrab = Main.pushModal(this._networkBackdrop);
+            this._networkModalGrab = Main.pushModal(this._networkBackdrop, {
+                actionMode: Shell.ActionMode.POPUP,
+            });
         Main.uiGroup.set_child_above_sibling(this._networkBackdrop, null);
         this._networkDialog.show();
         const [x, y] = this.get_transformed_position();
@@ -2216,7 +2550,7 @@ class AzClockCommandLabel extends Label {
         // The details now appear only in the click-opened modal.
         if (!this._networkDestroyed && this._networkDialogLabel) {
             this._networkDialogLabel.text = this._networkTooltipText;
-            if (this._networkConnectionsBox) {
+            if (this._networkConnectionsBox && !this._networkInspecting) {
                 const signature = JSON.stringify([this._networkConnectionItems, this._networkConnectionOmitted || 0]);
                 if (signature !== this._networkConnectionSignature) {
                     this._networkConnectionSignature = signature;
@@ -2235,8 +2569,15 @@ class AzClockCommandLabel extends Label {
                             });
                             row.add_child(host);
                         }
-                        row.add_child(new St.Label({text: `(${item.ip}) —`, style: 'color: #c8c8c8;'}));
-                        row.add_child(new St.Label({text: String(item.port), style: 'color: #ffd479;'}));
+                        const ip = new St.Button({label: `(${item.ip})`, reactive: true, can_focus: true,
+                            accessible_name: `Consultar IP ${item.ip}`, style: 'color: #82cfff; padding: 0px;'});
+                        ip.connect('clicked', () => this._inspectFirewall('ip', item.ip));
+                        row.add_child(ip);
+                        row.add_child(new St.Label({text: '—', style: 'color: #c8c8c8;'}));
+                        const port = new St.Button({label: String(item.port), reactive: true, can_focus: true,
+                            accessible_name: `Consultar porta ${item.port}`, style: 'color: #ffd479; padding: 0px;'});
+                        port.connect('clicked', () => this._inspectFirewall('port', item.port));
+                        row.add_child(port);
                         this._networkConnectionsBox.add_child(row);
                     }
                     if (this._networkConnectionOmitted)
@@ -2310,10 +2651,11 @@ class AzClockCommandLabel extends Label {
             this._mediaRow = row;
         }
         const spotify = /^org\.mpris\.MediaPlayer2\.spotify(?:\.|$)/.test(player);
-        const filename = spotify ? 'spotify.svg' : 'chrome.svg';
+        const youtube = /^org\.mpris\.MediaPlayer2\.io\.orbitz\.YouTubeWidget(?:\.|$)/.test(player);
+        const filename = spotify ? 'spotify.svg' : youtube ? 'youtube.svg' : 'chrome.svg';
         if (this._mediaIconFile !== filename) {
             this._mediaIcon.gicon = Gio.icon_new_for_string(GLib.build_filenamev([Me.path, 'media', 'players', filename]));
-            this._mediaIcon.accessible_name = spotify ? 'Spotify' : 'Google Chrome';
+            this._mediaIcon.accessible_name = spotify ? 'Spotify' : youtube ? 'YouTube' : 'Google Chrome';
             this._mediaIconFile = filename;
         }
         this._mediaIcon.show();
@@ -2378,7 +2720,7 @@ class AzClockCommandLabel extends Label {
             try {
                 const names = (await call('org.freedesktop.DBus', '/org/freedesktop/DBus',
                     'org.freedesktop.DBus', 'ListNames', null)).deep_unpack()[0];
-                const players = names.filter(name => /^org\.mpris\.MediaPlayer2\.(spotify|chromium|chrome)(\.|$)/.test(name))
+                const players = names.filter(name => /^org\.mpris\.MediaPlayer2\.(spotify|chromium|chrome|io\.orbitz\.YouTubeWidget)(\.|$)/.test(name))
                     .sort((a, b) => Number(!a.includes('.spotify')) - Number(!b.includes('.spotify')));
                 for (const player of players) {
                     try {
@@ -2388,11 +2730,14 @@ class AzClockCommandLabel extends Label {
                         const metadata = values.Metadata?.deep_unpack() || {};
                         const title = metadata['xesam:title']?.deep_unpack() || '';
                         const artist = metadata['xesam:artist']?.deep_unpack() || [];
-                        const score = status === 'Playing' ? 2 : status === 'Paused' ? 1 : 0;
+                        if (!['Playing', 'Paused'].includes(status) || typeof title !== 'string' || !title.trim())
+                            continue;
+                        const score = status === 'Playing' ? 2 : 1;
                         if (score > bestScore) {
                             bestScore = score;
                             selectedPlayer = player;
-                            text = `${status === 'Playing' ? '▶️' : status === 'Paused' ? '⏸️' : '⏹️'}  ${Array.isArray(artist) ? artist.join(', ') : ''} — ${title}`.slice(0, 1024);
+                            const artists = Array.isArray(artist) ? artist.filter(value => typeof value === 'string' && value.trim()).join(', ') : '';
+                            text = `${status === 'Playing' ? '▶️' : '⏸️'}  ${artists ? artists + ' — ' : ''}${title}`.slice(0, 1024);
                         }
                         if (score === 2)
                             break;
@@ -2587,6 +2932,15 @@ function init() {
 
 class AzClock {
     enable() {
+        Calendar.enable(Me.path, () => {
+            if (!this._running || !WIDGETDATA) return null;
+            const widget = this.widgets.find(w => w.get_paint_visibility() &&
+                WIDGETDATA[w.widgetIndex]?.some(element => element.Element_Type === DIGITAL_CLOCK));
+            if (!widget) return null;
+            const [x,y] = widget.get_transformed_position();
+            const [width,height] = widget.get_transformed_size();
+            return {x,y,width,height};
+        });
         widgetsEnabled = false;
         this.widgets = [];
         this._running = false;
@@ -2596,7 +2950,7 @@ class AzClock {
         this._controllerButton = this._controller;
         this._controllerIcons = {
             stopped: Gio.icon_new_for_string(GLib.build_filenamev([Me.path, 'media', 'controls', 'widgets-white.svg'])),
-            running: Gio.icon_new_for_string(GLib.build_filenamev([Me.path, 'media', 'controls', 'widgets-active.svg'])),
+            running: Gio.icon_new_for_string(GLib.build_filenamev([Me.path, 'media', 'controls', 'widgets-white.svg'])),
         };
         this._controllerIcon = new St.Icon({gicon: this._controllerIcons.stopped, icon_size: 24, visible: true,
             x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER});
@@ -2704,6 +3058,7 @@ class AzClock {
             this._running = true;
             this._createWidgets();
             this._startClockTimer();
+            this._openPostits();
             this._setControllerState(true);
         } catch (error) { this._startupFailed(error); }
     }
@@ -2714,8 +3069,34 @@ class AzClock {
         Main.notifyError('Widgets interrompidos', String(error.message || error).slice(0, 300));
     }
 
+    _openPostits() {
+        try {
+            Gio.Subprocess.new(['/usr/bin/env', 'GDK_BACKEND=x11', '/usr/bin/python3',
+                GLib.build_filenamev([GLib.get_user_data_dir(), 'orbitz-postits', 'app', 'postits.py'])],
+                Gio.SubprocessFlags.NONE);
+        } catch (error) {
+            logError(error, 'Falha ao abrir Sticky Notes');
+            Main.notifyError('Sticky Notes', 'Não foi possível abrir as notas.');
+        }
+    }
+
+    _closePostits() {
+        // Do not activate the application when it is already closed.
+        Gio.DBus.session.call('io.orbitz.Postits', '/io/orbitz/Postits',
+            'org.gtk.Actions', 'Activate',
+            new GLib.Variant('(sava{sv})', ['quit', [], {}]), null,
+            Gio.DBusCallFlags.NO_AUTO_START, 3000, null, (connection, result) => {
+                try { connection.call_finish(result); } catch (error) {
+                    if (!error.matches(Gio.DBusError, Gio.DBusError.NAME_HAS_NO_OWNER) &&
+                        !error.matches(Gio.DBusError, Gio.DBusError.SERVICE_UNKNOWN))
+                        logError(error, 'Falha ao encerrar post-its');
+                }
+            });
+    }
+
     _stopWidgets() {
         if (this._stopping) return this._stopping;
+        this._closePostits();
         this._running = false;
         widgetsEnabled = false;
         this._setControllerState(false, true);
@@ -2734,6 +3115,9 @@ class AzClock {
         if (networkClickTimer) { GLib.source_remove(networkClickTimer); networkClickTimer = null; }
         metricLabels.clear();
         networkClickLabels.clear();
+        widgetDragController?.cancel();
+        widgetDragController = null;
+        dragWidgets.clear();
         WIDGETDATA = null;
         this._stopping = Promise.allSettled([...pendingStops]).then(() => {
             this._stopping = null;
@@ -2743,6 +3127,7 @@ class AzClock {
     }
 
     disable() {
+        Calendar.disable();
         this._stopWidgets();
         this._controller?.destroy();
         this._controllerWindows?.clear();

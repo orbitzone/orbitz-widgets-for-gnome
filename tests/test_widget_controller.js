@@ -20,7 +20,7 @@ const settings = {
 };
 const context = {
     Meta: {WindowType:{DESKTOP:1}},
-    widgetsEnabled: false, activeCommandRuns: new Set(), pendingStops: new Set(),
+    widgetsEnabled: false, dragWidgets: new Set(), widgetDragController: null, activeCommandRuns: new Set(), pendingStops: new Set(),
     metricLabels: new Set(), networkClickLabels: new Set(), metricRestart: null, networkClickTimer: null,
     WIDGETDATA: null, DIGITAL_CLOCK: 'Digital_Clock', ANALOG_CLOCK: 'Analog_Clock',
     Me: {path:'/extension', settings: null, imports: {settings: {SettingsImport: {validateWidgets() { if (failValidation) throw Error('bad config'); }}}}},

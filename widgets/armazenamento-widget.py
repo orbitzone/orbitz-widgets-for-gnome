@@ -41,12 +41,13 @@ def health(device):
     return result
 
 
-def collect(details=False, external=False):
+def collect(details=False, external=False, selected=None):
     items, disks, seen = [], {}, set()
+    unmounted = []
     error = ''
     omitted = 0
     try:
-        raw = run(['lsblk', '-J', '-p', '-o', 'NAME,TYPE,FSTYPE,MOUNTPOINTS,MODEL,TRAN,RM,HOTPLUG'], timeout=3, check=True, limit=131072)
+        raw = run(['lsblk', '-b', '-J', '-p', '-o', 'NAME,TYPE,SIZE,FSTYPE,FSAVAIL,FSUSED,MOUNTPOINTS,MODEL,TRAN,RM,HOTPLUG'], timeout=3, check=True, limit=131072)
         nodes = json.loads(raw.stdout)['blockdevices']
         def walk(nodes, parent='', depth=0, removable=False):
             if not isinstance(nodes,list) or depth>12: raise ValueError('Inventário inválido')
@@ -60,11 +61,21 @@ def collect(details=False, external=False):
                 if kind == 'disk': disks[name] = dict(name=name, model=str(node.get('model') or name)[:100])
                 points=node.get('mountpoints') or []
                 if not isinstance(points,list): raise ValueError('Montagens inválidas')
+                if details and (not selected or disk == '/dev/'+selected) and kind == 'part' and not any(points) and not node.get('children') and removable_here == external and number(node.get('size')) and node['size'] > 0:
+                    if len(unmounted) < 12:
+                        def optional_bytes(key):
+                            try:
+                                value = int(node.get(key))
+                                return value if 0 <= value <= node['size'] else None
+                            except (TypeError, ValueError): return None
+                        unmounted.append(dict(device=name,disk=disk,total=node['size'],fstype=str(node.get('fstype') or 'Não identificado')[:80],available=optional_bytes('fsavail'),used=optional_bytes('fsused')))
+
                 for point in sorted((p for p in points if isinstance(p,str) and p.startswith('/')),key=len):
                     is_external = removable_here or point.startswith(('/media/', '/run/media/', '/mnt/'))
                     if is_external == external: yield name,disk,point
                 yield from walk(node.get('children') or [],disk,depth+1,removable_here)
         for device,disk,point in walk(nodes):
+            if selected and disk != '/dev/'+selected: continue
             try:
                 identity=os.stat(point).st_dev
                 if identity in seen: continue
@@ -90,7 +101,7 @@ def collect(details=False, external=False):
             except OSError:
                 error='Algumas montagens não puderam ser consultadas.'
         if details:
-            active_disks={item['disk'] for item in items}
+            active_disks={item['disk'] for item in items + unmounted}
             disks={name:disk for name,disk in disks.items() if name in active_disks}
             for index,disk in enumerate(disks.values()):
                 disk['health']=health(disk['name']) if index<4 else dict(state='unavailable',temperature=None,wear=None,note='Limite de 4 consultas SMART por atualização.')
@@ -98,7 +109,32 @@ def collect(details=False, external=False):
         error='Inventário indisponível. Verifique lsblk e permissões.'
     alerts=sum(i['percent']>=90 or (i['inodes'] is not None and i['inodes']>=90) for i in items)
     text=f'Armazenamento: {alerts} em atenção' if alerts else 'Armazenamento: espaço OK' if items and not error else 'Armazenamento: sem leitura' if not items else 'Armazenamento: parcial'
-    return dict(text=text,items=items,disks=list(disks.values())[:16] if details else [],error=error,omitted=omitted)
+    return dict(text=text,items=items,unmounted=unmounted,disks=list(disks.values())[:16] if details else [],error=error,omitted=omitted)
+
+def select_device(data, name, identity):
+    from external_storage import device_identity
+    try:
+        if not identity or device_identity(name) != identity:
+            raise ValueError('Dispositivo removido ou alterado. Atualize os widgets.')
+        disk = '/dev/' + name
+        data['items'] = [item for item in data['items'] if item['disk'] == disk]
+        data['unmounted'] = [item for item in data['unmounted'] if item['disk'] == disk]
+        data['disks'] = [item for item in data['disks'] if item['name'] == disk]
+        data['omitted'] = 0
+    except ValueError as error:
+        data.update(items=[], unmounted=[], disks=[], error=str(error))
+    return data
+
 
 if __name__ == '__main__':
-    print('AZCLOCK_STORAGE:'+json.dumps(collect('--details' in sys.argv, '--external' in sys.argv),ensure_ascii=False))
+    selected = sys.argv[sys.argv.index('--device')+1] if '--device' in sys.argv and sys.argv.index('--device')+1 < len(sys.argv) else None
+    data=collect('--details' in sys.argv, '--external' in sys.argv, selected)
+    if '--device' in sys.argv:
+        from external_storage import device_identity
+        def argument(flag):
+            return sys.argv[sys.argv.index(flag)+1] if flag in sys.argv and sys.argv.index(flag)+1<len(sys.argv) else ''
+        if '--external' not in sys.argv:
+            data.update(items=[],unmounted=[],disks=[],error='Seleção externa inválida.')
+        else:
+            data=select_device(data,argument('--device'),argument('--identity'))
+    print('AZCLOCK_STORAGE:'+json.dumps(data,ensure_ascii=False))
