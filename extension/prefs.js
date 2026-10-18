@@ -43,7 +43,7 @@ function fillPreferencesWindow(window) {
     });
 }
 
-var HomePage = GObject.registerClass(
+var HomePage = GObject.registerClass({GTypeName: 'OrbitzWidgetsHomePage'},
 class azClockHomePage extends Adw.PreferencesPage {
     _init(settings) {
         super._init({
@@ -136,6 +136,7 @@ class azClockHomePage extends Adw.PreferencesPage {
 });
 
 var WidgetRow = GObject.registerClass({
+    GTypeName: 'OrbitzWidgetsWidgetRow',
     Properties: {
         'widget-index': GObject.ParamSpec.int(
             'widget-index', 'widget-index', 'widget-index',
@@ -278,7 +279,7 @@ var WidgetRow = GObject.registerClass({
     }
 });
 
-var AddWidgetsDialog = GObject.registerClass(
+var AddWidgetsDialog = GObject.registerClass({GTypeName: 'OrbitzWidgetsAddWidgetsDialog'},
 class AzClockAddWidgetsDialog extends DialogWindow {
     _init(settings, parent) {
         super._init(_('Add Widget'), parent);

@@ -24,6 +24,7 @@ const ElementType = {
 };
 
 var WidgetSettingsPage = GObject.registerClass({
+    GTypeName: 'OrbitzWidgetsWidgetSettingsPage',
     Properties: {
         'title': GObject.ParamSpec.string(
             'title', 'title', 'title',
@@ -344,7 +345,7 @@ var WidgetSettingsPage = GObject.registerClass({
     }
 });
 
-var AddElementsDialog = GObject.registerClass(
+var AddElementsDialog = GObject.registerClass({GTypeName: 'OrbitzWidgetsAddElementsDialog'},
 class AzClockAddElementsDialog extends DialogWindow {
     _init(settings, parent, params) {
         super._init(_('Add Element to %s').format(params.widget_title), parent, params);

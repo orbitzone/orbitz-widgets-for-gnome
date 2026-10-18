@@ -8,7 +8,7 @@ const _ = Gettext.gettext;
 const Settings = Me.imports.settings;
 const {SubPage} = Settings.SubPage;
 
-var DigitalClockSubPage = GObject.registerClass(
+var DigitalClockSubPage = GObject.registerClass({GTypeName: 'OrbitzWidgetsDigitalClockSubPage'},
 class AzClockDigitalClockSubPage extends SubPage {
     _init(settings, params) {
         super._init(settings, params);

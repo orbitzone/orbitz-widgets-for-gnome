@@ -1,60 +1,20 @@
-![](https://gitlab.com/arcmenu/arcmenu-assets/raw/master/images/azClock.png)
+# Orbitz Widgets for GNOME
 
------
-### Introduction
+Projeto de **Felipe Santiago / orbitzone**: [GitHub](https://github.com/orbitzone/orbitz-widgets-for-gnome).
 
-Desktop Clock (azClock) is a GNOME Shell extension that adds a customizable clock to your desktop!
+Widgets de desktop, métricas, calendário, tarefas, timesheets, Sticky Notes e integrações para GNOME. A documentação principal, dependências e procedimentos de instalação/migração estão no [README do projeto](https://github.com/orbitzone/orbitz-widgets-for-gnome#readme).
 
-Picture shown above uses [ArcMenu](https://extensions.gnome.org/extension/3628/arcmenu/) and [App Icons Taskbar](https://extensions.gnome.org/extension/4944/app-icons-taskbar/).
+## Identidade
 
------
+- Nome: Orbitz Widgets for GNOME.
+- Versão apresentada: 1.0 (revisão inteira1 no manifesto).
+- Marca vetorial própria: `media/orbitz-logo.svg`.
+- UUID: `orbitz-widgets@orbitzone.github.io`.
+- Schema: `org.gnome.shell.extensions.orbitz-widgets`.
+- Origem reconhecida: Desktop Clock / azclock v7, de Andrew Zaech.
 
-### Installation
+A troca da identidade legada exige migração explícita das configurações e ativação de apenas uma das extensões. Não instalar o upstream para atualizar Orbitz. Não sobrescrever dados locais da agenda, notas ou cofre. Manifesto de versões GNOME não equivale a teste em todas as versões declaradas.
 
-#### To install the most recent official release: Visit Desktop Clock on the [Official GNOME Extensions](https://extensions.gnome.org/extension/5156/desktop-clock/) website.
+## Créditos e licenças
 
-- **To install Desktop Clock from source**: Please see the: [Install From Source Wiki Guide](https://gitlab.com/AndrewZaech/azclock/-/wikis/Install-From-Source-Guide).
-
-<p align="left">
-       <a href="https://extensions.gnome.org/extension/5156/desktop-clock/" >
-    <img src="https://gitlab.com/arcmenu/arcmenu-assets/raw/master/images/get-it-ego.png" width="240" style="margin-left: 4px"/>
-    </a>
-
------
-
-### Support Desktop Clock
-
-Desktop Clock is provided free of charge. If you enjoy using this extension and wish to help support the project, feel free to use the link below!
-
-[![Donate via Paypal](https://gitlab.com/arcmenu/arcmenu-assets/raw/master/images/paypal_donate.png)](https://www.paypal.com/donate/?cmd=_donations&business=53CWA7NR743WC&item_name=Support+Desktop+Clock&currency_code=USD&source=url)
-
------
-
-### Credits:
-
-**@[AndrewZaech](https://gitlab.com/AndrewZaech) - Project Maintainer and Developer**
-
-#### Desktop Clock Logo
-
-**@[AndyC](https://gitlab.com/LinxGem33)** [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)
-
-#### Clock Faces and Hands 
-
-**@[stefan-oskamp](https://gitlab.com/stefan-oskamp) #34 - Style 9**
-
-*Modifications were made to the following files to better suit this extensions needs*
-
-**@[macrovector on Freepik](https://www.freepik.com/free-vector/clock-watch-collection-set-dial-with-seconds-arrow_13031502.htm) - Styles 1, 2, 5, 7, 8**
-
-**@[Jahoe](https://commons.wikimedia.org/wiki/User:Jahoe) - Style 4** [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/)
-
-**@[wikipedia](https://commons.wikimedia.org/wiki/File:Swiss_railway_clock_1.svg) - Style 3** [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)
-
-#### Other contributions via MR:
-
-**@[Sergey Korablin](https://gitlab.com/skorablin) - !7**
-
-#### Translators:
-**@[Etamuk](https://gitlab.com/Etamuk) - German** | **@[Ser82-png](https://gitlab.com/Ser82-png) - Russian** | **@[Vistaus](https://gitlab.com/Vistaus) - Dutch**
-
------
+Código derivado de [Desktop Clock / azclock](https://gitlab.com/AndrewZaech/azclock); referências e avisos foram preservados em [Créditos e licenças](https://github.com/orbitzone/orbitz-widgets-for-gnome/blob/main/docs/credits.md). O texto GPL v3 está em `LICENSE`; dependências e recursos mantêm suas licenças próprias. Orbitz é mantido independentemente do upstream.

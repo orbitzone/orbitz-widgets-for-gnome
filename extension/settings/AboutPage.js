@@ -5,12 +5,11 @@ const {Adw, Gdk, Gio, GLib, GObject, Gtk} = imports.gi;
 const Gettext = imports.gettext.domain(Me.metadata['gettext-domain']);
 const _ = Gettext.gettext;
 
-const PAYPAL_LINK = `https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=53CWA7NR743WC&item_name=Support+${Me.metadata.name}&source=url`;
-const PROJECT_DESCRIPTION = _('Add a clock to the desktop!');
-const PROJECT_IMAGE = 'azclock-logo';
+const PROJECT_DESCRIPTION = _('Widgets, monitoramento, agenda e notas para GNOME.');
+const PROJECT_IMAGE = GLib.build_filenamev([Me.path, 'media', 'orbitz-logo.svg']);
 const SettingsImport = Me.imports.settings.SettingsImport;
 
-var AboutPage = GObject.registerClass(
+var AboutPage = GObject.registerClass({GTypeName: 'OrbitzWidgetsAboutPage'},
 class AzClockAboutPage extends Adw.PreferencesPage {
     _init() {
         super._init({
@@ -29,12 +28,12 @@ class AzClockAboutPage extends Adw.PreferencesPage {
 
         const projectImage = new Gtk.Image({
             margin_bottom: 5,
-            icon_name: PROJECT_IMAGE,
+            gicon: new Gio.FileIcon({file: Gio.File.new_for_path(PROJECT_IMAGE)}),
             pixel_size: 100,
         });
 
         const projectTitleLabel = new Gtk.Label({
-            label: _('Desktop Clock'),
+            label: Me.metadata.name,
             css_classes: ['title-1'],
             vexpand: true,
             valign: Gtk.Align.FILL,
@@ -57,10 +56,10 @@ class AzClockAboutPage extends Adw.PreferencesPage {
         const infoGroup = new Adw.PreferencesGroup();
 
         const projectVersionRow = new Adw.ActionRow({
-            title: _('Desktop Clock Version'),
+            title: _('Versão do Orbitz'),
         });
         projectVersionRow.add_suffix(new Gtk.Label({
-            label: Me.metadata.version.toString(),
+            label: Me.metadata['version-name'] || (Me.metadata.version === 1 ? '1.0' : Me.metadata.version.toString()),
             css_classes: ['dim-label'],
         }));
         infoGroup.add(projectVersionRow);
@@ -107,11 +106,11 @@ class AzClockAboutPage extends Adw.PreferencesPage {
         }));
         infoGroup.add(sessionTypeRow);
 
-        const gitlabRow = this._createLinkRow(_('Desktop Clock GitLab'), Me.metadata.url);
-        infoGroup.add(gitlabRow);
+        const projectRow = this._createLinkRow(_('Orbitz no GitHub'), Me.metadata.url);
+        infoGroup.add(projectRow);
 
-        const donateRow = this._createLinkRow(_('Donate via PayPal'), PAYPAL_LINK);
-        infoGroup.add(donateRow);
+        const authorRow = this._createLinkRow('Felipe Santiago · orbitzone', 'https://github.com/orbitzone');
+        infoGroup.add(authorRow);
 
         this.add(infoGroup);
         // -----------------------------------------------------------------------
@@ -119,7 +118,7 @@ class AzClockAboutPage extends Adw.PreferencesPage {
         // Save/Load Settings----------------------------------------------------------
         const settingsGroup = new Adw.PreferencesGroup();
         const settingsRow = new Adw.ActionRow({
-            title: _('Desktop Clock Settings'),
+            title: _('Configurações do Orbitz'),
         });
         const loadButton = new Gtk.Button({
             label: _('Load'),
@@ -167,7 +166,11 @@ class AzClockAboutPage extends Adw.PreferencesPage {
         this.add(settingsGroup);
         // -----------------------------------------------------------------------
 
-        const gnuSoftwareGroup = new Adw.PreferencesGroup();
+        const creditsGroup = new Adw.PreferencesGroup({title: _('Créditos')});
+        creditsGroup.add(this._createLinkRow(
+            _('Base original: azclock · Andrew Zaech'), 'https://gitlab.com/AndrewZaech/azclock'));
+        this.add(creditsGroup);
+
         const gnuSofwareLabel = new Gtk.Label({
             label: _(GNU_SOFTWARE),
             use_markup: true,
@@ -179,8 +182,7 @@ class AzClockAboutPage extends Adw.PreferencesPage {
             vexpand: true,
         });
         gnuSofwareLabelBox.append(gnuSofwareLabel);
-        gnuSoftwareGroup.add(gnuSofwareLabelBox);
-        this.add(gnuSoftwareGroup);
+        creditsGroup.add(gnuSofwareLabelBox);
     }
 
     _showError(message) {
@@ -268,6 +270,6 @@ class AzClockAboutPage extends Adw.PreferencesPage {
 
 var GNU_SOFTWARE = '<span size="small">' +
     'This program comes with absolutely no warranty.\n' +
-    'See the <a href="https://gnu.org/licenses/old-licenses/gpl-2.0.html">' +
-    'GNU General Public License, version 2 or later</a> for details.' +
+    'See the <a href="https://github.com/orbitzone/orbitz-widgets-for-gnome/blob/main/LICENSE">' +
+    'GNU General Public License — veja LICENSE do projeto</a>.' +
     '</span>';

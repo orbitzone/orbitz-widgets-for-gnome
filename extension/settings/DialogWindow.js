@@ -1,6 +1,7 @@
 const {Adw, GLib, GObject} = imports.gi;
 
 var DialogWindow = GObject.registerClass({
+    GTypeName: 'OrbitzWidgetsDialogWindow',
     Properties: {
         'widget-index': GObject.ParamSpec.int(
             'widget-index', 'widget-index', 'widget-index',

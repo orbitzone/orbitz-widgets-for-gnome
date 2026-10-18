@@ -2,13 +2,31 @@
 
 Documentação da instalação local revisada em **17/10/2026**, a partir do código em uso e do [inventário da stack](stack.md).
 
-Orbitz reúne widgets de desktop, monitoramento do sistema, calendário, tarefas, timesheets e Sticky Notes. A base é uma personalização do **Desktop Clock / azclock v7**, de Andrew Zaech, mantendo o identificador `azclock@azclock.gitlab.com`. Não é uma versão oficial do upstream.
+**Orbitz Widgets for GNOME** é o projeto de **Felipe Santiago / orbitzone**, desenvolvido em [github.com/orbitzone/orbitz-widgets-for-gnome](https://github.com/orbitzone/orbitz-widgets-for-gnome). Reúne widgets de desktop, monitoramento do sistema, calendário, tarefas, timesheets e Sticky Notes. A origem do código e as atribuições dos componentes estão em [Créditos e licenças](docs/credits.md).
 
 ## Estado atual — 18/10/2026
 
-Refatoração modular, contratos da equipe, atualização local reversível e restauro do padrão Hardware estão implementados. A instalação local foi conferida novamente com o atualizador: nenhum arquivo ou comando pendente de migração. O usuário confirmou CPU e SSD funcionando após a correção do roteamento CLI.
+Refatoração modular, contratos da equipe, atualização local reversível e restauro do padrão Hardware estão implementados. A nova identidade Orbitz foi preparada, ativada e conferida; a identidade legada está desativada e preservada para retorno. A marca e a página Sobre 1.0 também foram aplicadas: o atualizador confirma zero arquivos e comandos pendentes. O usuário confirmou CPU e SSD funcionando após a correção do roteamento CLI.
 
-A última verificação completa passou: **71 testes Python, 17 arquivos de teste Node.js e o teste GJS/PangoCairo**. Resultados de 62 Python/16 JS nos relatórios anteriores pertencem ao alvo auditado naquele momento. Persistem pendências explícitas: clique da RAM não abre no teste manual reportado (ainda sem confirmação após o restauro visual), comparação visual/interativa completa e diferenças históricas de dispositivos externos/alertas (BUG-02). Este estado pode ser versionado com limitações documentadas; não representa uma versão integralmente validada do desktop.
+A última verificação completa anterior à mudança de identidade passou: **71 testes Python, 17 arquivos de teste Node.js e o teste GJS/PangoCairo**. ID-01 recebe verificações próprias e migração separada. Resultados de 62 Python/16 JS nos relatórios anteriores pertencem ao alvo auditado naquele momento. Persistem pendências explícitas: clique da RAM não abre no teste manual reportado (ainda sem confirmação após o restauro visual), comparação visual/interativa completa e diferenças históricas de dispositivos externos/alertas (BUG-02). Este estado pode ser versionado com limitações documentadas; não representa uma versão integralmente validada do desktop.
+
+## Identidade Orbitz e migração
+
+A identidade própria implementada nas fontes usa UUID `orbitz-widgets@orbitzone.github.io`, URL deste GitHub e schema `org.gnome.shell.extensions.orbitz-widgets`. O UUID identifica a extensão; o campo URL aponta ao repositório. A versão apresentada é **1.0**, com revisão numérica interna 1 no manifesto, sem representar certificação de compatibilidade ou resolução das pendências conhecidas. O domínio de tradução `azclock` e o schema XML legado permanecem apenas para compatibilidade de traduções/migração.
+
+A instalação atual usa a identidade Orbitz. Preparação reversível, configuração copiada e ativação exclusiva foram confirmadas; a instalação antiga está preservada para rollback. Implementação e auditorias dirigidas concluídas; validação gráfica/funcional abrangente permanece distinta do teste superficial relatado pelo usuário. Trocar somente o nome da pasta ou o manifesto não migra configurações. A nova instalação deve receber configuração preservada, backup/rollback e um procedimento de ativação que evite executar ambas as identidades. Nenhuma migração de dados JSON, SQLite ou credenciais é necessária por essa troca; esses dados não devem ser movidos. Guia de preparo/ativação/retorno: [migração de identidade](docs/operations/identity-migration.md). Estado e aceite em `docs/requirements.md` (RC-13), `docs/backlog.md` (ID-01) e `docs/decisions.md` (D-22).
+
+## Marca e página Sobre
+
+A marca própria fica em `extension/media/orbitz-logo.svg`: vetor original Orbitz, com anel, órbita e satélite, sem o relógio da base. Preferências carrega o arquivo pelo caminho da extensão e apresenta Orbitz Widgets for GNOME, versão 1.0, Felipe Santiago/orbitzone e GitHub do projeto. Origem e licença ficam no grupo de créditos, com os avisos preservados.
+
+Para evitar abrir a página da instalação legada preservada para rollback, fechar janelas de preferências antigas e abrir explicitamente:
+
+```bash
+gnome-extensions prefs orbitz-widgets@orbitzone.github.io
+```
+
+Mudanças na página Sobre exigem atualização dos arquivos e reabertura das preferências; não exigem reinício da sessão por si só. Validação visual real continua distinta da renderização isolada da logo/testes de componentes.
 
 ## Desenvolvimento no Codex
 
@@ -261,34 +279,7 @@ Foram aprovados 44 testes Python e 12 dos 15 testes JavaScript. Permanecem falha
 
 ## Créditos e licenças
 
-Desktop Clock / azclock: **Andrew Zaech**. Personalizações e widgets Orbitz: **orbitzone / Orbitz**. A extensão inclui o texto da licença GNU GPL v3 em seu arquivo `LICENSE`; bibliotecas, ferramentas e recursos visuais mantêm suas próprias licenças. A CLI da Ookla possui termos separados.
-
-Os créditos originais dos recursos do Desktop Clock são preservados abaixo.
-
-**@[AndrewZaech](https://gitlab.com/AndrewZaech) - Project Maintainer and Developer**
-
-#### Desktop Clock Logo
-
-**@[AndyC](https://gitlab.com/LinxGem33)** [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)
-
-#### Clock Faces and Hands
-
-**@[stefan-oskamp](https://gitlab.com/stefan-oskamp) #34 - Style 9**
-
-*Modifications were made to the following files to better suit this extensions needs*
-
-**@[macrovector on Freepik](https://www.freepik.com/free-vector/clock-watch-collection-set-dial-with-seconds-arrow_13031502.htm) - Styles 1, 2, 5, 7, 8**
-
-**@[Jahoe](https://commons.wikimedia.org/wiki/User:Jahoe) - Style 4** [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/)
-
-**@[wikipedia](https://commons.wikimedia.org/wiki/File:Swiss_railway_clock_1.svg) - Style 3** [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)
-
-#### Other contributions via MR:
-
-**@[Sergey Korablin](https://gitlab.com/skorablin) - !7**
-
-#### Translators:
-**@[Etamuk](https://gitlab.com/Etamuk) - German** | **@[Ser82-png](https://gitlab.com/Ser82-png) - Russian** | **@[Vistaus](https://gitlab.com/Vistaus) - Dutch**
+Projeto Orbitz: **Felipe Santiago / orbitzone**. Origem, contribuições anteriores, recursos e licenças estão em [docs/credits.md](docs/credits.md). Os arquivos `LICENSE` e `extension/LICENSE` e os avisos das dependências/recursos foram preservados.
 
 -----
 

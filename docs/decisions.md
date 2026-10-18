@@ -65,3 +65,19 @@ Usuário solicitou recuperar tamanhos anteriores e mantê-los como padrão. Valo
 ## D-21 — Versionar estado atual com pendências explícitas
 
 Usuário solicitou prosseguir com commit/push em 18/10/2026. Supervisor consolidou README/stack/backlog e executou verificação completa atual (71 Python,17 Node,GJS/Pango aprovados). Estado pode ser versionado como refatoração/correções com clique RAM e validação gráfica pendentes, sem declarar release integralmente aprovada. Operações Git da ferramenta impedidas: .git somente leitura para fetch e DNS do GitHub indisponível para ls-remote. Publicação ainda não realizada; sem force-push ou integração remota automática.
+
+## D-22 — Identidade Orbitz e preservação da origem
+
+Usuário pediu projeto próprio atribuído a si, com menor destaque ao template de origem e identificador ligado ao seu GitHub. Supervisor escolheu UUID orbitz-widgets@orbitzone.github.io e schema org.gnome.shell.extensions.orbitz-widgets, metadados/links Orbitz e version 1 como linha própria. Não representa domínio web publicado nem release totalmente validada. Créditos/licenças herdados ficam preservados, concentrados em docs/credits.md; retirar CTA/doações upstream da apresentação principal sem inventar dados financeiros do usuário. Compatibilidade de tradução e schema legado mantida para migração; dados/cofre independentes do UUID não serão movidos. Migração e ativação exigem procedimento explícito e rollback, sem execução automática na sessão ativa do agente.
+
+### Complemento D-22 — namespace GObject e versões de licença exibidas
+
+Reprodução com GObject confirmou que GTypes implícitos do legado permanecem registrados após desativação. Para permitir carregamento sequencial das identidades no mesmo processo, os 20 registros recebem GTypeName OrbitzWidgets explícitos; nomes JS/exports e controlador plain preservados. Registro representativo de 20 pares legado/Orbitz passou com GObject real, sem provar ativação completa no Shell. Corrigido também aviso UI herdado que apontava GPL2 enquanto LICENSE distribuído contém outro texto: a página passa a referenciar o arquivo LICENSE do projeto de forma neutra, preservando avisos/arquivos sem relicenciamento ou conclusão jurídica adicional.
+
+### Aceite local D-22
+
+Supervisor conferiu relatório frontend/backend/auditoria ID01. Identidade própria, preservação de créditos/licenças e ferramentas estão prontas para preparo humano, com limites documentados. Suíte global do alvo anterior aprovada83 testes Python/18 arquivos Node/2 testes GJS; após correção de remoção parcial, auditor verificou11 testes do migrador e proteções de subset/conflito. Sem impeditivo reproduzido remanescente no escopo; não confundir preparo com ativação ou aceitação visual. Nova etapa começa pelo --prepare no terminal, sem reinício imediato nem ativação automática.
+
+## D-23 — Identidade visual própria e versão exibida
+
+Pedido explícito de logo nova e versão 1.0. Implementação em vetor SVG nativo para escala/integrar GNOME, com origem gráfica própria do Orbitz; não reutilizar o relógio da base como marca. Version-name1.0 para apresentação com version inteiro 1 preservado. Preferências serão abertas pelo UUID Orbitz para evitar confusão com janela/página da instalação legada ainda preservada para rollback. Atribuições e licença não serão apagadas; ficam na seção própria discreta.

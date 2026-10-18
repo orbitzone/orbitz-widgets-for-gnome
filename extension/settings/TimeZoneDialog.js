@@ -21,6 +21,7 @@ function getGWeatherVersion() {
 }
 
 var TimeZoneDialog = GObject.registerClass({
+    GTypeName: 'OrbitzWidgetsTimeZoneDialog',
     Signals: {
         'time-zone-changed': {param_types: [GObject.TYPE_STRING, GObject.TYPE_STRING]},
     },

@@ -8,7 +8,7 @@ const _ = Gettext.gettext;
 const Settings = Me.imports.settings;
 const {TextLabelSubPage} = Settings.TextLabelSubPage;
 
-var CommandLabelSubPage = GObject.registerClass(
+var CommandLabelSubPage = GObject.registerClass({GTypeName: 'OrbitzWidgetsCommandLabelSubPage'},
 class AzClockCommandLabelSubPage extends TextLabelSubPage {
     _init(settings, params) {
         super._init(settings, params);

@@ -12,7 +12,10 @@ from datetime import datetime
 
 REPO = Path(__file__).resolve().parents[1]
 HOME = Path.home()
-EXT = HOME / '.local/share/gnome-shell/extensions/azclock@azclock.gitlab.com'
+LEGACY_UUID = 'azclock@azclock.gitlab.com'
+NEW_UUID = 'orbitz-widgets@orbitzone.github.io'
+EXTENSIONS = HOME / '.local/share/gnome-shell/extensions'
+EXT = EXTENSIONS / LEGACY_UUID
 NOTES = HOME / '.local/share/orbitz-postits/app'
 COLLECTORS = HOME / '.local/share/orbitz-widgets/collectors'
 BACKUPS = HOME / 'Documents/Codex/work/orbitz-local-updates'
@@ -20,6 +23,43 @@ SCHEMA = 'org.gnome.shell.extensions.azclock'
 OLD_DIRS = [HOME / 'Documents/Codex' / p for p in (
     '2026-10-08/quan/outputs', '2026-10-09/pngrub-ae-in-f14-1e100-net/outputs',
     '2026-10-11/https-rdap-org-ip-2a06-3a98c1/outputs')]
+
+
+def select_identity():
+    """Use the migrated installation when present; never overlay another UUID."""
+    global EXT, SCHEMA
+    source = json.loads((REPO / 'extension/metadata.json').read_text())
+    installed = [EXTENSIONS / identity for identity in (NEW_UUID, LEGACY_UUID)
+                 if (EXTENSIONS / identity).exists()]
+    if not installed:
+        raise RuntimeError('Nenhuma instalação Orbitz/azclock encontrada; prepare a migração de identidade primeiro.')
+    EXT = installed[0]
+    metadata = json.loads((EXT / 'metadata.json').read_text())
+    if metadata.get('uuid') != EXT.name:
+        raise RuntimeError('UUID do manifesto instalado difere do diretório; atualização recusada.')
+    if source.get('uuid') != EXT.name:
+        raise RuntimeError('A fonte usa outra identidade; execute migrate-identity.py antes de atualizar.')
+    expected_schema = {LEGACY_UUID: 'org.gnome.shell.extensions.azclock',
+                       NEW_UUID: 'org.gnome.shell.extensions.orbitz-widgets'}[EXT.name]
+    if metadata.get('settings-schema') != expected_schema:
+        raise RuntimeError('Schema instalado incompatível com identidade; atualização recusada.')
+    if source.get('settings-schema') != expected_schema:
+        raise RuntimeError('Schema da fonte incompatível com identidade; atualização recusada.')
+    SCHEMA = expected_schema
+    return EXT
+
+
+def identity_from_manifest(manifest):
+    """DEP01 backups without identity fields always belong to azclock."""
+    global EXT, SCHEMA
+    legacy_schema = 'org.gnome.shell.extensions.azclock'
+    new_schema = 'org.gnome.shell.extensions.orbitz-widgets'
+    candidate = Path(manifest.get('extension', str(EXTENSIONS / LEGACY_UUID)))
+    expected = {LEGACY_UUID: legacy_schema, NEW_UUID: new_schema}
+    schema = manifest.get('schema', legacy_schema)
+    if candidate.parent != EXTENSIONS or candidate.name not in expected or schema != expected[candidate.name]:
+        raise RuntimeError('Identidade/schema de rollback incompatíveis; nenhuma configuração alterada.')
+    EXT, SCHEMA = candidate, schema
 
 
 def digest(path):
@@ -57,6 +97,7 @@ def migrate(value):
 
 
 def files():
+    select_identity()
     result = []
     for source_root, destination in [(REPO / 'extension', EXT),
                                       (REPO / 'sticky-notes', NOTES),
@@ -65,7 +106,9 @@ def files():
             relative = source.relative_to(source_root)
             if 'vendor' in relative.parts or '__pycache__' in relative.parts:
                 continue
-            if source.suffix not in ('.py', '.js', '.html') or not source.is_file():
+            brand_asset = source_root == REPO / 'extension' and relative in (
+                Path('metadata.json'), Path('media/orbitz-logo.svg'))
+            if (source.suffix not in ('.py', '.js', '.html') and not brand_asset) or not source.is_file():
                 continue
             target = destination / relative
             if source.is_symlink() or target.is_symlink():
@@ -76,11 +119,16 @@ def files():
 
 
 def atomic_copy(source, target):
+    content = source.read_bytes()
+    if target == EXT / 'metadata.json':
+        metadata = json.loads(content)
+        if metadata.get('uuid') != EXT.name or metadata.get('settings-schema') != SCHEMA:
+            raise RuntimeError('Metadata fonte incompatível com UUID/schema do destino; cópia recusada.')
     target.parent.mkdir(parents=True, exist_ok=True)
     fd, name = tempfile.mkstemp(prefix='.orbitz-update-', dir=target.parent)
     try:
         with os.fdopen(fd, 'wb') as stream:
-            stream.write(source.read_bytes())
+            stream.write(content)
             os.fchmod(stream.fileno(), source.stat().st_mode & 0o777)
             stream.flush()
             os.fsync(stream.fileno())
@@ -95,6 +143,10 @@ def atomic_copy(source, target):
 
 
 def preflight():
+    # Rollback may target a previous identity recorded by its manifest.
+    metadata = json.loads((EXT / 'metadata.json').read_text())
+    if metadata.get('uuid') != EXT.name:
+        raise RuntimeError('UUID instalado incompatível com diretório.')
     # Probe parent access before touching any installed code/configuration.
     for destination in (EXT, NOTES, COLLECTORS):
         parent = destination if destination.exists() else destination.parent
@@ -111,6 +163,7 @@ def preflight():
 
 def restore(folder, force=False):
     manifest = json.loads((folder / 'manifest.json').read_text())
+    identity_from_manifest(manifest)
     for item in manifest['files']:
         if item['backup'] and digest(folder / item['backup']) != item['old_hash']:
             raise RuntimeError('Backup inválido; rollback não iniciado.')
@@ -146,12 +199,15 @@ def restore(folder, force=False):
 
 
 def main():
+    global EXT, SCHEMA
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--apply', action='store_true')
     parser.add_argument('--rollback', type=Path)
     parser.add_argument('--force', action='store_true', help='Permite rollback sobre mudanças posteriores.')
     args = parser.parse_args()
     if args.rollback:
+        saved = json.loads((args.rollback.resolve() / 'manifest.json').read_text())
+        identity_from_manifest(saved)
         preflight()
         restore(args.rollback.resolve(), args.force)
         return
@@ -170,7 +226,7 @@ def main():
         return
     BACKUPS.mkdir(parents=True, exist_ok=True, mode=0o700)
     folder = Path(tempfile.mkdtemp(prefix=datetime.now().strftime('%Y%m%d-%H%M%S-'), dir=BACKUPS))
-    manifest = {'repo': str(REPO), 'old_settings': old, 'new_settings': new, 'files': []}
+    manifest = {'repo': str(REPO), 'extension': str(EXT), 'schema': SCHEMA, 'old_settings': old, 'new_settings': new, 'files': []}
     for index, (source, target) in enumerate(planned):
         old_hash = digest(target) if target.exists() else None
         backup = f'files/{index}' if target.exists() else None

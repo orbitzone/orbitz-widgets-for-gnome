@@ -94,3 +94,7 @@ Backend/frontend estáveis, inventários e documentação integrados. Auditoria 
 ## Comunicação obrigatória de prontidão para teste
 
 O supervisor é responsável por informar, ao término de cada atualização, se está pronta para teste e se o usuário deve reiniciar a sessão. Desenvolvedores reportam componentes afetados, necessidade de instalação/reabertura/reinício e roteiro de teste; auditor reporta evidências e impedimentos; frontend leva critérios visuais do UX ao supervisor. Supervisor confirma aplicação e versão instalada antes de liberar reinício manual. Atualização não aplicada ou parcialmente recuperada nunca é anunciada como pronta. Não reiniciar sessão automaticamente, nem exigir logout quando basta reabrir o componente. Esta regra foi solicitada explicitamente pelo usuário em 18/10/2026.
+
+## ID-01 — propriedade temporária dos arquivos
+
+Para a identidade própria solicitada em 18/10/2026: frontend possui `extension/metadata.json`, UI About/rótulos/logs, novo schema Orbitz (legado preservado) e testes JS pertinentes; backend possui `tools/update-local.py`, novo `tools/migrate-identity.py` e testes operacionais. Supervisor possui README/stack, créditos e documentação de produto; UX atua via frontend e escreve docs/design; auditor verifica alvo estável e escreve relatórios. Ninguém aplica instalação/ativa/desativa GNOME nesta etapa. Preparação e ativação manual serão separadas; nunca manter duas identidades ativas. Créditos/licenças antigos não são removidos.

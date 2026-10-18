@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" role="img" aria-labelledby="orbitz-title orbitz-desc">
+  <title id="orbitz-title">Orbitz</title>
+  <desc id="orbitz-desc">Anel aberto ao centro em teal, cruzado por uma órbita cyan com um pequeno satélite.</desc>
+  <circle cx="64" cy="64" r="31" fill="none" stroke="#0f766e" stroke-width="14"/>
+  <circle cx="64" cy="64" r="31" fill="none" stroke="#2dd4bf" stroke-width="8"/>
+  <g transform="rotate(-32 64 64)" fill="none">
+    <ellipse cx="64" cy="64" rx="47" ry="19" stroke="#0f766e" stroke-width="8"/>
+    <ellipse cx="64" cy="64" rx="47" ry="19" stroke="#22d3ee" stroke-width="4"/>
+  </g>
+  <circle cx="104" cy="39" r="6" fill="#22d3ee" stroke="#0f766e" stroke-width="3"/>
+</svg>

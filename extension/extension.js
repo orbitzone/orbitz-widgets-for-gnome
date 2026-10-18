@@ -54,7 +54,7 @@ function stopCommandRun(run) {
                 await killer.wait_async(null);
                 if (!killer.get_successful()) throw new Error('Falha ao encerrar árvore do coletor.');
             }
-        } catch (error) { logError(error, 'Desktop Clock collector cleanup'); }
+        } catch (error) { logError(error, 'Orbitz collector cleanup'); }
         try { proc.force_exit(); await proc.wait_async(null); }
         catch (error) { /* Process may already have exited. */ }
     })();
@@ -418,7 +418,7 @@ function getClockDate(widgetIndex, elementIndex, origDate) {
 
 const PANEL_TITLE_STYLE = 'font-family: sans-serif; font-size: 15px; font-weight: bold; color: white; padding-bottom: 4px;';
 
-var DesktopWidget = GObject.registerClass(
+var DesktopWidget = GObject.registerClass({GTypeName: 'OrbitzWidgetsDesktopWidget'},
 class AzClockDesktopWidget extends St.Widget {
     _init(index) {
         super._init({
@@ -759,7 +759,7 @@ class AzClockDesktopWidget extends St.Widget {
             this._popupMenu();
             return GLib.SOURCE_REMOVE;
         });
-        GLib.Source.set_name_by_id(this._menuTimeoutId, '[azclock] this.popupMenu');
+        GLib.Source.set_name_by_id(this._menuTimeoutId, '[orbitz] this.popupMenu');
     }
 
     _popupMenu() {
@@ -783,7 +783,7 @@ class AzClockDesktopWidget extends St.Widget {
             const lockWidget = getData(this._widgetIndex, WIDGET_DATA_INDEX, 'Lock_Widget', 'bool');
             lockWidgetItem.label.text = lockWidget ? _('Unlock') : _('Lock');
 
-            this._menu.addAction(_('Desktop Clock Settings'), () => {
+            this._menu.addAction(_('Configurações do Orbitz'), () => {
                 ExtensionUtils.openPrefs();
             });
 
@@ -816,7 +816,7 @@ class AzClockDesktopWidget extends St.Widget {
     }
 });
 
-var AnalogClock = GObject.registerClass(
+var AnalogClock = GObject.registerClass({GTypeName: 'OrbitzWidgetsAnalogClock'},
 class AzClockAnalogClock extends Clutter.Actor {
     _init(widgetIndex, elementIndex, elementData) {
         super._init({
@@ -972,7 +972,7 @@ class AzClockAnalogClock extends Clutter.Actor {
     }
 });
 
-var Label = GObject.registerClass(
+var Label = GObject.registerClass({GTypeName: 'OrbitzWidgetsLabel'},
 class AzClockLabel extends St.Label {
     _init(widgetIndex, elementIndex) {
         this.widgetIndex = widgetIndex;
@@ -1068,7 +1068,7 @@ class AzClockLabel extends St.Label {
     }
 });
 
-var DigitalClock = GObject.registerClass(
+var DigitalClock = GObject.registerClass({GTypeName: 'OrbitzWidgetsDigitalClock'},
 class AzClockDigitalClock extends Label {
     _init(widgetIndex, elementIndex) {
         super._init(widgetIndex, elementIndex);
@@ -1098,7 +1098,7 @@ class AzClockDigitalClock extends Label {
     }
 });
 
-var TextLabel = GObject.registerClass(
+var TextLabel = GObject.registerClass({GTypeName: 'OrbitzWidgetsTextLabel'},
 class AzClockTextLabel extends Label {
     _init(widgetIndex, elementIndex) {
         super._init(widgetIndex, elementIndex);
@@ -1112,7 +1112,7 @@ class AzClockTextLabel extends Label {
     }
 });
 
-var CommandLabel = GObject.registerClass(
+var CommandLabel = GObject.registerClass({GTypeName: 'OrbitzWidgetsCommandLabel'},
 Me.imports.commandPanels.install(class AzClockCommandLabel extends Label {
     _init(widgetIndex, elementIndex) {
         super._init(widgetIndex, elementIndex);
@@ -1276,7 +1276,7 @@ Me.imports.commandPanels.install(class AzClockCommandLabel extends Label {
                 }
                 this._openNetworkDialog();
                 } catch (error) {
-                logError(error, 'Desktop Clock network click');
+                logError(error, 'Orbitz network click');
                 }
             }
         }
@@ -1889,7 +1889,7 @@ Me.imports.commandPanels.install(class AzClockCommandLabel extends Label {
         }
         if (!command || command.length === 0) {
             this._setErrorState();
-            log('Desktop Clock - Error executing command. No command detected.');
+            log('Orbitz - Error executing command. No command detected.');
             return;
         }
         const run = {command, proc: null, timeout: null, cancelled: false,
@@ -1929,7 +1929,7 @@ Me.imports.commandPanels.install(class AzClockCommandLabel extends Label {
             if (!proc.get_successful() || stderr) {
                 this._setErrorState();
                 const status = proc.get_exit_status();
-                log(`Desktop Clock - Error executing command "${command}": ${stderr ? stderr.trim().slice(0, 1024) : GLib.strerror(status)}`);
+                log(`Orbitz - Error executing command "${command}": ${stderr ? stderr.trim().slice(0, 1024) : GLib.strerror(status)}`);
                 return;
             }
 
@@ -1937,7 +1937,7 @@ Me.imports.commandPanels.install(class AzClockCommandLabel extends Label {
 
             if (!response) {
                 this._setErrorState();
-                log(`Desktop Clock - Error executing command "${command}": no output.`);
+                log(`Orbitz - Error executing command "${command}": no output.`);
                 return;
             }
 
@@ -1991,7 +1991,7 @@ Me.imports.commandPanels.install(class AzClockCommandLabel extends Label {
         } catch (err) {
             if (!this._networkDestroyed && (!run.cancelled || run.outputLimit)) {
                 this._setErrorState();
-                log(`Desktop Clock - Error executing command "${command}": ${err}`);
+                log(`Orbitz - Error executing command "${command}": ${err}`);
             }
         } finally {
             if (run.timeout)

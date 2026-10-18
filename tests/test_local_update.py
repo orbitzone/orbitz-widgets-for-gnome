@@ -1,5 +1,6 @@
 """Reversible installer contracts; all targets/settings are synthetic."""
 import importlib.util
+import json
 from pathlib import Path
 import tempfile
 import unittest
@@ -24,6 +25,78 @@ class LocalUpdateTests(unittest.TestCase):
         self.assertEqual(actual[0][1]['Name'], 'CPU')
         self.assertEqual(actual[0][2:], data[0][2:])
         self.assertEqual(update.migrate(value), (value, 0))
+
+    def test_identity_selection_prefers_new_and_refuses_mismatches(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            extensions = root/'extensions';extensions.mkdir()
+            repo = root/'repo';(repo/'extension').mkdir(parents=True)
+            (repo/'extension/metadata.json').write_text(json.dumps({'uuid':update.NEW_UUID,'settings-schema':'org.gnome.shell.extensions.orbitz-widgets'}))
+            old = extensions/update.LEGACY_UUID;old.mkdir()
+            (old/'metadata.json').write_text(json.dumps({'uuid':update.LEGACY_UUID,'settings-schema':'org.gnome.shell.extensions.azclock'}))
+            with patch.object(update,'EXTENSIONS',extensions), patch.object(update,'REPO',repo), patch.object(update,'EXT',old), patch.object(update,'SCHEMA',update.SCHEMA):
+                with self.assertRaisesRegex(RuntimeError,'outra identidade'):update.select_identity()
+                new = extensions/update.NEW_UUID;new.mkdir()
+                (new/'metadata.json').write_text(json.dumps({'uuid':update.NEW_UUID,'settings-schema':'org.gnome.shell.extensions.orbitz-widgets'}))
+                self.assertEqual(update.select_identity(),new)
+                self.assertEqual(update.SCHEMA,'org.gnome.shell.extensions.orbitz-widgets')
+                (new/'metadata.json').write_text(json.dumps({'uuid':update.LEGACY_UUID}))
+                with self.assertRaisesRegex(RuntimeError,'difere do diretório'):update.select_identity()
+
+    def test_legacy_backup_without_identity_never_targets_new_schema(self):
+        with patch.object(update,'EXT',update.EXTENSIONS/update.NEW_UUID), patch.object(update,'SCHEMA','org.gnome.shell.extensions.orbitz-widgets'):
+            update.identity_from_manifest({'old_settings':'synthetic'})
+            self.assertEqual(update.EXT,update.EXTENSIONS/update.LEGACY_UUID)
+            self.assertEqual(update.SCHEMA,'org.gnome.shell.extensions.azclock')
+            with self.assertRaisesRegex(RuntimeError,'Identidade/schema'):
+                update.identity_from_manifest({'extension':str(update.EXTENSIONS/update.NEW_UUID),'schema':'org.gnome.shell.extensions.azclock'})
+
+    def test_brand_metadata_and_logo_apply_hashes_and_rollback(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            repo = root/'repo';extension = repo/'extension';(extension/'media').mkdir(parents=True)
+            (repo/'widgets').mkdir();(repo/'sticky-notes').mkdir()
+            extensions = root/'extensions';new = extensions/update.NEW_UUID;new.mkdir(parents=True)
+            old_metadata = {'uuid':update.NEW_UUID,'settings-schema':'org.gnome.shell.extensions.orbitz-widgets','version':1}
+            new_metadata = {**old_metadata,'version-name':'1.0'}
+            (new/'metadata.json').write_text(json.dumps(old_metadata))
+            original_metadata = (new/'metadata.json').read_bytes()
+            (extension/'metadata.json').write_text(json.dumps(new_metadata))
+            (extension/'media/orbitz-logo.svg').write_text('<svg xmlns="http://www.w3.org/2000/svg"/>')
+            for relative in ['youtube.json','notes.json','nested/metadata.json','speedtest','binary.bin','media/other.svg','vendor/extra.py']:
+                path = extension/relative;path.parent.mkdir(exist_ok=True,parents=True);path.write_text('not an update target')
+            state = [GLib.Variant('aaa{ss}',[]).print_(True)]
+            def settings(action,*args):
+                if action == 'get':return state[0]
+                if action == 'set':state[0]=args[1];return ''
+                raise AssertionError(action)
+            with patch.object(update,'REPO',repo), patch.object(update,'EXTENSIONS',extensions), patch.object(update,'EXT',new), patch.object(update,'SCHEMA',old_metadata['settings-schema']), patch.object(update,'NOTES',root/'notes'), patch.object(update,'COLLECTORS',root/'collectors'), patch.object(update,'BACKUPS',root/'backups'), patch.object(update,'settings',side_effect=settings), patch.object(update,'preflight'), patch('sys.argv',['update-local.py','--apply']):
+                self.assertEqual({str(a.relative_to(extension)) for a,_ in update.files()}, {'metadata.json','media/orbitz-logo.svg'})
+                update.main()
+                self.assertEqual((new/'metadata.json').read_bytes(),(extension/'metadata.json').read_bytes())
+                self.assertEqual(update.digest(new/'media/orbitz-logo.svg'),update.digest(extension/'media/orbitz-logo.svg'))
+                self.assertEqual(update.files(),[])
+                backup = next((root/'backups').iterdir())
+                manifest = json.loads((backup/'manifest.json').read_text())
+                self.assertEqual(manifest['extension'],str(new))
+                for item in manifest['files']:
+                    self.assertEqual(update.digest(Path(item['target'])),item['new_hash'])
+                update.restore(backup)
+                self.assertEqual((new/'metadata.json').read_bytes(),original_metadata)
+                self.assertFalse((new/'media/orbitz-logo.svg').exists())
+                self.assertEqual(state[0],manifest['old_settings'])
+
+    def test_brand_copy_refuses_uuid_schema_mismatch_and_missing_schema(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            new = root/update.NEW_UUID;new.mkdir()
+            target = new/'metadata.json';target.write_text('original')
+            source = root/'source-metadata.json'
+            for metadata in [{'uuid':update.LEGACY_UUID,'settings-schema':'org.gnome.shell.extensions.orbitz-widgets'}, {'uuid':update.NEW_UUID,'settings-schema':'org.gnome.shell.extensions.azclock'}, {'uuid':update.NEW_UUID}]:
+                with self.subTest(metadata=metadata), patch.object(update,'EXT',new), patch.object(update,'SCHEMA','org.gnome.shell.extensions.orbitz-widgets'):
+                    source.write_text(json.dumps(metadata))
+                    with self.assertRaisesRegex(RuntimeError,'incompatível'):update.atomic_copy(source,target)
+                    self.assertEqual(target.read_text(),'original')
 
     def exercise_apply(self, fail=False):
         with tempfile.TemporaryDirectory() as temporary:

@@ -11,6 +11,7 @@ const {WidgetsData} = Me.imports.settings.WidgetsData;
 const _ = Gettext.gettext;
 
 var SubPage = GObject.registerClass({
+    GTypeName: 'OrbitzWidgetsSubPage',
     Properties: {
         'widget-index': GObject.ParamSpec.int(
             'widget-index', 'widget-index', 'widget-index',

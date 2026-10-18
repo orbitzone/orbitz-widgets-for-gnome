@@ -2,11 +2,15 @@
 
 O usuário autorizou aplicar o refactor localmente e reiniciar a sessão manualmente após confirmação. O instalador não reinicia/recarrega o GNOME, não para aplicativos nem altera dados da agenda/notas/cofre.
 
+## Identidade própria ID-01
+
+Os passos abaixo documentam a atualização da identidade anterior. Com fontes Orbitz e instalação ainda azclock, o atualizador agora recusa sobrepor UUIDs. Preparar a [migração de identidade](identity-migration.md) antes de usar o atualizador futuro; após preparar a árvore Orbitz válida, ele identifica o destino novo. Backups antigos continuam explicitamente ligados ao schema legado. Não substituir o UUID somente renomeando pastas/metadados.
+
 ## Situação em 18/10/2026
 
 Plano real: 49 arquivos de código e 10 comandos dos coletores. A aplicação pelo agente foi impedida antes de qualquer mudança em código instalado/GSettings: `Errno 30 Read-only file system` na sondagem prévia do diretório da extensão. O sandbox não permite gravar `~/.local/share`; não há ampliação de permissão disponível. Portanto a instalação permanece antiga e não está pronta para validar o refactor.
 
-`tools/update-local.py` atualiza somente `.py`, `.js` e `.html` próprios. Vendor, manifesto/schema, binários, imagens e licenças não são sobrescritos; 1346 arquivos de vendor/schema/manifesto existentes foram comparados com as fontes e eram idênticos. Coletores vão para `~/.local/share/orbitz-widgets/collectors`; apenas caminhos conhecidos no campo Text_Command são migrados, preservando demais campos e argumentos. Pastas históricas ficam intactas. Caches locais descartáveis podem ser recriados pelo novo caminho; não se trata de migração de dados pessoais.
+`tools/update-local.py` atualiza `.py`, `.js` e `.html` próprios e a whitelist explícita da extensão: `metadata.json` e `media/orbitz-logo.svg`. Outros JSONs/SVGs e dados pessoais não são incluídos por extensão de arquivo. Vendor, manifesto/schema, binários, imagens e licenças não são sobrescritos; 1346 arquivos de vendor/schema/manifesto existentes foram comparados com as fontes e eram idênticos. Coletores vão para `~/.local/share/orbitz-widgets/collectors`; apenas caminhos conhecidos no campo Text_Command são migrados, preservando demais campos e argumentos. Pastas históricas ficam intactas. Caches locais descartáveis podem ser recriados pelo novo caminho; não se trata de migração de dados pessoais.
 
 Backup privado de código anterior e configuração widget-data em `~/Documents/Codex/work/orbitz-local-updates/<execução>/`, fora do repositório. O manifesto contém hashes e configuração local; não publicar nem copiar para o Git. Dados JSON/SQLite pessoais e credenciais não fazem parte desse backup e não são modificados.
 
@@ -41,3 +45,9 @@ Cinco testes sintéticos em `tests/test_local_update.py` aprovados: migração p
 ## Confirmação de aplicação — 18/10/2026
 
 Usuário executou --apply fora do sandbox e recebeu ATUALIZACAO_OK. Supervisor confirmou por leitura: 49 hashes de destinos coincidem com manifesto, configuração GSettings coincide com novo valor esperado, zero diferenças de código e zero migrações restantes. Execução privada `20261018-010701-upda7txp`, com 12 arquivos anteriores copiados para backup e ausência dos novos registrada. Instalação pronta para sair/entrar manualmente; resultado visual/interativo após nova sessão ainda pendente. Essa confirmação substitui o estado anterior “não aplicada” para a execução indicada, sem apagar o registro do bloqueio inicial.
+
+## Atualização da marca e Sobre1.0 — BRAND-01
+
+O instalador prepara logo SVG, metadata da mesma identidade e código About em uma atualização verificável/rollback. UUID/schema fonte e destino devem coincidir. Fechar preferências antigas antes de aplicar e reabrir explicitamente com `gnome-extensions prefs orbitz-widgets@orbitzone.github.io`. A captura DesktopClock7/GitLab/PayPal corresponde à página do legado, não à fonte instalada da identidade nova já conferida. Não apagar legado/backup para resolver confusão de janela. Após confirmar ATUALIZACAO_OK, basta reabrir preferências; não orientar logout sem necessidade demonstrada.
+
+BRAND-01 aplicada pelo usuário com ATUALIZACAO_OK, execução `20261018-021732-_vzv_1d9` (3 arquivos/0 comandos). Preferências inicialmente recusaram nova abertura por janela já existente; instruído fechar janelas antigas e abrir UUID Orbitz explicitamente. Usuário relatou aparente normalidade e revisão posterior do supervisor confirmou zero arquivos/comandos pendentes. Não exigiu reinício da sessão.

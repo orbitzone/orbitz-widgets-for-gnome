@@ -11,7 +11,7 @@ const {SubPage} = Settings.SubPage;
 const CLOCK_STYLE_COUNT = 9;
 const BUTTON_STYLE_COUNT = 5;
 
-var AnalogClockSubPage = GObject.registerClass(
+var AnalogClockSubPage = GObject.registerClass({GTypeName: 'OrbitzWidgetsAnalogClockSubPage'},
 class AzClockAnalogClockSubPage extends SubPage {
     _init(settings, params) {
         super._init(settings, params);
