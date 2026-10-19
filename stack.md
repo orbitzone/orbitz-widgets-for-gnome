@@ -4,7 +4,7 @@ Inventário inicial em **17/10/2026**, atualizado em **18/10/2026** após RF-01 
 
 ## Estado atual das fontes e instalação
 
-A instalação local já usa os módulos refatorados e os coletores em `~/.local/share/orbitz-widgets/collectors`; o atualizador confirmou zero arquivos/comandos pendentes na conferência de 18/10/2026. Os mapas de pastas históricas abaixo descrevem a origem anterior, preservada para referência e rollback; não são mais os caminhos configurados dos dez comandos migrados. Instalação em máquina limpa ainda não foi validada. Suíte completa atual: 71 testes Python, 17 arquivos Node.js e GJS/PangoCairo aprovados; clique RAM e validação visual/interativa permanecem pendentes conforme README/backlog.
+A instalação local já usa os módulos refatorados e os coletores em `~/.local/share/orbitz-widgets/collectors`; o atualizador confirmou zero arquivos/comandos pendentes na conferência de 18/10/2026. Os mapas de pastas históricas abaixo descrevem a origem anterior, preservada para referência e rollback; não são mais os caminhos configurados dos dez comandos migrados. Instalação em máquina limpa ainda não foi validada. Verificação histórica desse marco: 71 testes Python, 17 arquivos Node.js e GJS/PangoCairo aprovados; clique RAM e validação visual/interativa permanecem pendentes conforme README/backlog.
 
 ## Visão geral
 
@@ -271,3 +271,31 @@ As fontes passam a identificar Orbitz Widgets for GNOME, de Felipe Santiago/orbi
 A instalação local já foi migrada e ativada com o UUID Orbitz; a instalação antiga permanece desativada para retorno. Migrador auditado separa cópia/configuração reversíveis da ativação manual; não mover dados da agenda/notas nem credenciais, e nunca ativar duas extensões. O histórico de paths acima permanece evidência do estado anterior; não trocar UUID apenas renomeando pasta.
 
 ID-01: confira `docs/operations/identity-migration.md` e `docs/audits/2026-10-18-identity-audit.md`. Suíte integrada83 testes Python/18 arquivos Node/2 testes GJS/110 verificações de sintaxe e rechecagem final11 testes do migrador após ajuste de rollback; preparo/ativação foram executados pelo usuário e conferidos pelo supervisor; não houve troca automática pelo agente.
+
+## Invoice PDF — INV-01
+
+`planner_menu.py` compõe o menu ao lado da data; `invoice_ui.py` mantém formulário e prévia separados. `invoice.py` calcula minutos/Decimal e valida o snapshot; `invoice_profiles.py` persiste perfis privados com lock e escrita atômica; `invoice_pdf.py` renderiza PDFs PT/EN com ReportLab e fontes DejaVu Sans incorporadas. Dependências da exportação: `python3-reportlab` e `fonts-dejavu-core`; imports da biblioteca PDF são tardios.
+
+Perfil local: `~/.local/share/orbitz-widgets/invoice-profiles.json`, modo 0600, separado de `notes.json`, credenciais e backups da agenda. Emitente/idioma globais; cliente/taxa/moeda por ID da timesheet. PDF salvo privadamente em destino escolhido, com confirmação para substituir. Nenhum serviço externo é consultado e os registros de horas permanecem intactos. Reabrir a agenda após instalação carrega os módulos novos; logout não é necessário.
+
+INV-02 (19/10/2026): seletor visual isolado para mês civil/histórico/intervalo inclusivo com um calendário. Navegação e seleção são eventos distintos; o formulário passa start/end ISO ao domínio existente. Sem novas dependências, migração de perfis ou alterações nos registros. Aplicação e validação GTK real permanecem separadas da verificação local.
+
+## Histórico de invoices — INV-03 (19/10/2026)
+
+`invoice_history.py` mantém PDFs e metadados privados separados dos dados vivos; `invoice_history_ui.py` apresenta consulta/cópia/exclusão e grupos por timesheet/cliente/mês de emissão. O menu e a sessão de exportação integram o acervo. Armazenamento em `~/.local/share/orbitz-widgets/invoices` (XDG), diretórios privados/arquivos0600 e IDs internos; nenhuma nova dependência externa. Exportar cópia ou excluir acervo não modifica o PDF externo original nem horas/perfis. Novas emissões apenas; não há varrimento de arquivos antigos.
+
+## Versões importadas e gov.br assistido — INV-04 (19/10/2026)
+
+Armazenamento separado de versões privadas vinculadas à invoice original; bytes/hashes preservados, sem substituir arquivos emitidos nem regenerar PDFs. Interface do histórico oferece cópia+portal, importação confirmada de versão e acesso ao VALIDAR. URLs oficiais fixas abertas via navegador, nenhuma chamada automática de upload/autenticação, nenhum segredo novo. Estado pendente sem motor criptográfico; nenhuma dependência de assinatura acrescentada. Compatibilidade, isolamento de corrupção e limites de exclusão continuam exigidos; reabrir agenda após aplicação, sem logout GNOME.
+
+INV-04 módulos: `invoice_signatures.py` isola importação/lista/cópia/exclusão de versões; `invoice_signatures_ui.py` isola assistente e diálogo. `invoice_history.py` mantém compatibilidade e exportação de bytes compartilhada; `invoice_history_ui.py` integra ações. Auditoria62 testes e seis hashes conferidos; instalação ainda pendente neste marco.
+
+## Orbitz Workspace — WSP-01
+
+`workspace_ui.py` compõe as áreas e resumo Hoje; `timesheet_context_ui.py` edita nome/referências; `workspace_backup_ui.py` conduz backup e restauração com parada segura da UI. Backend: `sheet_context.py` valida referências, `invoice_duplicates.py` compara horários/proveniência e `invoice_payments.py` guarda informação manual separada dos PDFs. `workspace_backup.py` aplica whitelist/manifesto/limites/locks estáveis/CAS e recuperação de falhas controladas; exclui credenciais/externos/Sticky Notes/GSettings. Contexto opcional em snapshots/PDF mantém leitura dos históricos antigos. Novos módulos Python acompanham o app pelo atualizador; nenhuma dependência externa nova.
+
+## Google Calendar e Calendly — CAL-01
+
+`calendar_http.py` limita HTTPS a hosts oficiais, recusa redirecionamentos e impõe limites/tempos; `google_oauth.py` recebe OAuth desktop em loopback com state/PKCE; `google_client.py` e `calendly_client.py` consultam calendários/eventos com paginação. `calendar_api_events.py` normaliza datas/recorrências/cancelamentos no contrato do cache existente. `calendar_accounts.py` coordena ciclo de conexão, renovação e remoção com locks; `credential_vault.ProviderVault` separa grants/PAT no Secret Service. `provider_connection_ui.py` mantém formulários e cancelamento com aceite da interface; `external_ui.py` integra as rotas. Sem nova dependência Python externa; libsecret/gi e vendor de calendários já existentes.
+
+Configuração real Google/PAT Calendly é externa ao repositório: [guia](docs/operations/calendar-integrations.md). Não há credencial compartilhada embutida, escrita remota de eventos ou servidor de webhooks. Teste de callback real pode exigir ambiente fora do sandbox; mocks e revisão não provam autorização com conta real.

@@ -81,7 +81,7 @@ def modify(request,path=DATA):
         fcntl.flock(lock,fcntl.LOCK_EX)
         data=read(path);action=request.get('action')
         if action=='get':return data
-        if action in ('timesheet','timesheet_delete','timesheet_undo','timesheet_start','timesheet_stop','sheet_create','sheet_archive','sheet_restore','sheet_delete','sheet_rename','sheet_reorder'):
+        if action in ('timesheet','timesheet_delete','timesheet_undo','timesheet_start','timesheet_stop','sheet_create','sheet_archive','sheet_restore','sheet_delete','sheet_rename','sheet_update','sheet_reorder'):
             timesheet.modify(data,request)
         elif action=='backup_restore':
             if request.get('expected')!=fingerprint(data):raise ValueError('Os dados mudaram desde a prévia. Selecione novamente a cópia antes de restaurar.')
@@ -92,7 +92,7 @@ def modify(request,path=DATA):
             write(restored,path);return restored
         elif action=='external_task':
             source=request.get('source')
-            if not isinstance(source,dict) or source.get('provider') not in ('icloud','ics') or not isinstance(source.get('key'),str) or not re.fullmatch('[0-9a-f]{64}',source['key']):
+            if not isinstance(source,dict) or source.get('provider') not in ('icloud','ics','google','calendly') or not isinstance(source.get('key'),str) or not re.fullmatch('[0-9a-f]{64}',source['key']):
                 raise ValueError('Origem de evento inválida.')
             for key in ('account_id','calendar_id','calendar_name','uid','occurrence','start','end'):
                 if not isinstance(source.get(key),str) or len(source[key])>2048:raise ValueError('Metadados do evento inválidos.')

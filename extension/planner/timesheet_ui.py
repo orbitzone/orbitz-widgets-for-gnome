@@ -6,6 +6,7 @@ gi.require_version('Gtk','3.0')
 from gi.repository import Gtk,GLib,Pango,Gdk
 import store
 import ui_state
+from workspace_ui import context_text
 import timesheet as model
 
 class Timesheet(Gtk.Box):
@@ -14,6 +15,9 @@ class Timesheet(Gtk.Box):
         self.readonly=readonly;self.persist_timer=0;self.inline_widgets={}
         self.sheet_id=sheet_id
         self.window=window;self.day=None;self.drafts={};self.editing=None;self.loading=False;self.dirty=False
+        self.context_label=Gtk.Label(xalign=0,wrap=True,selectable=True)
+        self.context_label.set_line_wrap_mode(Pango.WrapMode.WORD_CHAR)
+        self.context_label.set_max_width_chars(70);self.pack_start(self.context_label,False,False,0)
         self.period=Gtk.ComboBoxText()
         for key,title in [('day','Dia selecionado'),('week','Semana (segunda a domingo)'),('month','Mês selecionado')]:self.period.append(key,title)
         self.period.set_active_id(ui_state.get('period:'+sheet_id,'day'));self.period.connect('changed',self.period_changed)
@@ -21,7 +25,7 @@ class Timesheet(Gtk.Box):
         export=Gtk.Button(label='Exportar CSV');export.connect('clicked',self.export);toolbar.pack_end(export,False,False,0)
         archive=Gtk.Button.new_from_icon_name('folder-symbolic',Gtk.IconSize.BUTTON);archive.set_tooltip_text('Arquivar esta timesheet')
         archive.connect('clicked',lambda *_:self.window.archive_sheet(self));toolbar.pack_end(archive,False,False,0)
-        rename=Gtk.Button.new_from_icon_name('document-edit-symbolic',Gtk.IconSize.BUTTON);rename.set_tooltip_text('Renomear empresa');rename.connect('clicked',lambda *_:self.window.rename_sheet(self));toolbar.pack_end(rename,False,False,0)
+        rename=Gtk.Button.new_from_icon_name('document-edit-symbolic',Gtk.IconSize.BUTTON);rename.set_tooltip_text('Editar contexto da timesheet');rename.connect('clicked',lambda *_:self.window.rename_sheet(self));toolbar.pack_end(rename,False,False,0)
         self.timer_button=Gtk.Button(label='Iniciar atividade agora');self.timer_button.connect('clicked',self.timer_click);self.pack_start(self.timer_button,False,False,0)
         self.active_label=Gtk.Label(xalign=0,wrap=True);self.pack_start(self.active_label,False,False,0)
         self.summary=Gtk.Label(xalign=0,wrap=True)
@@ -138,6 +142,7 @@ class Timesheet(Gtk.Box):
         self.schedule_persist()
 
     def render(self):
+        self.context_label.set_text(context_text(self.sheet_data()))
         self.switch_day(self.window.day)
         self.editor_label.set_text(('Editar atividade' if self.editing else 'Nova atividade')+' · '+date.fromisoformat(self.day).strftime('%d/%m/%Y'))
         entries=self.sheet_data().get('timesheet',[])

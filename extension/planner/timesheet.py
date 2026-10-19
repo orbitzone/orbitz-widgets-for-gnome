@@ -3,6 +3,7 @@ import csv
 from datetime import date,datetime,timedelta
 import io
 import uuid
+import sheet_context
 
 class OverlapError(ValueError):pass
 
@@ -18,6 +19,7 @@ def clock_minutes(value):
 def activity_minutes(entry):return clock_minutes(entry['end'])-clock_minutes(entry['start'])
 
 def validate_activity(raw):
+    if not isinstance(raw,dict):raise ValueError('Registro de horas inválido.')
     text=raw.get('description');day=raw.get('date')
     if not isinstance(text,str) or not 0<len(text.strip())<=1000:raise ValueError('Informe uma descrição de até 1000 caracteres.')
     try:
@@ -139,6 +141,7 @@ def migrate(data):
         for entry in sheet['timesheet']+sheet.get('timesheet_trash',[]):
             if not isinstance(entry,dict) or not isinstance(entry.get('id'),str):raise ValueError('Registro de horas inválido.')
             validate_activity(entry)
+        if 'context' in sheet:sheet_context.validate(sheet['context'])
         active=sheet.get('timesheet_active')
         if active is not None:
             if not isinstance(active,dict) or not isinstance(active.get('description'),str):raise ValueError('Atividade em andamento inválida.')
@@ -153,20 +156,19 @@ def get_sheet(data,identity):
 def modify(data,request,now=None):
     migrate(data);action=request['action']
     if action=='sheet_create':
-        name=request.get('name','')
-        if not isinstance(name,str) or not 0<len(name.strip())<=80:raise ValueError('Informe um nome de empresa de até 80 caracteres.')
-        name=name.strip();name=name[:1].upper()+name[1:]
+        name=sheet_context.name(request.get('name',''))
+        context=sheet_context.validate(request.get('context'))
         if any(s['name'].casefold()==name.casefold() for s in data['timesheets']):
             raise ValueError('Já existe uma timesheet com esse nome. Consulte também as arquivadas.')
-        data['timesheets'].append(dict(id=str(uuid.uuid4()),name=name,archived=False,timesheet=[],timesheet_trash=[],timesheet_active=None))
+        data['timesheets'].append(dict(id=str(uuid.uuid4()),name=name,context=context,archived=False,timesheet=[],timesheet_trash=[],timesheet_active=None))
         return
     sheet=None if action=='sheet_reorder' else get_sheet(data,request.get('sheet_id','default'))
-    if action=='sheet_rename':
-        name=request.get('name','')
-        if not isinstance(name,str) or not 0<len(name.strip())<=80:raise ValueError('Informe um nome de até 80 caracteres.')
-        name=name.strip();name=name[:1].upper()+name[1:]
-        if any(s['id']!=sheet['id'] and s['name'].casefold()==name.casefold() for s in data['timesheets']):raise ValueError('Já existe uma empresa com esse nome.')
+    if action in ('sheet_rename','sheet_update'):
+        name=sheet_context.name(request.get('name',sheet['name']))
+        context=sheet_context.validate(request['context']) if 'context' in request else None
+        if any(s['id']!=sheet['id'] and s['name'].casefold()==name.casefold() for s in data['timesheets']):raise ValueError('Já existe uma timesheet com esse nome.')
         sheet['name']=name
+        if context is not None:sheet['context']=context
     elif action=='sheet_reorder':
         order=request.get('order')
         active=[s for s in data['timesheets'] if not s['archived']]

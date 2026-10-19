@@ -8,7 +8,12 @@ from gi.repository import Gtk,Gio,GLib,Pango
 import store
 import ui_state
 import planner_tools
+import planner_menu
 import task_timesheet_ui
+import workspace_ui
+import invoice_ui
+import invoice_history_ui
+import timesheet_context_ui
 from external_ui import ExternalCalendars
 from month_calendar import MonthCalendar
 from timesheet_ui import Timesheet
@@ -16,54 +21,114 @@ import timesheet as timesheet_model
 
 class CalendarWindow(Gtk.ApplicationWindow):
     def __init__(self,app):
-        super().__init__(application=app,title='Calendário e tarefas · Orbitz')
-        self.set_default_size(1040,1300);self.set_size_request(700,420)
+        super().__init__(application=app,title='Orbitz Workspace')
+        self.set_default_size(1100,1000);self.set_size_request(700,420)
         self.day=date.today().isoformat();self.data={'tasks':[]};self.timer=0;self.syncing_tabs=False
-        self.last_tab='tasks'
+        self.last_tab='today';self.selected_sheet_id=None;self.restoring=False
         outer=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=14,margin=20);self.add(outer)
         row=Gtk.Box(spacing=22);outer.pack_start(row,True,True,0)
         left=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=12);row.pack_start(left,False,False,0)
         self.calendar=MonthCalendar();left.pack_start(self.calendar,False,False,0)
-        today=Gtk.Button(label='Hoje');today.connect('clicked',lambda *_:self.select(date.today().isoformat()));left.pack_start(today,False,False,0)
+        today=Gtk.Button(label='Hoje');today.connect('clicked',lambda *_:self.show_area('today',reset_day=True));left.pack_start(today,False,False,0)
         self.calendar.connect('day-selected',self.day_selected)
         self.calendar.connect('month-changed',lambda *_:self.mark_days())
         right=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=12);row.pack_start(right,True,True,0)
-        self.heading=Gtk.Label(xalign=0);right.pack_start(self.heading,False,False,0)
-        tabs=Gtk.Notebook();self.tabs=tabs;tabs.set_scrollable(True);right.pack_start(tabs,True,True,0)
-        self.sheet_pages={}
-        plus=Gtk.Button(label='+');plus.set_tooltip_text('Nova timesheet por empresa');plus.connect('clicked',self.new_sheet)
-        tabs.set_action_widget(plus,Gtk.PackType.END);plus.show()
+        self.actions_menu=planner_menu.add_header(right,self)
+        self.workspace,self.context_label=workspace_ui.add_navigation(right,self)
         task_page=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=10)
-        tabs.append_page(task_page,Gtk.Label(label='Tarefas'))
         header=Gtk.Box(spacing=12);task_page.pack_start(header,False,False,0)
         add=Gtk.Button(label='+ Nova tarefa');add.connect('clicked',lambda *_:self.edit());header.pack_end(add,False,False,0)
         scroll=Gtk.ScrolledWindow();scroll.set_policy(Gtk.PolicyType.NEVER,Gtk.PolicyType.AUTOMATIC);task_page.pack_start(scroll,True,True,0)
         self.rows=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=10);scroll.add(self.rows)
+        events=Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        hours=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=8)
+        self.tabs=Gtk.Notebook();self.tabs.set_scrollable(True);hours.pack_start(self.tabs,True,True,0)
+        self.sheet_pages={}
+        plus=Gtk.Button(label='+ Nova timesheet');plus.connect('clicked',self.new_sheet)
+        hours.pack_start(plus,False,False,0);hours.reorder_child(plus,0);plus.show()
+        self.hours_empty=Gtk.Label(label='Crie uma timesheet para registrar horas.',xalign=0,wrap=True)
+        self.hours_empty.set_no_show_all(True)
+        hours.pack_start(self.hours_empty,False,False,0)
+        today_scroll=Gtk.ScrolledWindow();today_scroll.set_policy(Gtk.PolicyType.NEVER,Gtk.PolicyType.AUTOMATIC)
+        self.today_label=Gtk.Label(xalign=0,yalign=0,wrap=True,selectable=True)
+        self.today_label.set_line_wrap_mode(Pango.WrapMode.WORD_CHAR);self.today_label.set_max_width_chars(65)
+        today_scroll.add(self.today_label)
+        invoices=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=10)
+        generate=Gtk.Button(label='Gerar invoice / PDF…');generate.connect('clicked',lambda *_:invoice_ui.open_invoice(self))
+        invoices.pack_start(generate,False,False,0)
+        self.invoice_container=invoices;self.invoice_refresh=lambda:None
+        areas={'today':today_scroll,'events':events,'tasks':task_page,'hours':hours,'invoices':invoices}
+        for key,title in workspace_ui.AREAS:
+            areas[key].page_id=key;self.workspace.add_titled(areas[key],key,title)
+        footer=Gtk.Box(spacing=8);outer.pack_end(footer,False,False,0)
+        self.status=Gtk.Label(xalign=0,wrap=True);footer.pack_start(self.status,False,False,0)
+        try:
+            content,self.invoice_refresh=invoice_history_ui.create_history_content(self,self)
+            invoices.pack_start(content,True,True,0)
+        except Exception:
+            invoices.pack_start(Gtk.Label(label='Histórico indisponível. Reabra o Workspace para tentar novamente.',wrap=True),False,False,0)
         self.tabs.connect('switch-page',self.tab_switched)
         self.tabs.connect('page-reordered',self.tab_reordered)
         self.connect('delete-event',self.can_close)
-        footer=Gtk.Box(spacing=8);outer.pack_end(footer,False,False,0)
-        self.status=Gtk.Label(xalign=0,wrap=True);footer.pack_start(self.status,False,False,0)
-        self.archived_button=Gtk.Button.new_from_icon_name('folder-symbolic',Gtk.IconSize.MENU)
-        self.archived_button.set_relief(Gtk.ReliefStyle.NONE)
-        self.archived_button.get_accessible().set_name('Timesheets arquivadas')
-        self.archived_button.connect('clicked',self.open_archived);footer.pack_start(self.archived_button,False,False,0)
-        backups=Gtk.Button.new_from_icon_name('document-revert-symbolic',Gtk.IconSize.MENU)
-        backups.set_relief(Gtk.ReliefStyle.NONE);backups.set_tooltip_text('Restaurar backup')
-        backups.get_accessible().set_name('Restaurar backup')
-        backups.connect('clicked',lambda *_:planner_tools.open_backups(self));footer.pack_start(backups,False,False,0)
         self.connect('focus-in-event',lambda *_:self.refresh() and False)
         self.connect('destroy',self.cleanup)
-        self.external=ExternalCalendars(self,left,tabs)
-        self.refresh();self.show_all()
+        self.external=ExternalCalendars(self,left,workspace_ui.AgendaMount(events))
+        self.workspace.connect('notify::visible-child-name',self.area_changed)
+        self.refresh();self.show_all();self.show_area('today')
         self.timer=GLib.timeout_add_seconds(5,self.refresh)
+
+    def show_area(self,area,reset_day=False):
+        if self.restoring:return
+        self.workspace.set_visible_child_name(area)
+        if reset_day:self.select(date.today().isoformat())
+        self.area_changed()
+
+    def area_changed(self,*_):
+        if self.restoring:return
+        area=self.workspace.get_visible_child_name()
+        if area=='hours':
+            page=self.tabs.get_nth_page(self.tabs.get_current_page())
+            self.last_tab=getattr(page,'sheet_id','hours')
+            if hasattr(page,'sheet_id'):self.selected_sheet_id=page.sheet_id
+        else:self.last_tab=area
+        if area=='invoices':self.invoice_refresh()
+        self.update_context();self.update_today()
+
+    def focus_sheet(self,identity):
+        page=self.sheet_pages.get(identity)
+        if page is not None:
+            self.selected_sheet_id=identity;self.tabs.set_current_page(self.tabs.page_num(page));self.show_area('hours')
+
+    def update_context(self):
+        area=self.workspace.get_visible_child_name()
+        title=dict(workspace_ui.AREAS).get(area,'Workspace')
+        sheet=next((s for s in self.data.get('timesheets',[]) if s['id']==self.selected_sheet_id),None)
+        context=workspace_ui.context_text(sheet) if sheet and area in ('hours','invoices') else ''
+        if context and area=='invoices':context='Nova invoice: '+context
+        context_day=date.today() if area=='today' else date.fromisoformat(self.day)
+        self.context_label.set_text(title+' · '+context_day.strftime('%d/%m/%Y')+(' · '+context if context else ''))
+
+    def update_today(self):
+        events=[]
+        if hasattr(self,'external'):
+            try:
+                import apple_client
+                _context,cache=self.external.selected_cache()
+                events=[event for event in cache.get('events',[]) if apple_client.on_day(event,date.today())]
+            except Exception:pass
+        self.today_label.set_text(workspace_ui.today_text(self.data,events))
 
     def select(self,day):
         chosen=date.fromisoformat(day);self.day=day
-        self.calendar.select_month(chosen.month-1,chosen.year);self.calendar.select_day(chosen.day);self.render()
+        self.selecting_programmatically=True
+        try:self.calendar.select_month(chosen.month-1,chosen.year);self.calendar.select_day(chosen.day)
+        finally:self.selecting_programmatically=False
+        self.render()
 
     def day_selected(self,*_):
-        year,month,day=self.calendar.get_date();self.day=date(year,month+1,day).isoformat();self.render()
+        year,month,day=self.calendar.get_date();self.day=date(year,month+1,day).isoformat()
+        if not getattr(self,'selecting_programmatically',False) and self.workspace.get_visible_child_name()=='today':self.show_area('events')
+        self.render()
 
     def mark_days(self):
         self.calendar.clear_marks();year,month,_=self.calendar.get_date()
@@ -78,11 +143,13 @@ class CalendarWindow(Gtk.ApplicationWindow):
         else:self.calendar.finish_marks()
 
     def refresh(self):
+        if self.restoring:return False
         try:
             latest=store.modify({'action':'get'})
             if latest!=self.data:self.data=latest;self.render()
             else:
                 for page in self.sheet_pages.values():page.update_timer()
+            self.update_today()
             self.status.set_text('Tarefas e horas salvas neste computador')
         except Exception as error:self.status.set_text(str(error))
         return True
@@ -116,6 +183,7 @@ class CalendarWindow(Gtk.ApplicationWindow):
         self.rows.show_all()
         self.sync_sheets()
         if hasattr(self,'external'):self.external.render()
+        self.update_context();self.update_today()
 
     def register_task(self,task):
         task_timesheet_ui.register_task(self,task)
@@ -135,17 +203,22 @@ class CalendarWindow(Gtk.ApplicationWindow):
                 tab.set_tooltip_text('TS - '+sheet['name']);self.tabs.append_page(page,tab);self.tabs.set_tab_reorderable(page,True);page.show_all()
             page=self.sheet_pages[identity]
             label=self.tabs.get_tab_label(page);label.set_text('TS - '+sheet['name']);label.set_tooltip_text('TS - '+sheet['name']);label.set_width_chars(min(22,len('TS - '+sheet['name'])))
-            self.tabs.reorder_child(page,active.index(sheet)+2)
+            self.tabs.reorder_child(page,active.index(sheet))
             page.render()
-        count=sum(s['archived'] for s in self.data.get('timesheets',[]))
-        self.archived_button.set_tooltip_text(f'Timesheets arquivadas ({count})')
-        target=self.external.page if self.last_tab=='events' else self.sheet_pages.get(self.last_tab)
-        self.tabs.set_current_page(self.tabs.page_num(target) if target else 0)
+        planner_menu.update_archive_count(self)
+        identity=self.last_tab if self.last_tab in self.sheet_pages else self.selected_sheet_id
+        target=self.sheet_pages.get(identity)
+        if target:self.tabs.set_current_page(self.tabs.page_num(target))
+        elif active:self.selected_sheet_id=active[0]['id']
+        else:self.selected_sheet_id=None
+        self.hours_empty.set_visible(not active)
         self.syncing_tabs=False
 
     def tab_switched(self,tabs,page,index):
         if self.syncing_tabs:return
-        self.last_tab=getattr(page,'sheet_id',getattr(page,'page_id','tasks'))
+        self.selected_sheet_id=page.sheet_id
+        if self.workspace.get_visible_child_name()=='hours':self.last_tab=page.sheet_id
+        self.update_context()
         try:ui_state.set('active-tab',self.last_tab)
         except Exception as error:self.status.set_text(str(error))
 
@@ -155,15 +228,7 @@ class CalendarWindow(Gtk.ApplicationWindow):
         self.change({'action':'sheet_reorder','order':order})
 
     def rename_sheet(self,page):
-        dialog=Gtk.Dialog(title='Renomear empresa',transient_for=self,modal=True)
-        dialog.add_buttons('Cancelar',Gtk.ResponseType.CANCEL,'Salvar',Gtk.ResponseType.OK)
-        field=Gtk.Entry(text=page.sheet_data()['name']);field.set_max_length(80);dialog.get_content_area().add(field)
-        error=Gtk.Label(xalign=0);dialog.get_content_area().add(error);dialog.show_all()
-        while dialog.run()==Gtk.ResponseType.OK:
-            try:
-                self.data=store.modify({'action':'sheet_rename','sheet_id':page.sheet_id,'name':field.get_text()});self.render();break
-            except Exception as failure:error.set_text(str(failure))
-        dialog.destroy()
+        timesheet_context_ui.edit_context(self,page.sheet_data())
 
     def open_task_records(self,task):
         self.refresh()
@@ -180,31 +245,19 @@ class CalendarWindow(Gtk.ApplicationWindow):
             sheet=linked[response-1];entry=next(e for e in sheet['timesheet'] if e.get('source_task_id')==task['id'])
             self.select(entry['date'])
             if sheet['archived']:planner_tools.view_archive(self,sheet['id'])
-            else:self.tabs.set_current_page(self.tabs.page_num(self.sheet_pages[sheet['id']]))
+            else:self.focus_sheet(sheet['id'])
 
     def open_source_task(self,identity):
         self.refresh();task=next((t for t in self.data['tasks'] if t['id']==identity),None)
         if task is None:self.status.set_text('A tarefa original foi removida. O registro de horas continua preservado.');return
-        self.select(task['date']);self.tabs.set_current_page(0);self.edit(task)
+        self.select(task['date']);self.show_area('tasks');self.edit(task)
 
     def can_close(self,*_):
+        if self.restoring:return False
         return any(page.can_close() for page in self.sheet_pages.values() if page.has_draft())
 
     def new_sheet(self,*_):
-        dialog=Gtk.Dialog(title='Nova timesheet',transient_for=self,modal=True)
-        dialog.add_buttons('Cancelar',Gtk.ResponseType.CANCEL,'Criar',Gtk.ResponseType.OK)
-        box=dialog.get_content_area();box.set_spacing(10);box.set_margin_start(18);box.set_margin_end(18)
-        box.add(Gtk.Label(label='Empresa',xalign=0));field=Gtk.Entry();field.set_max_length(80);field.set_placeholder_text('Ex.: viewdeck');box.add(field)
-        error=Gtk.Label(xalign=0,wrap=True);box.add(error);dialog.set_default_response(Gtk.ResponseType.OK);field.set_activates_default(True)
-        dialog.show_all();field.grab_focus()
-        while dialog.run()==Gtk.ResponseType.OK:
-            try:
-                self.data=store.modify({'action':'sheet_create','name':field.get_text()});self.render()
-                created=self.data['timesheets'][-1]
-                self.tabs.set_current_page(self.tabs.page_num(self.sheet_pages[created['id']]))
-                self.status.set_text('Timesheet criada e salva');break
-            except Exception as failure:error.set_text(str(failure))
-        dialog.destroy()
+        timesheet_context_ui.edit_context(self)
 
     def archive_sheet(self,page):
         sheet=page.sheet_data()
@@ -243,7 +296,7 @@ class CalendarWindow(Gtk.ApplicationWindow):
             try:
                 self.data=store.modify({'action':'sheet_delete' if delete else 'sheet_restore','sheet_id':sheet['id']});self.render();populate();error.set_text('')
                 if delete:ui_state.set('draft:'+sheet['id'],None)
-                if not delete:self.tabs.set_current_page(self.tabs.page_num(self.sheet_pages[sheet['id']]))
+                if not delete:self.focus_sheet(sheet['id'])
             except Exception as failure:error.set_text(str(failure))
         populate();dialog.show_all();dialog.run();dialog.destroy()
 
@@ -300,6 +353,15 @@ class CalendarWindow(Gtk.ApplicationWindow):
         else:persist()
         dialog.destroy()
 
+    def flush_workspace_drafts(self):
+        if not workspace_ui.flush_drafts(self,GLib.source_remove):
+            self.status.set_text('Salve ou resolva os rascunhos antes de continuar com o backup.')
+            return False
+        return True
+
+    def quiesce_for_restore(self):
+        workspace_ui.quiesce(self,GLib.source_remove)
+
     def cleanup(self,*_):
         if hasattr(self,'external'):self.external.cleanup()
         if self.timer:GLib.source_remove(self.timer);self.timer=0
@@ -310,11 +372,12 @@ class CalendarApp(Gtk.Application):
         self.connect('command-line',self.command)
     def command(self,app,command):
         window=self.get_active_window() or CalendarWindow(self)
-        window.last_tab='tasks'
-        window.tabs.set_current_page(0)
+        initial=ui_state.get('workspace-start-area','today')
+        if initial not in dict(workspace_ui.AREAS):initial='today'
+        window.show_area(initial,reset_day=initial=='today')
         arguments=command.get_arguments()
         if len(arguments)>1:
-            try:window.select(date.fromisoformat(arguments[1]).isoformat())
+            try:window.select(date.fromisoformat(arguments[1]).isoformat());window.show_area('tasks')
             except ValueError:pass
         window.present();return 0
 

@@ -4,6 +4,10 @@ Registro inicial: 17/10/2026; estado consolidado atualizado em 18/10/2026. A tab
 
 ## Resumo atual
 
+- OPS-01 (19/10/2026): fluxo econômico vigente em `docs/agents/workflow.md`; fila consolidada em `docs/sprint-backlog.md`. Esta política prevalece sobre acionamentos por tarefa descritos nos marcos históricos abaixo.
+
+- INV-01: menu e invoice PDF PT/EN implementados; 17 testes novos e oito regressões planner aprovados na auditoria dirigida. QA visual de quatro páginas sintéticas aprovada; aplicação local e teste GTK real pendentes.
+
 - RF-01: implementação e auditorias locais concluídas, validação gráfica/interativa integral pendente; não declarar conclusão integral.
 - B-01: falhas históricas de testes resolvidas e verificadas; baseline corrigida 11/14 JS, suíte atual 17/17 Node aprovada.
 - DEP-01: atualização local e rollback implementados/auditados; instalação conferida, plano zero arquivos e zero comandos pendentes. Não equivale a pacote de instalação limpa.
@@ -156,3 +160,33 @@ BRAND-01 — implementação/auditoria concluídas no escopo local: SVG original
 ### Consolidação antes do commit da identidade/marca
 
 Usuário relatou funcionamento aparente após instalar a marca. Supervisor conferiu plano: zero arquivos/comandos pendentes, portanto SVG/meta/About coincidem com fontes. Revisão curta atual: teste Node de identidade, GJS 20 pares, schemas strict e 9 testes do atualizador passaram; diff check limpo. Preparo/ativação Orbitz já confirmados anteriormente, legado desativado/preservado. Validação manual superficial de About/marca não encerra RAM/EXT nem certifica toda interface. Sem repetir suíte global/auditorias suficientes por ausência de mudança que justifique.
+
+## INV-01 — Menu superior e invoice de timesheet
+
+Confirmado pelo usuário em18/10/2026; em andamento. Frontend possui calendar-app.py, novo menu/invoice_ui e testes de UI; backend possui domínio/perfil/PDF e testes respectivos; UX via frontend define critérios visuais; supervisor mantém documentação e executa QA PDFPTEN; auditor revisa cálculos/dados/saídas. Aceite RC-15. Sem alterar histórico da agenda nem dadosreais nesta implementação, sem emissãoeletrônicaoficial. Instalação/validação real ficam após estado estável e auditoria.
+
+INV-01 — auditoria independente concluída sem impeditivo reproduzido no escopo: `docs/audits/2026-10-18-invoice-audit.md`. Supervisor conferiu os oito hashes do alvo e o plano de seis arquivos/zero comandos. Código apto para atualização local; aplicação e teste GTK real ainda pendentes. Reabrir agenda após aplicação, sem logout.
+
+## INV-02 — Períodos da invoice por calendário único
+
+19/10/2026, confirmado/em implementação: três modos (mês civil, histórico, específico), substituindo dois campos ISO digitados por seleção visual de início/fim em um calendário. Frontend possui módulo/UI/testes; UX via frontend; auditor valida alvo estável; supervisor documentação. Aceite RC-16. Preservar domínio/perfis/PDF; sem instalação automática ou reinício GNOME.
+
+INV-02 — resultado consolidado em 19/10/2026: auditoria dirigida aprovou 27 testes (10 de período e 17 regressões invoice), três sintaxes e diff-check, sem impeditivo reproduzido. Supervisor conferiu os três hashes do alvo. Relatório `docs/audits/2026-10-19-invoice-period-audit.md`; revisão UX em `docs/design/2026-10-19-invoice-period-review.md`, achado de invalidação tratado. Funcional local validado; visual/teclado/AT GTK real pendentes. Plano de dois arquivos/zero comandos, aplicação ainda necessária; encerrar/reabrir agenda, sem logout GNOME.
+
+## INV-03 — Histórico de invoices
+
+19/10/2026, confirmado/em implementação. Menu com consulta/download/exclusão de cópias locais privadas, por empresa da timesheet/cliente e ano/mês de emissão. Critérios RC-18; metadados e PDF preservados à parte de dados vivos. Backend armazenamento/segurança; frontend menu/diálogo/integração; UX via frontend; supervisor documentação; auditor após estabilidade. Sem importação automática de PDFs anteriores, alteração da instalação ou publicação.
+
+INV-03 — observações UX opcionais: uniformizar separador decimal da lista/detalhes com a UI em português e avaliar um discriminador visual curto para timesheets de mesmo nome (identidades já ficam separadas). Não há falha de exclusão errada demonstrada; propostas não bloqueiam o histórico. Texto para acervo vazio versus totalmente ilegível foi corrigido. Teste GTK/AT real segue pendente.
+
+INV-03 — conclusão local em 19/10/2026: auditoria independente aprovou 47 testes de invoices (incluindo 11 histórico backend e nove histórico frontend), seis sintaxes e diff-check. IH-A01/IH-A02 resolvidos e reverificados; nenhum impeditivo remanescente no escopo. Supervisor conferiu os seis hashes finais. Relatório `docs/audits/2026-10-19-invoice-history-audit.md`; revisão UX estática separada. Funcional local e integridade aprovados; GTK/AT/chooser/confirmações reais pendentes. Listagem metadata/stat e hash nas ações, sem benchmark. Plano de quatro arquivos/zero comandos, ainda precisa aplicação local. Após ATUALIZACAO_OK, encerrar/reabrir agenda, sem logout; testar gerar uma invoice sintética, consultar/salvar cópia/cancelar exclusão e excluir somente registro de teste. PDFs antigos não importados automaticamente. Nenhuma instalação, commit ou push executado nesta etapa.
+
+## INV-04 — Assinatura assistida gov.br
+
+19/10/2026, confirmado/em implementação. Copy→portal oficial→login/assinatura/download manuais→importar versão pendente, original preservado, múltiplas versões consultáveis/baixáveis e acesso ao VALIDAR. RC-19/D-27; sem API/OAuth/validação criptográfica automática. Backend armazenamento compatível; frontend histórico/ações/helper, UX via frontend; supervisor documentação e auditor após estabilidade. Sem implantação automática, credenciais ou documentos reais.
+
+INV-04 — conclusão local em 19/10/2026: auditoria independente aprovou 62 testes de invoices (15 novos), seis sintaxes e diff-check, sem impeditivo reproduzido. Supervisor conferiu seis hashes finais; relatório `docs/audits/2026-10-19-invoice-signatures-audit.md`. Original v1 e versões privadas preservados, cancelamentos/URLs fixas/vínculos e estado pendente verificados com dados temporários. Não houve assinatura, validação criptográfica, acesso real a portais/contas ou dados pessoais. GTK/AT/browser real e ações manuais nos serviços permanecem pendentes. Plano quatro arquivos/zero comandos; aplicação ainda necessária, seguida de fechar/reabrir agenda, sem logout. Teste manual: histórico→selecionar invoice→Assinar com gov.br→salvar cópia/portal; depois importar PDF escolhido com confirmação e consultar Original e versões/VALIDAR. Estado importado permanece pendente. Nenhuma instalação, commit ou push executado nesta entrega.
+
+## OPS-01 — Fluxo econômico de agentes
+
+Concluído em documentação em 19/10/2026: auditoria média no fechamento de sprint, alto risco antes da operação, UX sob demanda, testes proporcionais com o responsável, briefs/relatórios curtos e contexto ativo compacto. Histórico dos contratos preservado; fila de próximas revisões criada sem disparar nova sprint/auditoria. Sem alteração de código, instalação ou reinício. Economia de tokens não medida; avaliar retrabalho e necessidade real de revisões nos próximos lotes, sem automação de acompanhamento.

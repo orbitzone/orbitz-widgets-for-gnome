@@ -64,7 +64,7 @@ def register_task(window,task):
                 if answer!=Gtk.ResponseType.YES:continue
                 latest=store.modify(dict(payload,allow_overlap=True))
             window.data=latest;window.render()
-            page=window.sheet_pages[payload['sheet_id']];window.tabs.set_current_page(window.tabs.page_num(page))
+            window.focus_sheet(payload['sheet_id'])
             window.status.set_text('Tarefa registrada em '+target.get_active_text()+' · salvo e com backup');break
         except Exception as failure:error.set_text(str(failure))
     dialog.destroy()

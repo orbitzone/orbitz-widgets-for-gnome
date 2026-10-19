@@ -10,11 +10,12 @@ import external_store as remote
 import store,ui_state
 import ics_client
 from calendar_selector import CalendarSelector,below
+import provider_connection_ui
 
 class ExternalCalendars:
     def __init__(self,window,left,tabs):
         self.executor=ThreadPoolExecutor(max_workers=3)
-        self.window=window;self.alive=True;self.busy=set();self.cancel_events=[];self.accounts=[];self.loading=False
+        self.window=window;self.alive=True;self.busy=set();self.cancel_events=[];self.accounts=[];self.loading=False;self.sync_cancels={}
         self.controls=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=6)
         left.pack_start(self.controls,False,False,0);left.reorder_child(self.controls,0)
         self.selector=CalendarSelector()
@@ -25,13 +26,15 @@ class ExternalCalendars:
         connect_content.pack_end(Gtk.Image.new_from_icon_name('pan-down-symbolic',Gtk.IconSize.MENU),False,False,0)
         connect.add(connect_content);menu_row.pack_start(connect,True,True,0)
         menu,menu_rows=below(connect)
-        for label,callback in [('Apple / iCloud…',self.connect_apple),('Assinatura por link (.ics)…',self.connect_subscription),('Gerenciar conexões…',self.manage)]:
+        for label,callback in [('Apple / iCloud…',self.connect_apple),('Google Calendar…',self.connect_google),('Calendly…',self.connect_calendly),('Assinatura por link (.ics)…',self.connect_subscription),('Gerenciar conexões…',self.manage)]:
             item=Gtk.Button(label=label);item.set_relief(Gtk.ReliefStyle.NONE)
             def activate(_button,action=callback):menu.popdown();action()
             item.connect('clicked',activate);menu_rows.pack_start(item,False,False,0)
         menu_rows.show_all()
         refresh=Gtk.Button.new_from_icon_name('view-refresh-symbolic',Gtk.IconSize.MENU);refresh.set_tooltip_text('Atualizar eventos do calendário selecionado')
         refresh.connect('clicked',lambda *_:self.sync(True));menu_row.pack_end(refresh,False,False,0)
+        cancel=Gtk.Button.new_from_icon_name('process-stop-symbolic',Gtk.IconSize.MENU);cancel.set_tooltip_text('Cancelar sincronização em andamento')
+        cancel.get_accessible().set_name('Cancelar sincronização');cancel.connect('clicked',self.cancel_sync);menu_row.pack_end(cancel,False,False,0)
         self.status=Gtk.Label(xalign=0,wrap=True);self.status.set_max_width_chars(28);self.controls.pack_start(self.status,False,False,0)
         self.page=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=10,margin=12);self.page.page_id='events'
         self.title=Gtk.Label(xalign=0,wrap=True);self.page.pack_start(self.title,False,False,0)
@@ -104,6 +107,18 @@ class ExternalCalendars:
                 context=(account,calendar,month)
                 if context!=selected:self.sync_context(context,force)
 
+    def connect_google(self,*_):
+        provider_connection_ui.connect_provider(self,'google')
+
+    def connect_calendly(self,*_):
+        provider_connection_ui.connect_provider(self,'calendly')
+
+    def cancel_sync(self,*_,account_id=None):
+        matched=0
+        for owner,cancel in list(self.sync_cancels.values()):
+            if account_id is None or owner==account_id:cancel.set();matched+=1
+        if account_id is None:self.status.set_text('Interrompendo sincronização; último cache disponível mantido.' if matched else 'Nenhuma sincronização em andamento.')
+
     def sync_context(self,context,force=False):
         if not self.alive:return
         account,calendar,month=context;key=remote.cache_key(account['id'],calendar['id'],month)
@@ -117,16 +132,24 @@ class ExternalCalendars:
             return
         if key in self.busy:return
         self.busy.add(key)
+        cancelled=threading.Event();self.cancel_events.append(cancelled);self.sync_cancels[key]=(account['id'],cancelled)
         if self.context()==context:self.status.set_text('Atualizando eventos…');self.render()
         def work():
-            if account['provider']=='ics':events=ics_client.events(calendar['url'],account['id'],calendar['id'],month)
+            if account['provider'] in ('google','calendly'):
+                import calendar_accounts
+                events=calendar_accounts.events(account,calendar,month,cancel_event=cancelled)
+            elif account['provider']=='ics':events=ics_client.events(calendar['url'],account['id'],calendar['id'],month)
             else:
                 password=remote.Vault().get(account['id'])
                 try:events=apple.AppleClient(account['email'],password).events(calendar,account['id'],month)
                 finally:password=None
-            remote.put_cache(account['id'],calendar,month,events,datetime.now(timezone.utc).isoformat())
+            if not cancelled.is_set() and self.alive:remote.put_cache(account['id'],calendar,month,events,datetime.now(timezone.utc).isoformat())
         def done(result,error):
-            self.busy.discard(key)
+            self.busy.discard(key);self.sync_cancels.pop(key,None)
+            if cancelled in self.cancel_events:self.cancel_events.remove(cancelled)
+            if cancelled.is_set():
+                if self.context()==context:self.status.set_text('Sincronização interrompida; último cache disponível mantido.')
+                return
             if self.context()!=context:self.window.mark_days();return
             if error:self.status.set_text(str(error)+'\nOs eventos já baixados foram preservados.')
             else:
@@ -213,7 +236,7 @@ class ExternalCalendars:
                 if not raw.isdigit():raise ValueError('Informe um número inteiro de minutos.')
                 source=dict(key=event['key'],provider=account['provider'],account_id=account['id'],calendar_id=calendar['id'],calendar_name=self.source_label(account,calendar),uid=event['uid'],occurrence=event['occurrence'],start=event['start'],end=event['end'],all_day=event['all_day'])
                 payload=dict(action='external_task',source=source,text=fields['text'].get_text(),date=fields['date'].get_text().strip(),time=fields['time'].get_text().strip(),reminder=int(raw))
-                self.window.data=store.modify(payload);self.window.select(payload['date']);self.window.tabs.set_current_page(0);self.window.status.set_text('Tarefa criada a partir do evento · salva localmente');break
+                self.window.data=store.modify(payload);self.window.select(payload['date']);self.window.show_area('tasks');self.window.status.set_text('Tarefa criada a partir do evento · salva localmente');break
             except Exception as failure:error.set_text(str(failure))
         dialog.destroy()
 
@@ -257,7 +280,7 @@ class ExternalCalendars:
         dialog.destroy()
         if success[0]:
             account=success[0];self.populate(account['id']+'|'+account['calendars'][0]['id']);self.selection_changed()
-            self.window.tabs.set_current_page(self.window.tabs.page_num(self.page))
+            self.window.show_area('events')
 
     def connect_apple(self,*_):
         dialog=Gtk.Dialog(title='Conectar Apple / iCloud',transient_for=self.window,modal=True)
@@ -309,7 +332,16 @@ class ExternalCalendars:
         fields['password'].set_text('');dialog.destroy()
         if success[0]:
             account=success[0];self.populate(account['id']+'|'+account['calendars'][0]['id']);self.selection_changed()
-            self.window.tabs.set_current_page(self.window.tabs.page_num(self.page))
+            self.window.show_area('events')
+
+    def disconnect_account(self,account):
+        self.cancel_sync(account_id=account['id'])
+        if account['provider'] in ('google','calendly'):
+            import calendar_accounts
+            calendar_accounts.disconnect(account)
+        else:
+            if account['provider']=='icloud':remote.Vault().delete(account['id'])
+            remote.remove_account(account['id'])
 
     def manage(self,*_):
         dialog=Gtk.Dialog(title='Conexões de calendário',transient_for=self.window,modal=True)
@@ -321,7 +353,8 @@ class ExternalCalendars:
             accounts=remote.read()['accounts']
             for account in accounts:
                 row=Gtk.Box(spacing=10);box.add(row)
-                title=Gtk.Label(label=account['label']+'\n'+account.get('email','Assinatura por link'),xalign=0);row.pack_start(title,True,True,0)
+                title=Gtk.Label(label=account['label']+'\n'+account.get('email',{'google':'Google Calendar','calendly':'Calendly','ics':'Assinatura por link'}.get(account['provider'],'iCloud')),xalign=0,wrap=True)
+                title.set_line_wrap_mode(Pango.WrapMode.WORD_CHAR);title.set_max_width_chars(40);row.pack_start(title,True,True,0)
                 remove=Gtk.Button(label='Desconectar');remove.connect('clicked',lambda _,a=account:disconnect(a));row.pack_end(remove,False,False,0)
             if not accounts:box.add(Gtk.Label(label='Nenhuma conta conectada.',xalign=0))
             box.show_all()
@@ -332,9 +365,7 @@ class ExternalCalendars:
             if answer!=Gtk.ResponseType.OK:return
             status.set_text('Desconectando…')
             def work():
-                
-                if account['provider']=='icloud':remote.Vault().delete(account['id'])
-                remote.remove_account(account['id'])
+                self.disconnect_account(account)
             def done(result,error):
                 if not dialog.get_visible():return
                 status.set_text(str(error) if error else 'Conexão removida.');self.populate();self.selection_changed();populate()

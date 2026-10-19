@@ -41,14 +41,14 @@ async function request(payload){
     if(epoch===generation&&root){data=result.data;updateAlerts();}
     return result.data;
 }
-function problem(error){Main.notifyError('Agenda',String(error.message||error));}
+function problem(error){Main.notifyError('Orbitz Workspace',String(error.message||error));}
 var openCalendar=function(initialDay=null){
     if(!root)return;
     try{
         const argv=['/usr/bin/env','GDK_BACKEND=x11','/usr/bin/python3',GLib.build_filenamev([root,'planner','calendar-app.py'])];
         if(typeof initialDay==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(initialDay))argv.push(initialDay);
         const proc=Gio.Subprocess.new(argv,Gio.SubprocessFlags.NONE);
-        proc.wait_async(null,(process,result)=>{try{process.wait_finish(result);if(!process.get_successful())problem(Error('Não foi possível abrir o calendário.'));}catch(error){logError(error,'Calendário');}});
+        proc.wait_async(null,(process,result)=>{try{process.wait_finish(result);if(!process.get_successful())problem(Error('Não foi possível abrir o Orbitz Workspace.'));}catch(error){logError(error,'Orbitz Workspace');}});
     }catch(error){problem(error);}
 };
 function sound(){

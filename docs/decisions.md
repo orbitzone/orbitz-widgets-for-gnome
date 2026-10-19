@@ -81,3 +81,35 @@ Supervisor conferiu relatório frontend/backend/auditoria ID01. Identidade próp
 ## D-23 — Identidade visual própria e versão exibida
 
 Pedido explícito de logo nova e versão 1.0. Implementação em vetor SVG nativo para escala/integrar GNOME, com origem gráfica própria do Orbitz; não reutilizar o relógio da base como marca. Version-name1.0 para apresentação com version inteiro 1 preservado. Preferências serão abertas pelo UUID Orbitz para evitar confusão com janela/página da instalação legada ainda preservada para rollback. Atribuições e licença não serão apagadas; ficam na seção própria discreta.
+
+## D-24 — Invoice local e critérios monetários
+
+Pedido do usuário confirmado para PDF de serviços a partir das horas da timesheet, com partes/CPF-CNPJ/endereço cliente e PT/EN. Decisões técnicas: minutos inteiros e Decimal, arredondamento final centesimal, perfil emitente global e cliente/taxa/moeda por sheet, persistência privada separada. Todo histórico explícito inicialmente e período opcional, BRL padrão editável independente do idioma. Não incluir cronômetro em andamento/lixeira nem marcar automaticamente registros como faturados. O PDF será identificado como fatura/invoice de serviços, sem integração fiscal eletrônica ou cálculo tributário. ReportLab disponível nativamente é usado para paginação/PDF; supervisor aplica skillPDF para QA visual das amostras sintéticas.
+
+## D-25 — Mês civil e intervalo inclusivo no calendário da invoice
+
+19/10/2026. Pedido de três modos e calendário único. Decisão técnica: “1 mês” significa mês civil escolhido, não últimos 30 dias; “histórico” preserva default anterior. Modo específico usa dois cliques para início/fim inclusivos, ordenados se necessário, e permite navegar entre meses/anos sem selecionar automaticamente. Resumo e destaque evitam ambiguidade; incompleto impede revisão. Contrato existente start/end ISO alimenta domínio sem migração ou alteração monetária. Componente da agenda preservado, pois sua navegação atual também emite seleção de dia.
+
+## D-26 — Arquivo local imutável de invoices e limites de exclusão
+
+19/10/2026. Histórico mantém cópia exata dos PDFs gerados a partir da atualização, mais snapshot dos dados de emissão. Empresa significa timesheet e a competência de organização usa mês/ano de emissão, com período dos serviços separado e explícito. IDs internos distinguem registros e clientes homônimos, sem nomes/documentos em caminhos. Download exporta cópia; excluir atua exclusivamente no acervo gerenciado após confirmação, preservando exportações externas e dados de trabalho. Erro após salvar PDF externo gera aviso parcial e não equivale a falha retroativa da exportação. Sem importação/varrimento de arquivos antigos por inferência.
+
+## D-27 — Portais externos e honestidade do estado de assinatura
+
+19/10/2026. Usuário aprovou integração assistida após consulta oficial: API GOV.BR não disponível para este aplicativo privado. Abrir URLs oficiais fixas após ações explícitas; usuário controla login, upload e download. Importação guarda nova versão privada vinculada sem substituir original; hash associa bytes e registro, não autentica assinatura/conteúdo. Estado permanece pendente, mesmo após abrir VALIDAR ou confirmação manual. Sem bibliotecas novas de assinatura, validação criptográfica, tokens ou automação de navegador nesta etapa. Não alterar/regerar PDF assinado.
+
+D-27 — apresentação de versões: decisão técnica do supervisor aceita o diálogo separado “Original e versões…” acessível pela invoice no histórico, em vez de expandir cada versão na árvore principal. O pedido aprovado não exige árvore inline; essa escolha evita ler versões de todo o acervo ao recarregar a listagem. A linha principal identifica a invoice, e “Original” identifica o PDF dentro da tela de versões. Não se afirma equivalência visual por testes de lógica.
+
+## D-28 — Revisão por lote e risco, UX sob demanda
+
+19/10/2026. Usuário apontou custo excessivo do fluxo e pouco retorno de Design/UX. Supervisor substitui revisão independente por incremento por fila de sprint para risco médio, mantendo testes locais e revisão antecipada para operações de alto risco. IH-A01/IH-A02 foram defeitos reais encontrados nas auditorias de histórico; isso fundamenta preservar o gate de dados/exclusão, sem transformar rótulos/ajustes visuais em auditorias. UX passa a consultoria focada, frontend aplica padrões básicos. Contratos/contexto ativos compactados, versões anteriores preservadas em `docs/archive/2026-10-19-agent-workflow/`. Sem calendário automático, novos agentes ou alteração de modelos. Referência única: `docs/agents/workflow.md`.
+
+## D-29 — Espaço de trabalho e referências da timesheet
+
+19/10/2026, todas recomendações aceitas pelo usuário. O aplicativo da agenda passa a Orbitz Workspace (sem mudar UUID/schema da extensão). Cliente/contratante, contrato/projeto e departamento/centro de custo são referências opcionais de trabalho, separadas do nome identificador e do destinatário fiscal da invoice. Compatibilidade sem descarte/migração destrutiva. Nova navegação e Hoje reutilizam componentes; duplicidade é aviso, pagamento é informação manual e assinatura continua pendente até verificação externa real. Backup/restauração cobrem somente os dados listados de Workspace, preservando cofre/externos/outros aplicativos. Lote WSP-01 recebe uma auditoria final porque contém dados/backup, sem acionar UX por hábito.
+
+## D-30 — Integrações de calendário com acesso de consulta (19/10/2026)
+
+RC-22/CAL-01: Google usa OAuth de aplicativo desktop com navegador, state e PKCE; requer cliente OAuth real com API Calendar habilitada. Calendly inicia com PAT pessoal adequado à instalação privada, não com um token compartilhado embutido; uma oferta pública com OAuth próprio é escopo futuro. Consulta periódica/manual em vez de webhooks/servidor público. Persistir segredos exclusivamente no Secret Service, sem modificar calendários remotos nem vincular a existência das tarefas/horas à conexão. Implementação e mocks não provam autorização real.
+
+Referências oficiais consultadas: [Google OAuth desktop](https://developers.google.com/identity/protocols/oauth2/native-app), [escopos Calendar](https://developers.google.com/workspace/calendar/api/auth), [PAT Calendly](https://developer.calendly.com/docs/authentication/how-to-authenticate-with-personal-access-tokens), [escopos Calendly](https://developer.calendly.com/docs/authentication/scopes).
