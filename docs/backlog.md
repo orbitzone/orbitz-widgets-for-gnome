@@ -16,6 +16,10 @@ Registro inicial: 17/10/2026; estado atual revisado em 20/10/2026. A tabela orig
 - BUG-02: diferenças históricas de dispositivos externos e alertas permanecem para análise própria, sem mudança semântica nesta entrega.
 - B-02/B-03: há atualizador local e comandos migrados; distribuição/reinstalação limpa e consolidação integral ainda não validadas.
 - CAL-06/07: o usuário confirmou que Google Calendar e Brasil · Datas comemorativas funcionaram após a atualização. Testes dirigidos registrados: CAL-06 18; CAL-07 31 mais regressão de dados externos. Calendly com conta real permanece sem confirmação; revisão independente média segue para fechamento da sprint.
+- FX-01 e I18N-01: novos pedidos registrados em 20/10/2026, ainda sem prioridade de sprint. Widgets gêmeos de cotação/conversão BRL/moeda fiduciária e USD/cripto (moeda de destino selecionável e persistida pelo usuário) aguardam definição das fontes, cobertura dos catálogos e atualização; idioma PT-BR/EN-US aguarda inventário das interfaces e decisão sobre ativação imediata.
+- STICKY-01: ajuste visual solicitado em 20/10/2026 para remover a linha horizontal no fim do texto da nota e ocultar a barra de rolagem quando ociosa; preservar rolagem e redimensionamento. Ainda sem prioridade de sprint.
+- WID-01: unificar os widgets separados do desktop em um único widget chamado Workspace, conforme pedido de 20/10/2026. Inventário do escopo e compatibilidade de configurações pendentes; não priorizado para sprint.
+- WID-02: adicionar relógio mundial ao relógio atual; usuário escolhe um fuso horário e vê a hora local correspondente, útil para trabalho remoto. Persistência e mudanças de horário de verão devem ser tratadas; ainda sem prioridade de sprint.
 - INV-01–04/WSP-01: GTK real de histórico/versões, chooser e fluxo de assinatura continua pendente; a auditoria funcional/PDF sintético não substitui esse teste.
 - Commit `324ecce` enviado a `origin/main`; a árvore estava limpa na última verificação. Não houve nova suíte global nesta revisão documental.
 
@@ -224,3 +228,37 @@ RC-29: Brasil·Datas comemorativas permanente em Gerenciar, toggle persistente, 
 CAL-07 fontes e testes locais concluídos:31 testes dirigidos e regressão externa. Em 20/10/2026 o usuário confirmou que a fonte Datas comemorativas funcionou na instalação atual. A persistência do ciclo desativar→reabrir→reativar não foi explicitamente confirmada. Revisão média consolidada continua pendente no fechamento da sprint; reusar os testes documentados e não repetir a suíte sem mudança/falha concreta.
 
 Proposta futura (fora CAL-07): guarda enabled em consumidores de alertas para fontes desativáveis que tenham eventos com horário. A fonte pública brasileira atual é de dia inteiro e já não produz alertas temporizados; não ampliar esta entrega nem exigir reload GNOME por hipótese.
+
+## FX-01 — Widgets gêmeos de conversão BRL/moeda fiduciária e USD/cripto (20/10/2026)
+
+Solicitado pelo usuário; ainda não priorizado para uma sprint. Criar dois widgets gêmeos, com apresentação, controles e comportamento consistentes. No widget de moedas fiduciárias, converter BRL para a moeda escolhida pelo usuário entre as disponíveis na fonte e manter a seleção fixa/persistida no widget; permitir inverter a conversão para moeda escolhida → BRL. No widget cripto, o usuário pode escolher Bitcoin ou outra moeda digital disponível; converter USD para o ativo escolhido e permitir inverter para ativo → USD. Os catálogos devem vir de fontes públicas confiáveis e permitir localizar/selecionar moedas de forma prática. Cada widget identifica claramente moeda de entrada, moeda de saída e resultado.
+
+Critérios para implementação: cada widget mostra fonte e momento da cotação, mantém a moeda escolhida após reabrir/reiniciar e calcula corretamente nos dois sentidos; apresentar cotações atuais e manter os catálogos pesquisáveis sem bloquear a interface; indisponibilidade, falha de rede ou cotação antiga é indicada sem apresentá-la como atual. A paridade visual/funcional não implica compartilhar fonte ou regra de cotação. Decidir e documentar provedores públicos confiáveis, cobertura e limites dos catálogos (não prometer moedas que a fonte não oferece), intervalo de atualização, tratamento offline, precisão/arredondamento e eventual custo ou chave. Não foi escolhida API nem autorizado uso de serviço pago.
+
+## I18N-01 — Idioma PT-BR / EN-US em toda a interface (20/10/2026)
+
+Solicitado pelo usuário; ainda não priorizado para uma sprint. Incluir seletor de idioma nas Settings, no canto superior esquerdo e na mesma linha do botão Add Widget à direita. Oferecer Português (Brasil) e English (United States), persistir a preferência e aplicar o idioma à interface do Orbitz.
+
+Critérios para implementação: externalizar as strings atualmente em português para o catálogo PT-BR e fornecer traduções EN-US; cobrir toda interface mantida pelo Orbitz — preferências/settings, Orbitz Workspace, widgets e aplicações próprias, diálogos, mensagens de erro, estados vazios, tooltips, nomes acessíveis e notificações. Não traduzir conteúdo escrito pelo usuário nem nomes/textos vindos de serviços externos. Verificar ausência de strings da interface no idioma errado, expansão do texto, navegação e apresentação de datas/números por locale, preservando os dados armazenados.
+
+Decisões pendentes: inventário dos componentes abrangidos, formato/caminho dos catálogos compatível com GJS, Python e GTK, comportamento após trocar idioma (imediato ou reabrir) e locale inicial para instalações existentes. Manter PT-BR como comportamento padrão na migração, salvo decisão posterior do usuário.
+
+## STICKY-01 — Acabamento visual da nota adesiva (20/10/2026)
+
+Solicitado pelo usuário a partir de captura da janela Sticky Notes; ainda não priorizado para uma sprint. Remover a linha horizontal residual que aparece ao final da área de texto da nota. A barra de rolagem deve ficar oculta quando inativa e aparecer apenas durante a interação/rolagem, desaparecendo após o uso.
+
+Critérios de aceite: a linha horizontal no fim do conteúdo não aparece; texto comprido continua rolável por mouse, teclado e demais meios já suportados; a barra não fica visível em repouso e não cobre o texto; a barra pode aparecer temporariamente enquanto o usuário navega e volta a ocultar-se depois. Preservar conteúdo, salvamento, cabeçalho, tamanho e alça de redimensionamento da nota.
+
+## WID-01 — Unificar os widgets de desktop em Workspace (20/10/2026)
+
+Solicitado pelo usuário a partir da captura do widget de relógio/data/clima; ainda não priorizado para uma sprint. Reunir os widgets atualmente separados do desktop em um único widget de topo chamado **Workspace**, usando a captura como referência para uma superfície visual unificada. O pedido inclui os widgets existentes de relógio, clima e outros módulos de desktop.
+
+Critérios para implementação: apresentar os módulos do escopo dentro de um único widget configurável, sem janelas de desktop independentes para cada módulo; permitir reconhecer e configurar cada seção sem misturar seus controles; preservar dados e preferências existentes ou migrá-los de modo reversível; manter carregamento, atualização, acessibilidade e interação dos módulos que continuarem incluídos.
+
+Definições necessárias antes da implementação: inventariar todos os widgets atuais e confirmar se “todos” inclui desempenho/sistema, rede, mídia e lançadores; definir grade, posição, redimensionamento e liga/desliga das seções; decidir se aplicativos separados como Sticky Notes e YouTube permanecem fora do widget unificado. O nome Workspace coincide com o Orbitz Workspace de agenda/horas/faturamento e precisa de diferenciação clara na interface. Sem prioridade ou sprint atribuída.
+
+## WID-02 — Relógio mundial adicional (20/10/2026)
+
+Solicitado pelo usuário; ainda não priorizado para uma sprint. Adicionar ao relógio existente um relógio secundário cuja região/fuso horário o usuário escolhe. A hora da região selecionada deve permanecer visível na tela junto ao relógio local, para facilitar a coordenação de trabalho remoto.
+
+Critérios para implementação: escolher uma região por nome/localidade e fuso horário; persistir a escolha após reiniciar; atualizar a hora sem bloquear a interface; aplicar automaticamente regras de horário de verão e mudanças de offset da base de fusos, sem alterar o relógio local nem depender de conversões manuais.

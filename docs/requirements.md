@@ -258,3 +258,43 @@ Adoção de assinatura legada com a mesma URL sem duplicar ID/cache nem alterar 
 Evidência RC-29/CAL-07: fonte padrão restaurada/adotada por inicialização explícita idempotente; remove_account da fonte passa a desativar, mantendo cache; toggle estrito/persistido, cache tardio ignorado. Gerenciar sempre mostra opção padrão com Ativar/Desativar, fonte inativa fora da seleção/sync/Agenda/marcações e trabalhos enfileirados cancelados.31 testes direcionados aprovados (7persistência+16frontend+8atividade), regressão dirigida de dados externos aprovada, sintaxe/diff check limpos. Fonte padrão é de dia inteiro e já não gera alertas temporizados; não alterar JS de lembretes por hipótese. No fechamento da implementação, aplicação e GUI estavam pendentes; revisão média agrupada na fila.
 
 Validação manual registrada em 20/10/2026: usuário confirmou que a fonte de Datas comemorativas funcionou na instalação atual. O ciclo persistente desativar→reabrir→reativar não foi explicitamente confirmado. Revisão média consolidada permanece na fila de fechamento.
+
+## RC-30 — Widgets gêmeos de conversão BRL/moeda fiduciária e USD/cripto (20/10/2026)
+
+Pedido confirmado: adicionar dois widgets gêmeos, com apresentação, controles e comportamento consistentes. No widget fiat, o usuário seleciona uma moeda de destino disponível e converte BRL → moeda escolhida, mantendo essa escolha fixa e persistida; pode inverter para moeda escolhida → BRL. No widget cripto, o usuário escolhe Bitcoin ou outra criptomoeda disponível e converte USD → ativo selecionado, com inversão ativo → USD.
+
+Critérios de aceite: cada widget identifica claramente moedas de entrada/saída e resultado; inverter a direção troca moedas e cálculo corretamente; a moeda escolhida permanece após reabrir/reiniciar; mostrar fonte e momento da cotação atual; informar indisponibilidade, falha de rede e dado desatualizado sem apresentar cotação antiga como atual. Catálogos de moedas fiduciárias e cripto devem vir de fontes públicas confiáveis, permitir localizar/selecionar moedas de modo prático e deixar claros os limites de cobertura. Atualizações e busca nos catálogos não podem bloquear a interface. Os widgets compartilham padrão visual e interação, mas podem usar fontes, atualização e políticas de precisão distintas conforme o mercado.
+
+Pendências de produto antes da implementação: provedores/fontes públicas confiáveis e cobertura/limites de cada catálogo, licença/termos de uso, metodologia da cotação fiat (referência ou comercial), intervalo de atualização, disponibilidade offline, precisão/arredondamento e eventual custo/chave. Não assumir API nem serviço pago, nem prometer cobertura além das moedas oferecidas pelas fontes escolhidas. Ainda sem prioridade de sprint.
+
+## RC-31 — Idioma de interface PT-BR / EN-US (20/10/2026)
+
+Pedido confirmado: opção de idioma em Settings, canto superior esquerdo alinhado horizontalmente com Add Widget, permitindo escolher Português (Brasil) ou English (United States); a preferência persiste e controla o idioma da aplicação.
+
+Critérios de aceite: todas as strings de interface mantidas pelo Orbitz devem ser externalizadas para um catálogo PT-BR e traduzidas para EN-US; cobrir extensão/preferências, Workspace, widgets e aplicações próprias, diálogos, mensagens de erro, estados vazios, tooltips, acessibilidade e notificações. Conteúdo do usuário e textos de serviços externos não são traduzidos automaticamente. A escolha deve sobreviver ao reinício e evitar mistura de idiomas; validar layouts com textos mais longos e formatos de data/número por locale sem reescrever dados armazenados. PT-BR permanece o padrão inicial para preservar a experiência atual.
+
+Pendências de arquitetura/experiência: inventariar componentes GJS/Python/GTK e mecanismos de tradução existentes; decidir aplicação imediata versus reabrir a interface; identificar exceções e fallback quando faltar uma string. Ainda sem prioridade de sprint.
+
+## RC-32 — Linha residual e barra de rolagem em Sticky Notes (20/10/2026)
+
+Pedido confirmado a partir da captura: remover a linha horizontal que aparece ao final do texto da nota e ocultar a barra de rolagem em repouso, mostrando-a durante o uso da rolagem.
+
+Critérios de aceite: eliminar a linha residual no fim da área de texto; manter notas longas roláveis por mouse, teclado e meios já suportados; ocultar a barra quando ociosa, permiti-la aparecer temporariamente durante a interação e ocultá-la após inatividade; não sobrepor texto. Preservar conteúdo, gravação, cabeçalho, dimensões e alça de redimensionamento. Confirmar aparência e interação em GTK real, além das verificações locais proporcionais.
+
+Escopo restrito ao visual e à interação de rolagem: não alterar persistência SQLite/WAL, conteúdo da nota ou comportamento de redimensionamento. Ainda sem prioridade de sprint.
+
+## RC-33 — Widget unificado Workspace (20/10/2026)
+
+Pedido confirmado: consolidar os widgets de desktop que hoje aparecem separados em um único widget chamado Workspace. A captura enviada, com relógio, data e clima numa só superfície, é a referência inicial; o pedido também abrange os demais widgets separados.
+
+Critérios de aceite: os módulos confirmados são apresentados dentro de uma única superfície/widget do GNOME Shell, sem manter cada módulo como janela/widget independente; cada módulo conserva controles e estados distinguíveis; configurações e dados atuais continuam acessíveis, com migração reversível se a consolidação alterar sua estrutura; atualização, acessibilidade, redimensionamento e interação permanecem funcionais.
+
+Antes de implementar, inventariar módulos e confirmar o limite de “todos” (incluindo desempenho/sistema, rede, mídia, lançadores e aplicações separadas como Sticky Notes/YouTube), além de definir grade/layout, posicionamento, tamanho e habilitação individual das seções. Distinguir o widget **Workspace** do aplicativo **Orbitz Workspace** existente para evitar ambiguidade. Ainda sem prioridade de sprint.
+
+## RC-34 — Relógio mundial adicional (20/10/2026)
+
+Pedido confirmado: adicionar um relógio secundário ao relógio atual. O usuário seleciona a região/fuso horário e a hora correspondente aparece na tela junto ao horário local, apoiando quem trabalha remotamente.
+
+Critérios de aceite: seleção simples de uma cidade/região e seu fuso; preferência persiste após reiniciar; hora secundária é atualizada sem bloquear a interface; conversão usa identificadores e regras de fuso horário, incluindo horário de verão e mudanças de offset, mantendo correto o relógio local. Exibir região/fuso escolhido com a hora para evitar ambiguidade.
+
+Escopo confirmado para um relógio mundial adicional. Ainda sem prioridade de sprint.
