@@ -1,6 +1,6 @@
 # Backlog e próximas entregas
 
-Registro inicial: 17/10/2026; estado consolidado atualizado em 18/10/2026. A tabela original e os marcos históricos são preservados abaixo; o resumo atual prevalece para andamento. Prioridades propostas não constituem aprovação comercial. O agente trabalha quando acionado, sem monitoramento contínuo.
+Registro inicial: 17/10/2026; estado atual revisado em 20/10/2026. A tabela original e os marcos históricos são preservados abaixo; o resumo atual prevalece para andamento. Prioridades propostas não constituem aprovação comercial. O agente trabalha quando acionado, sem monitoramento contínuo.
 
 ## Resumo atual
 
@@ -12,10 +12,12 @@ Registro inicial: 17/10/2026; estado consolidado atualizado em 18/10/2026. A tab
 - B-01: falhas históricas de testes resolvidas e verificadas; baseline corrigida 11/14 JS, suíte atual 17/17 Node aprovada.
 - DEP-01: atualização local e rollback implementados/auditados; instalação conferida, plano zero arquivos e zero comandos pendentes. Não equivale a pacote de instalação limpa.
 - VIS-01: padrão histórico implementado/auditado e arquivo instalado coincide com a fonte atual; aparência real após restauro ainda requer confirmação manual.
-- BUG-01: CPU e SSD confirmados pelo usuário; clique RAM ainda reportado sem abertura, sem confirmação de reteste após restauro visual.
+- BUG-01: encerrado por confirmação manual do usuário em 20/10/2026: o clique RAM não é mais um problema; CPU e SSD já haviam sido confirmados funcionando. Isso registra o resultado observado, sem alegar certificação gráfica ampla.
 - BUG-02: diferenças históricas de dispositivos externos e alertas permanecem para análise própria, sem mudança semântica nesta entrega.
 - B-02/B-03: há atualizador local e comandos migrados; distribuição/reinstalação limpa e consolidação integral ainda não validadas.
-- Verificação completa atual: 71 Python, 17 arquivos Node e GJS/PangoCairo aprovados; diff check sem erros. Commit/push solicitados, execução pela ferramenta impedida por Git somente leitura e rede/DNS indisponível.
+- CAL-06/07: o usuário confirmou que Google Calendar e Brasil · Datas comemorativas funcionaram após a atualização. Testes dirigidos registrados: CAL-06 18; CAL-07 31 mais regressão de dados externos. Calendly com conta real permanece sem confirmação; revisão independente média segue para fechamento da sprint.
+- INV-01–04/WSP-01: GTK real de histórico/versões, chooser e fluxo de assinatura continua pendente; a auditoria funcional/PDF sintético não substitui esse teste.
+- Commit `324ecce` enviado a `origin/main`; a árvore estava limpa na última verificação. Não houve nova suíte global nesta revisão documental.
 
 ## Tabela inicial (histórico)
 
@@ -131,6 +133,8 @@ BUG-01 — aplicação corretiva confirmada: usuário executou instalador e forn
 
 BUG-01 — retorno manual após correção: usuário confirmou CPU e SSD funcionando; RAM continua sem abrir modal. Roteamento corrigido instalado e hashes já conferidos, portanto sintoma RAM agora tratado separadamente no frontend (clique/hit test/abertura e geometria Pango real). Logs recentes de GNOME Shell consultados sem erro pertinente identificado; ausência de log não prova ausência de defeito. Frontend acionado para reprodução dirigida, sem alteração especulativa ou instalação/restart automático. Pergunta opcional ao usuário sobre palavra RAM versus barra/percentual e influência dos painéis abertos, mantendo investigação independente. CPU/SSD validados por observação superficial do usuário, não certificação abrangente.
 
+Atualização em 20/10/2026: usuário informou que o clique da RAM não é mais um problema. Encerrar BUG-01 por confirmação manual, limitada ao comportamento observado pelo usuário.
+
 ## VIS-01 — Restauro do resumo Hardware (18/10/2026)
 
 Confirmado pelo usuário: fonte e barras cresceram após migração, possível diferença de espaçamento, captura anexada. Supervisor confirmou ausência de size7680/line_height1.5, troca barra8→10 e linhas vazias na fonte do repo vs coletor histórico; GSettings visual pré/pós igual. Backend acionado para restauração mínima de apresentação, frontend/UX para padrão e validação. Critérios em RC-12; preserve lógica/CLI, sem importar histórico inteiro. Não anunciar aplicação ou correção do clique RAM antes de evidência.
@@ -211,12 +215,12 @@ CAL-05 fechamento local: configuração privada do mantenedor preparada/check OK
 
 Confirmado Google login/sincronização inicial pelo usuário; manter limites de casos não testados. Corrigir assimetria calendário/Agenda para feriados de outras fontes e atividades locais, distinguir seleção, melhorar legenda/tooltip. Ajuda opcional de ativação Calendar API do projeto para mantenedor. Frontend/testes em andamento; risco médio, revisão no fechamento.
 
-CAL-06 implementado nas fontes com18 testes direcionados aprovados. Motivos das marcações alinhados ao conteúdo da Agenda; seleção distinguida e ajudaAPIopcional adicionada. Aplicação/validação visual pendentes, revisão média agrupada.
+CAL-06 implementado nas fontes com18 testes direcionados aprovados. Motivos das marcações alinhados ao conteúdo da Agenda; seleção distinguida e ajudaAPIopcional adicionada. Em 20/10/2026 o usuário confirmou que a integração Google Calendar funcionou na instalação atual. Essa confirmação cobre o fluxo usado, não todas as contas ou o Calendly. Revisão média agrupada permanece pendente.
 
 ## CAL-07 — Fonte padrão reativável
 
 RC-29: Brasil·Datas comemorativas permanente em Gerenciar, toggle persistente, restauração do cadastro excluído, sem duplicação de assinatura legada; inativa não participa de fonte/sync/marcação. Backend/Frontend em paralelo com contrato alinhado, sem credenciais ou dados reais. Risco médio, revisão agrupada.
 
-CAL-07 fontes concluídas/testes locais aprovados:31 testes dirigidos e regressão externa. Plano3arquivos/0comandos; reabrir Workspace após atualização restaura o cadastro excluído e permite testar Ativar/Desativar persistente. GUI/aplicação e revisão média no fechamento permanecem separadas.
+CAL-07 fontes e testes locais concluídos:31 testes dirigidos e regressão externa. Em 20/10/2026 o usuário confirmou que a fonte Datas comemorativas funcionou na instalação atual. A persistência do ciclo desativar→reabrir→reativar não foi explicitamente confirmada. Revisão média consolidada continua pendente no fechamento da sprint; reusar os testes documentados e não repetir a suíte sem mudança/falha concreta.
 
 Proposta futura (fora CAL-07): guarda enabled em consumidores de alertas para fontes desativáveis que tenham eventos com horário. A fonte pública brasileira atual é de dia inteiro e já não produz alertas temporizados; não ampliar esta entrega nem exigir reload GNOME por hipótese.

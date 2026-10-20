@@ -1,16 +1,18 @@
 # Fila de sprint e revisões
 
-Atualizado em 19/10/2026. Lote lógico, sem agenda automática. Política: [workflow](agents/workflow.md). Prioridades de produto continuam em [backlog](backlog.md).
+Atualizado em 20/10/2026. Lote lógico, sem agenda automática. Política: [workflow](agents/workflow.md). Prioridades de produto continuam em [backlog](backlog.md).
 
 ## Estado atual
 
-INV-01–04 já auditadas; último conjunto passou em 62 testes dirigidos. WSP-01 está implementado e auditado nas fontes; não iniciar auditoria retroativa das entregas anteriores. Conferência GTK/instalação é separada. Próximos pedidos serão agrupados abaixo antes de convocar auditoria; usuário mantém prioridades.
+INV-01–04 já auditadas; último conjunto passou em 62 testes dirigidos. WSP-01 está implementado e auditado nas fontes; não iniciar auditoria retroativa das entregas anteriores. O usuário confirmou teste funcional de Google Calendar e Datas comemorativas em 20/10. Revisão independente média de CAL-06/07 permanece pendente para fechamento da sprint; GTK de invoices/versões e teste real do Calendly são pendências distintas. Próximos pedidos serão agrupados abaixo antes de convocar auditoria; usuário mantém prioridades.
 
 | Item | Estado | Risco / responsável | Próxima ação |
 |---|---|---|---|
 | OPS-01 — fluxo econômico | Documentação ajustada | Baixo / supervisor | Aplicar nos próximos briefs; sem auditor ou UX para esta alteração |
 | INV-01–04 — conjunto atual | Auditoria local concluída | Parecer INV-04 | Reusar evidência se o alvo não mudar; não reauditar por hábito |
-| Teste da agenda/histórico/versões em GTK real | Pendente manual | Frontend/usuário | Registrar resultado quando houver teste permitido, sem repetir ambiente bloqueado |
+| Invoices: histórico/versões e chooser em GTK real | Pendente manual | Frontend/usuário | Registrar resultado quando houver teste permitido; o smoke de calendários foi confirmado em 20/10 |
+| CAL-06/07 — revisão média consolidada | Testes locais; usuário confirmou Google e fonte de feriados funcionando. Persistência do toggle CAL-07 não confirmada; auditoria pendente | Auditor no fechamento da sprint | Revisar uma vez o alvo atual e integração antes de próximo lote de publicação; não repetir testes já cobertos |
+| CAL-01 — Calendly real | Integração por token implementada; conta real não confirmada | Usuário, se/quando desejar testar | Teste manual separado; não bloqueia funcionamento já confirmado do Google e da fonte pública |
 | Formato decimal PT e rótulos de timesheets homônimas | Propostas opcionais | Baixo / frontend | Priorizar com futuro lote de UI; não ativar UX/auditor agora |
 
 ## Cadastro de próxima tarefa
@@ -68,6 +70,10 @@ CAL-06/RC-28 em desenvolvimento: usuário confirmou loginGoogle, mas feriados/ta
 
 CAL-06 testes locais aprovados:18 testes (7novos+11frontend), AST/diff check; fonte estável,5arquivos/0comandos. Revisão média continua na fila para fechamento, sem convocação adicional por incremento. GUI/aplicação pendentes. Reabrir Workspace após atualizar, sem logout; conferir dias com feriado de outra fonte e atividade local.
 
+Validação manual do usuário em 20/10/2026: Google Calendar funcionou na instalação atual. Confirma o fluxo usado pelo usuário; não generalizar a todas as contas, versões ou ao Calendly. A revisão média permanece no fechamento consolidado.
+
 CAL-07/RC-29 em implementação: fonte pública padrão permanente com Ativar/Desativar e adoção/restauração idempotente. Backend estado/persistência; frontend gerenciamento/filtros/sync/cancel/Agenda. Testes afetados agora, revisão média agrupada; nenhuma nova auditoria/UX ou aplicação automática.
 
 CAL-07 testes locais aprovados:31 dirigidos (7persistência+16frontend+8atividade) e regressão dados externos, sintaxe/diff. Plano3arquivos/0comandos. Risco médio, revisão na fila de fechamento; sem auditor/UX extra. Sem dados reais ou instalação alterados. Teste manual: reabrir→Gerenciar→fonte padrão recuperada→Desativar→reabrir e confirmar desativada→Ativar. Sem logout necessário.
+
+Validação manual do usuário em 20/10/2026: a fonte Brasil · Datas comemorativas funcionou na instalação atual. Não há confirmação explícita do ciclo desativar→reabrir→reativar; manter esse caso como teste manual opcional de fechamento. A revisão independente média continua agrupada para a sprint.

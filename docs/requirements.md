@@ -97,7 +97,9 @@ Confirmado pelo usuário em 18/10/2026 a partir da captura `codex-clipboard-70ec
 | Padding e margens | Preservar configuração existente: esquerda/direita 20; topo/baixo 0; margens 0. Configuração antes/agora já igual. |
 | Alinhamento/configuração | Text_Size=8, fonte custom desativada, X Start/Y Center/Line Center preservados; markup define tamanho efetivo do resumo. |
 
-Não alterar algoritmos de métricas, cálculo/cache SSD, agregação de dispositivos ou layout dos demais widgets neste reparo visual. Padrões de cores/alertas e dispositivos divergentes permanecem registrados separadamente; não introduzir nova paleta. Critérios automatizados de markup/barra/linhas/colunas e revisão UX complementam, sem substituir, comparação visual após atualização. Falha de clique RAM permanece aberta e não é presumida corrigida por alteração estética.
+Não alterar algoritmos de métricas, cálculo/cache SSD, agregação de dispositivos ou layout dos demais widgets neste reparo visual. Padrões de cores/alertas e dispositivos divergentes permanecem registrados separadamente; não introduzir nova paleta. Critérios automatizados de markup/barra/linhas/colunas e revisão UX complementam, sem substituir, comparação visual após atualização. Na data desta decisão, a falha de clique RAM permanecia aberta; consulte a atualização de estado abaixo.
+
+Estado atualizado em 20/10/2026: o usuário informou que o clique da RAM não é mais um problema. BUG-01 fica encerrado por confirmação manual; isso não amplia a validação para outros hardwares ou versões.
 
 ## RC-13 — Identidade própria Orbitz (18/10/2026)
 
@@ -243,7 +245,9 @@ Observado no código: marcação inclui feriados de todas as fontes e tarefas/ho
 
 Google mantém Entrar com Google; link fixo opcional para ativar Calendar API no projeto Orbitz com responsabilidade explícita do mantenedor, sem exigir Cloud/JSON de usuários comuns nem mudar autenticação. Testes proporcionais com fixtures e revisão média agrupada no fechamento; sem auditor/UX automáticos, instalação ou redes reais por inferência.
 
-Evidência RC-28/CAL-06: projeções somente leitura em day_activity.py compartilhadas por calendário/Agenda; feriados externos com título/origem, resumos/rotas de tarefas/horas locais, seleção explicitada, legenda limitada à largura e link opcional de ativação adicionados.18 testes direcionados aprovados (7atividade/integração+11frontend), AST/diff check. Sem nova autenticação, leitura de acervo real ou mutação de dados. Plano5arquivos/0comandos; GUI/aplicação pendentes, revisão média na fila de fechamento.
+Evidência RC-28/CAL-06: projeções somente leitura em day_activity.py compartilhadas por calendário/Agenda; feriados externos com título/origem, resumos/rotas de tarefas/horas locais, seleção explicitada, legenda limitada à largura e link opcional de ativação adicionados.18 testes direcionados aprovados (7atividade/integração+11frontend), AST/diff check. Sem nova autenticação, leitura de acervo real ou mutação de dados. No fechamento da implementação, GUI/aplicação estavam pendentes; revisão média na fila de fechamento.
+
+Validação manual registrada em 20/10/2026: usuário confirmou que Google Calendar funcionou na instalação atual. Confirmação restrita à conta/fluxo usados; Calendly e cobertura ampla de contas permanecem pendentes.
 
 ## RC-29 — Datas comemorativas padrão e reativáveis (19/10/2026)
 
@@ -251,4 +255,6 @@ Usuário confirmou que excluir a assinatura “Datas comemorativas” a removeu 
 
 Adoção de assinatura legada com a mesma URL sem duplicar ID/cache nem alterar contas pessoais. Desativar preserva registro/cache, mas exclui fonte do seletor, consultas automáticas, marcações e conteúdo da Agenda; trabalhos pendentes não podem reativá-la. Reativar devolve fonte/atualização. Tarefas criadas e horas permanecem independentes, demais fontes mantêm desconexão normal. Cadastro/estado por operação explícita idempotente no aplicativo, sem reescrita automática em toda leitura genérica nem sobrescrever arquivo inválido. Fixtures e verificações proporcionais agora, revisão média no fechamento.
 
-Evidência RC-29/CAL-07: fonte padrão restaurada/adotada por inicialização explícita idempotente; remove_account da fonte passa a desativar, mantendo cache; toggle estrito/persistido, cache tardio ignorado. Gerenciar sempre mostra opção padrão com Ativar/Desativar, fonte inativa fora da seleção/sync/Agenda/marcações e trabalhos enfileirados cancelados.31 testes direcionados aprovados (7persistência+16frontend+8atividade), regressão dirigida de dados externos aprovada, sintaxe/diff check limpos. Fonte padrão é de dia inteiro e já não gera alertas temporizados; não alterar JS de lembretes por hipótese. Plano3arquivos/0comandos, instalação e GUI pendentes; revisão média agrupada na fila.
+Evidência RC-29/CAL-07: fonte padrão restaurada/adotada por inicialização explícita idempotente; remove_account da fonte passa a desativar, mantendo cache; toggle estrito/persistido, cache tardio ignorado. Gerenciar sempre mostra opção padrão com Ativar/Desativar, fonte inativa fora da seleção/sync/Agenda/marcações e trabalhos enfileirados cancelados.31 testes direcionados aprovados (7persistência+16frontend+8atividade), regressão dirigida de dados externos aprovada, sintaxe/diff check limpos. Fonte padrão é de dia inteiro e já não gera alertas temporizados; não alterar JS de lembretes por hipótese. No fechamento da implementação, aplicação e GUI estavam pendentes; revisão média agrupada na fila.
+
+Validação manual registrada em 20/10/2026: usuário confirmou que a fonte de Datas comemorativas funcionou na instalação atual. O ciclo persistente desativar→reabrir→reativar não foi explicitamente confirmado. Revisão média consolidada permanece na fila de fechamento.

@@ -12,7 +12,7 @@ Atualizado em 19/10/2026. O README principal é a apresentação pública do pro
 ## Evidências recentes
 
 - [Workspace](audits/2026-10-19-workspace-audit.md):169 testes Python; integração temporária de contexto/fatura/versão/pagamento/backup/restauração. QA PDF do supervisor é separada da interação GTK.
-- [Calendários](audits/2026-10-19-calendar-audit.md):27 testes de calendário e8 do planner aprovados,2 skips de socket; teste Node de identidade e integração temporária. OAuth, cofre, contas e GTK reais continuam pendentes.
+- [Calendários](audits/2026-10-19-calendar-audit.md):27 testes de calendário e8 do planner aprovados,2 skips de socket; teste Node de identidade e integração temporária. Atualização manual em 20/10: usuário confirmou Google Calendar e Brasil · Datas comemorativas funcionando. Calendly com conta real permanece sem confirmação; revisão média CAL-06/07 segue para fechamento.
 - [Invoices e assinatura assistida](audits/2026-10-19-invoice-signatures-audit.md):62 testes dirigidos no alvo daquele marco. Não é resultado da suíte global atual, nem assinatura validada.
 
 Não repetir testes amplos ou transformar contagens históricas em execução atual. Ao publicar, conferir diff e hashes das fontes afetadas contra o relatório pertinente. Instalação/ativação e validação visual devem ter evidências próprias; alterações no repositório não atualizam a instalação.
