@@ -9,6 +9,7 @@ import stat
 import subprocess
 import sys
 import time
+from widget_runtime import launch_terminal_command
 
 AGE = 30 * 86400
 FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
@@ -161,7 +162,7 @@ def main():
     parser.add_argument('--interactive', action='store_true')
     args = parser.parse_args()
     if args.launch:
-        subprocess.Popen(['gnome-terminal', '--', '/usr/bin/python3', str(Path(__file__).resolve()), '--interactive'], start_new_session=True)
+        launch_terminal_command(['/usr/bin/python3', str(Path(__file__).resolve()), '--interactive'])
     elif args.interactive:
         if not sys.stdin.isatty():
             raise SystemExit('A limpeza exige confirmação em um terminal.')

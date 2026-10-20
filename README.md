@@ -98,7 +98,7 @@ O ambiente de referência é **Ubuntu 22.04 com GNOME 42.9**. A extensão declar
 - **Usa uma instalação antiga do Desktop Clock/azclock personalizada como Orbitz?** Consulte o [guia de migração](docs/operations/identity-migration.md) para preservar configurações e dados. Mantenha somente uma identidade ativa.
 - **Vai instalar pela primeira vez?** Confira a [plataforma e as dependências](stack.md). As ferramentas atuais atendem instalações existentes; ainda não há um instalador completo validado para máquina nova.
 
-Os requisitos principais são Python 3, PyGObject, GTK e bibliotecas do GNOME. Faturas usam `python3-reportlab` e `fonts-dejavu-core`; o player do YouTube precisa de WebKitGTK. Docker, sensores, firewall e consultas de pacotes dependem das ferramentas e permissões disponíveis no computador.
+Os requisitos principais são Python 3, PyGObject, GTK, bibliotecas do GNOME e **Tilix**. Ações que pedem confirmação ou autorização em terminal — como manutenção, leitura de módulos de RAM e inspeção de processos — abrem no Tilix. Faturas usam `python3-reportlab` e `fonts-dejavu-core`; o player do YouTube precisa de WebKitGTK. Docker, sensores, firewall e consultas de pacotes dependem das ferramentas e permissões disponíveis no computador.
 
 Com a extensão instalada, abra as preferências:
 

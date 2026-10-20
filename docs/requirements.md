@@ -298,3 +298,21 @@ Pedido confirmado: adicionar um relógio secundário ao relógio atual. O usuár
 Critérios de aceite: seleção simples de uma cidade/região e seu fuso; preferência persiste após reiniciar; hora secundária é atualizada sem bloquear a interface; conversão usa identificadores e regras de fuso horário, incluindo horário de verão e mudanças de offset, mantendo correto o relógio local. Exibir região/fuso escolhido com a hora para evitar ambiguidade.
 
 Escopo confirmado para um relógio mundial adicional. Ainda sem prioridade de sprint.
+
+## RC-35 — Itens de menu para Google Drive e Zoho WorkDrive (20/10/2026)
+
+Pedido confirmado com baixa prioridade: adicionar Google Drive e Zoho WorkDrive como itens de menu no Orbitz. A navegação/consulta cotidiana deve ocorrer dentro do aplicativo, sem abrir browser. A autorização inicial OAuth pode abrir o browser do sistema; o aplicativo nunca solicita a senha da conta. Usar WorkDrive, pois Zoho Docs foi descontinuado.
+
+Escopo inicial proposto: conectar/desconectar a conta; ver recentes e favoritos; buscar arquivos; mostrar estado de conexão; abrir arquivos compatíveis no aplicativo local padrão. Restringir permissões ao mínimo necessário, descrever o acesso solicitado e proteger/remover tokens pelo cofre seguro. Formatos nativos de Google Docs/Zoho Writer podem exigir browser para edição colaborativa completa; informar isso claramente.
+
+Antes da implementação, decidir escopos OAuth, arquivos compartilhados, formatos suportados, cache e arquivos temporários, revogação de autorização e requisitos de verificação dos provedores. Navegação, busca e estados offline/erro não podem bloquear a interface. Prioridade baixa (P3 proposta); não atribuída a sprint.
+
+## RC-36 — Aba central Integrations (20/10/2026)
+
+Pedido confirmado: incluir uma aba **Integrations** ao lado de **Settings** e **About**. Ela será o ponto único para encontrar e gerir os serviços externos usados pelo Orbitz e as respectivas API keys, certificados e tokens, evitando que os formulários de conexão fiquem dispersos.
+
+Critérios de aceite: inventariar integrações existentes e planejadas; listar cada serviço com status, conta/identificador conectado, permissões e ações contextuais para conectar, configurar, renovar/substituir credencial ou desconectar/revogar. Telas dos recursos que precisem de credenciais devem encaminhar para a entrada central sem criar cópias do formulário; preferências funcionais não secretas podem continuar junto ao recurso. Erros de autenticação e expiração devem informar próximo passo sem expor detalhes sensíveis.
+
+Segurança: não revelar valores completos de tokens ou API keys por padrão, nem salvá-los em texto claro, logs ou configurações comuns; usar o cofre seguro do Orbitz, mascarar valores e permitir substituição/remoção explícita. Para certificados, mostrar tipo e validade/estado, proteger chaves privadas e oferecer importação/substituição/remoção com confirmação apropriada. Migração dos fluxos atuais deve preservar conexões e dados; não exigir que o usuário reconecte serviços sem necessidade.
+
+Ainda sem prioridade de sprint. A cobertura só será considerada completa após inventário dos serviços integrados.

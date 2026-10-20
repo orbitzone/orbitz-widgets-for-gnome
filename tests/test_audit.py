@@ -79,14 +79,23 @@ class RuntimeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             target = Path(folder) / 'executed'
             command = f'touch {target}'
-            with patch.object(runtime.subprocess, 'Popen') as launch:
+            with patch.object(runtime.shutil, 'which', return_value='/usr/bin/tilix'), patch.object(runtime.subprocess, 'Popen') as launch:
                 runtime.launch_terminal('Test', command)
                 argv = launch.call_args.args[0]
-            self.assertEqual(argv[:4], ['gnome-terminal', '--', 'bash', '-c'])
-            subprocess.run(['bash', '-c', argv[4]], input='', text=True, capture_output=True, check=True)
+            self.assertEqual(argv[:2], ['/usr/bin/tilix', '-e'])
+            import shlex
+            terminal_command = shlex.split(argv[2])
+            self.assertEqual(terminal_command[:2], ['bash', '-c'])
+            script = terminal_command[2]
+            subprocess.run(['bash', '-c', script], input='', text=True, capture_output=True, check=True)
             self.assertFalse(target.exists())
-            subprocess.run(['bash', '-c', argv[4]], input='\n\n', text=True, capture_output=True, check=True)
+            subprocess.run(['bash', '-c', script], input='\n\n', text=True, capture_output=True, check=True)
             self.assertTrue(target.exists())
+
+    def test_terminal_requires_tilix(self):
+        with patch.object(runtime.shutil, 'which', return_value=None):
+            with self.assertRaisesRegex(FileNotFoundError, 'Tilix'):
+                runtime.launch_terminal_command(['true'])
 
 
 class WidgetTests(unittest.TestCase):
@@ -144,6 +153,13 @@ class WidgetTests(unittest.TestCase):
         action = {'id': 'test', 'name': 'Test', 'command': 'true'}
         with patch.dict(module, actions=lambda: [action], launch_terminal=lambda *args: self.assertEqual(args, ('Test','true'))):
             module['launch']('test')
+
+    def test_cleanup_interactive_mode_uses_shared_terminal_launcher(self):
+        module = definitions('limpeza-linux.py')
+        calls = []
+        with patch.object(module['sys'], 'argv', ['limpeza-linux.py', '--launch']), patch.dict(module, launch_terminal_command=lambda command: calls.append(command)):
+            module['main']()
+        self.assertEqual(calls, [['/usr/bin/python3', str(ROOT/'widgets'/'limpeza-linux.py'), '--interactive']])
 
     def test_docker_inspection_caps(self):
         module = definitions('docker-widget.py')

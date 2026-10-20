@@ -1,5 +1,5 @@
 """Bounded subprocesses and validated private caches shared by widgets."""
-import json, math, os, selectors, signal, stat, subprocess, tempfile, time
+import json, math, os, selectors, shlex, shutil, signal, stat, subprocess, tempfile, time
 from pathlib import Path
 
 
@@ -90,13 +90,22 @@ def read_json(path):
     except (OSError,ValueError,TypeError): return None
 
 
+def launch_terminal_command(command):
+    """Run an argv command in Tilix without passing it through an implicit shell."""
+    if not isinstance(command, (list, tuple)) or not command or any(not isinstance(arg, str) or '\x00' in arg for arg in command):
+        raise ValueError('Comando inválido para o terminal')
+    terminal = shutil.which('tilix')
+    if not terminal:
+        raise FileNotFoundError('Tilix não está instalado; instale Tilix para executar ações interativas.')
+    subprocess.Popen([terminal, '-e', shlex.join(command)], start_new_session=True)
+
+
 def launch_terminal(name, command, effect=''):
     """Display command as data and require successful input before execution."""
-    import shlex
     if not isinstance(command,str) or not command or '\x00' in command:
         raise ValueError('Comando inválido')
     message='\n'.join(part for part in (name, effect, command) if part)
     script=('printf "%s\\n" '+shlex.quote(message)+
             '; printf "\\nEnter para executar; Ctrl+C para cancelar: "; read -r reply || exit 0; '+command+
             '; result=$?; printf "\\nCódigo de saída: %s\\nEnter para fechar: " "$result"; read -r reply || true')
-    subprocess.Popen(['gnome-terminal','--','bash','-c',script],start_new_session=True)
+    launch_terminal_command(['bash', '-c', script])

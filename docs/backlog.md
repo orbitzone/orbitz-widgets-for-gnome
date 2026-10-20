@@ -20,6 +20,8 @@ Registro inicial: 17/10/2026; estado atual revisado em 20/10/2026. A tabela orig
 - STICKY-01: ajuste visual solicitado em 20/10/2026 para remover a linha horizontal no fim do texto da nota e ocultar a barra de rolagem quando ociosa; preservar rolagem e redimensionamento. Ainda sem prioridade de sprint.
 - WID-01: unificar os widgets separados do desktop em um único widget chamado Workspace, conforme pedido de 20/10/2026. Inventário do escopo e compatibilidade de configurações pendentes; não priorizado para sprint.
 - WID-02: adicionar relógio mundial ao relógio atual; usuário escolhe um fuso horário e vê a hora local correspondente, útil para trabalho remoto. Persistência e mudanças de horário de verão devem ser tratadas; ainda sem prioridade de sprint.
+- CLOUD-01 (baixa prioridade/P3 proposta): incluir Google Drive e Zoho WorkDrive como itens de menu, com consulta de arquivos dentro do Orbitz e abertura local para formatos compatíveis. Autorização inicial OAuth pode usar browser; não pedir senha da conta nem exigir browser para navegação cotidiana. Escopo, formatos e permissões mínimos a definir.
+- INT-01: criar aba Integrations ao lado de Settings e About como ponto central de estado e gestão de integrações, API keys, certificados e tokens; credenciais mascaradas e guardadas no cofre seguro. Prioridade ainda não definida.
 - INV-01–04/WSP-01: GTK real de histórico/versões, chooser e fluxo de assinatura continua pendente; a auditoria funcional/PDF sintético não substitui esse teste.
 - Commit `324ecce` enviado a `origin/main`; a árvore estava limpa na última verificação. Não houve nova suíte global nesta revisão documental.
 
@@ -262,3 +264,19 @@ Definições necessárias antes da implementação: inventariar todos os widgets
 Solicitado pelo usuário; ainda não priorizado para uma sprint. Adicionar ao relógio existente um relógio secundário cuja região/fuso horário o usuário escolhe. A hora da região selecionada deve permanecer visível na tela junto ao relógio local, para facilitar a coordenação de trabalho remoto.
 
 Critérios para implementação: escolher uma região por nome/localidade e fuso horário; persistir a escolha após reiniciar; atualizar a hora sem bloquear a interface; aplicar automaticamente regras de horário de verão e mudanças de offset da base de fusos, sem alterar o relógio local nem depender de conversões manuais.
+
+## CLOUD-01 — Integração de arquivos Google Drive e Zoho WorkDrive (20/10/2026)
+
+Solicitado pelo usuário e classificado como baixa prioridade (P3 proposta), sem sprint atribuída. Adicionar Google Drive e Zoho WorkDrive como itens de menu no Orbitz. Usar o nome WorkDrive: Zoho Docs foi descontinuado. A interface do Orbitz deve permitir consultar arquivos sem abrir browser durante o uso normal; primeira autorização OAuth pode abrir o browser do sistema para o consentimento.
+
+Escopo inicial proposto: conexão/desconexão de conta, lista de recentes e favoritos, busca de arquivos, estado da conexão e abertura de formatos compatíveis no aplicativo local padrão. Não solicitar senhas dos serviços; guardar e remover tokens conforme o cofre seguro existente. Solicitar permissões mínimas e explicar o alcance do acesso antes de conectar.
+
+Critérios para implementação: permitir navegar/consultar os arquivos selecionados dentro do menu/painel do Orbitz; manter listagem e busca responsivas, com estados de erro/offline claros; abrir localmente tipos de arquivo compatíveis sem lançar browser. Documentos nativos dos editores web podem exigir o browser para edição colaborativa completa; sinalizar essa limitação sem simular suporte nativo. Decidir escopos OAuth, suporte a arquivos compartilhados, formatos, cache/localização temporária, revogação de tokens e requisitos de verificação dos provedores antes de desenvolver.
+
+## INT-01 — Centro de integrações (20/10/2026)
+
+Pedido confirmado: adicionar uma aba **Integrations** ao lado de **Settings** e **About**, centralizando a descoberta e gestão de todas as integrações externas e suas credenciais, para não espalhar os pontos de configuração pela aplicação. Inventariar serviços existentes e planejados (por exemplo, calendários, Google Drive/Zoho WorkDrive, YouTube e provedores de cotações) antes de declarar cobertura completa.
+
+Escopo: catálogo de serviços com estado conectado/desconectado/ação necessária, conta ou identificador associado, permissões concedidas e ações disponíveis para conectar, configurar, renovar/substituir credenciais ou desconectar/revogar. Centralizar a entrada e gestão de API keys, certificados e tokens; telas específicas dos recursos devem levar à integração correspondente, sem duplicar formulários de credenciais. Manter preferências funcionais próprias do recurso no seu contexto quando isso não for uma credencial.
+
+Critérios para implementação: nunca mostrar segredos completos por padrão nem gravá-los em texto claro, logs ou configurações comuns; reutilizar o cofre seguro/Secret Service do Orbitz, mostrar valores mascarados e oferecer substituição/remoção explícita. Certificados devem ser apresentados com tipo, validade/estado e ações seguras, sem expor chaves privadas. Indicar erros de autorização/expiração de modo acionável e preservar integrações existentes durante a migração para a nova tela. Ainda sem prioridade de sprint.

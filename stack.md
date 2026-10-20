@@ -112,9 +112,10 @@ Estes módulos já acompanham o Python; não exigem instalação por pip.
 | APT | Consulta e ações de atualização dos pacotes Ubuntu/Debian. |
 | Snap e Flatpak, opcionais | Consulta e atualização desses formatos quando instalados. |
 | Docker CLI e daemon, opcionais | Inventário e ações do widget de contêineres. |
-| Bash e terminal gráfico | Execução das ações explicitamente acionadas pelo usuário. |
+| Bash e Tilix | Execução das ações explicitamente acionadas pelo usuário; Tilix é o terminal gráfico usado por essas ações. |
 | `sudo` | Elevação em ações específicas, como firmware e manutenção. |
-| Tilix e btop | Terminal e monitor de sistema usados pelo lançador configurado. |
+| Tilix | Dependência para abrir ações interativas no terminal; todas as ações do Orbitz usam este terminal. |
+| btop, opcional | Monitor de sistema usado pelo lançador quando instalado. |
 | Google Chrome | Lançador do Gemini em janela de aplicativo. |
 | Player compatível com MPRIS | Controles de mídia para os players reconhecidos, incluindo Spotify, Chrome/Chromium e YouTube Widget. |
 | Caffeine Indicator | Indicador externo mantido na inicialização automática. |
