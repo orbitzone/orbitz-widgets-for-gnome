@@ -67,6 +67,66 @@ class ProviderHttpTests(unittest.TestCase):
         self.assertNotIn(PAT,str(failed.exception))
         with self.assertRaises(CalendarError):http.request_json('https://api.calendly.com/scheduled_events',host='api.calendly.com',path_prefix='/',form={'token':PAT})
 
+    def test_token_endpoint_diagnostic_allowlist_never_exposes_sensitive_fields(self):
+        sensitive='synthetic-code-secret-SENTINEL'
+        for code in ('invalid_client','invalid_grant','access_denied','invalid_scope','unauthorized_client'):
+            with self.subTest(code=code):
+                body=json.dumps(dict(error=code,error_description=sensitive,access_token=ACCESS,refresh_token=REFRESH,client_secret=CLIENT['client_secret'],code=sensitive)).encode()
+                error=HTTPError(oauth.TOKEN_URL,400,'reason '+sensitive,{},io.BytesIO(body))
+                with patch.object(http,'build_opener') as opener:
+                    opener.return_value.open.side_effect=error
+                    with self.assertRaises(CalendarError) as failed:
+                        http.request_json(oauth.TOKEN_URL,host='oauth2.googleapis.com',path_prefix='/token',form=dict(code=sensitive))
+                self.assertIn(code,str(failed.exception))
+                for value in (sensitive,ACCESS,REFRESH,CLIENT['client_secret']):self.assertNotIn(value,str(failed.exception))
+                self.assertTrue(error.fp.closed)
+
+    def test_token_error_unknown_malformed_oversized_and_non_token_api_stay_generic(self):
+        sensitive='private-synthetic-SENTINEL'
+        payloads=[json.dumps({'error':sensitive}).encode(),json.dumps({'error':[sensitive]}).encode(),sensitive.encode(),json.dumps({'error':'invalid_client','error_description':sensitive*400}).encode()]
+        for body in payloads:
+            with self.subTest(size=len(body)):
+                error=HTTPError(oauth.TOKEN_URL,400,sensitive,{},io.BytesIO(body))
+                with patch.object(http,'build_opener') as opener:
+                    opener.return_value.open.side_effect=error
+                    with self.assertRaises(CalendarError) as failed:http.request_json(oauth.TOKEN_URL,host='oauth2.googleapis.com',path_prefix='/token',form={'code':sensitive})
+                self.assertNotIn(sensitive,str(failed.exception));self.assertNotIn('invalid_client',str(failed.exception))
+        response=io.BytesIO(b'{"error":"invalid_client"}')
+        error=HTTPError('https://www.googleapis.com/calendar/v3/test',400,sensitive,{},response)
+        with patch.object(http,'build_opener') as opener:
+            opener.return_value.open.side_effect=error
+            with self.assertRaises(CalendarError) as failed:http.request_json('https://www.googleapis.com/calendar/v3/test',host='www.googleapis.com',path_prefix='/calendar/v3/',bearer=ACCESS)
+        self.assertNotIn('invalid_client',str(failed.exception))
+        self.assertTrue(response.closed)
+
+    def test_invalid_request_missing_secret_exact_templates_only_and_safe_fallback(self):
+        templates=['client_secret is missing.','Missing required parameter: client_secret']
+        for description in templates+['client_secret is missing. '+PAT,'prefix '+templates[0],templates[0]+'\n',{'private':PAT}]:
+            with self.subTest(exact=description in templates):
+                body=json.dumps({'error':'invalid_request','error_description':description,'access_token':ACCESS,'client_secret':PAT}).encode()
+                error=HTTPError(oauth.TOKEN_URL,400,'private reason '+PAT,{},io.BytesIO(body))
+                with patch.object(http,'build_opener') as opener:
+                    opener.return_value.open.side_effect=error
+                    with self.assertRaises(CalendarError) as failed:http.request_json(oauth.TOKEN_URL,host='oauth2.googleapis.com',path_prefix='/token',form={'code':'private-code'})
+                message=str(failed.exception)
+                self.assertIn('troca de token (HTTP 400)',message);self.assertIn('invalid_request',message)
+                self.assertEqual('parâmetro client_secret' in message,description in templates)
+                for value in (PAT,ACCESS,'private-code','private reason'):self.assertNotIn(value,message)
+
+    def test_unknown_token_error_and_google_api_failure_identify_stage_without_body(self):
+        cases=[(oauth.TOKEN_URL,'oauth2.googleapis.com',{'code':'private-code'},'Google OAuth - troca de token'),('https://www.googleapis.com/calendar/v3/users/me/calendarList','www.googleapis.com',None,'Google Calendar - lista de calendários'),('https://www.googleapis.com/calendar/v3/calendars/private-calendar-id/events','www.googleapis.com',None,'Google Calendar - consulta de eventos')]
+        for url,host,form,stage in cases:
+            for status in (400,401):
+                with self.subTest(stage=stage,status=status):
+                    body=json.dumps({'error':PAT,'error_description':ACCESS}).encode()
+                    error=HTTPError(url,status,REFRESH,{},io.BytesIO(body))
+                    with patch.object(http,'build_opener') as opener:
+                        opener.return_value.open.side_effect=error
+                        with self.assertRaises(CalendarError) as failed:http.request_json(url,host=host,path_prefix='/',form=form)
+                    message=str(failed.exception)
+                    self.assertIn(stage,message);self.assertIn('HTTP '+str(status),message)
+                    for value in (PAT,ACCESS,REFRESH,'private-code','private-calendar-id'):self.assertNotIn(value,message)
+
     def test_response_limits_and_cancel(self):
         with patch.object(http,'build_opener') as opener:
             opener.return_value.open.return_value=io.BytesIO(b'{}xxxx')
@@ -113,6 +173,33 @@ class MemoryCallbackTests(unittest.TestCase):
         finally:flow.close()
         self.assertTrue(flow.server.closed)
 
+    def test_broken_browser_write_keeps_valid_callback_but_never_invalid_state(self):
+        cases=[('valid',False,'synthetic-success-code',False),('denied',True,None,True),('invalid',False,None,False),('invalid_host',False,None,False)]
+        cases=[(*case,phase) for case in cases for phase in ('headers','body')]
+        for kind,denied,expected_code,expected_denied,phase in cases:
+            with self.subTest(kind=kind,phase=phase):
+                with patch.object(oauth,'HTTPServer',MemoryServer):flow=oauth.Loopback()
+                try:
+                    query={'state':flow.state if kind!='invalid' else 'wrong'}
+                    query.update({'error':'access_denied'} if denied else {'code':'synthetic-success-code'})
+                    handler=object.__new__(flow.server.handler)
+                    handler.path='/?'+urlencode(query);handler.client_address=('127.0.0.1',12345);handler.headers={'Host':'evil.invalid' if kind=='invalid_host' else '127.0.0.1:43210'}
+                    handler.send_response=lambda status:None;handler.send_header=lambda *args:None;handler.end_headers=lambda:None
+                    class BrokenWriter:
+                        def write(self,value):raise BrokenPipeError('synthetic closed browser')
+                    handler.wfile=BrokenWriter() if phase=='body' else io.BytesIO()
+                    if phase=='headers':handler.end_headers=lambda:(_ for _ in ()).throw(BrokenPipeError('synthetic closed headers'))
+                    output=io.StringIO()
+                    with contextlib.redirect_stdout(output),contextlib.redirect_stderr(output):
+                        handler.do_GET()
+                    self.assertEqual(flow.code,expected_code)
+                    self.assertEqual(flow.denied,expected_denied)
+                    self.assertEqual(output.getvalue(),'')
+                    if kind=='valid':self.assertEqual(flow.wait(timeout=.01),'synthetic-success-code')
+                    elif kind=='denied':
+                        with self.assertRaisesRegex(CalendarError,'não foi concedida'):flow.wait(timeout=.01)
+                finally:flow.close()
+
     def test_callback_denial_cancel_timeout_duplicate_state_and_clear_memory(self):
         with patch.object(oauth,'HTTPServer',MemoryServer):flow=oauth.Loopback()
         try:
@@ -154,6 +241,7 @@ class VaultBoundaryTests(unittest.TestCase):
 class OAuthTests(unittest.TestCase):
     def setUp(self):
         self.temporary=tempfile.TemporaryDirectory();self.addCleanup(self.temporary.cleanup)
+        environment=patch.dict('os.environ',{'XDG_CONFIG_HOME':str(Path(self.temporary.name)/'isolated-config')});environment.start();self.addCleanup(environment.stop)
         self.config=Path(self.temporary.name)/'client.json';self.config.write_text(json.dumps({'installed':CLIENT}))
 
     def test_desktop_config_required_no_remote_endpoint_injection(self):
@@ -161,6 +249,38 @@ class OAuthTests(unittest.TestCase):
         for value in [{'web':CLIENT},{'installed':dict(CLIENT,token_uri='https://evil.invalid/token')},{'installed':{'client_id':'not-a-desktop-client'}}]:
             self.config.write_text(json.dumps(value))
             with self.assertRaises(CalendarError):oauth.load_config(self.config)
+
+    def test_public_default_requires_no_file_and_never_invents_client_secret(self):
+        expected='227612761270-gua91gpqp9agb5flm164ind5fk7l38hq.apps.googleusercontent.com'
+        with patch.object(oauth.os,'open',side_effect=AssertionError('default must not read config files')):
+            config=oauth.load_config()
+            self.assertEqual(config,{'client_id':expected})
+            config['client_id']='modified locally'
+            self.assertEqual(oauth.load_config(None),{'client_id':expected})
+        # Custom Desktop files remain supported, including their supplied secret.
+        self.assertEqual(oauth.load_config(self.config),CLIENT)
+
+    def test_default_token_exchange_and_refresh_without_secret_keep_existing_grant(self):
+        class Flow:
+            verifier='synthetic-verifier';redirect_uri='http://127.0.0.1:1234/'
+            def authorization_url(self,config):return oauth.AUTH_URL+'?'+urlencode(config)
+            def wait(self,cancel_event):return 'synthetic-code'
+            def close(self):pass
+        with patch.object(oauth,'Loopback',return_value=Flow()),patch.object(http,'request_json',return_value=grant()) as request:
+            value=oauth.authorize(open_browser=lambda url:True)
+            form=request.call_args.kwargs['form']
+            self.assertEqual(form['client_id'],oauth.DEFAULT_CLIENT_ID)
+            self.assertNotIn('client_secret',form)
+            self.assertEqual(form['code_verifier'],'synthetic-verifier')
+        response=grant();response.pop('refresh_token')
+        previous={key:value[key] for key in ('config','refresh_token','scope')}
+        with patch.object(http,'request_json',return_value=response) as request:
+            renewed=oauth.refresh(previous)
+            form=request.call_args.kwargs['form']
+            self.assertEqual(form['client_id'],oauth.DEFAULT_CLIENT_ID)
+            self.assertNotIn('client_secret',form)
+            self.assertEqual(renewed['refresh_token'],REFRESH)
+            self.assertEqual(previous['refresh_token'],REFRESH)
 
     def test_loopback_state_pkce_host_and_no_logging_real_synthetic_callback(self):
         output=io.StringIO()
@@ -295,6 +415,7 @@ class AccountLifecycleTests(unittest.TestCase):
     def setUp(self):
         self.temporary=tempfile.TemporaryDirectory();self.addCleanup(self.temporary.cleanup)
         self.base=Path(self.temporary.name);self.vault=FakeVault()
+        environment=patch.dict('os.environ',{'XDG_CONFIG_HOME':str(self.base/'isolated-config')});environment.start();self.addCleanup(environment.stop)
         for target,name,value in [(external_store,'PATH',self.base/'data/external-calendars.json'),(accounts,'LOCK_ROOT',self.base/'data/locks'),(accounts,'_ACCESS',{})]:
             patcher=patch.object(target,name,value);patcher.start();self.addCleanup(patcher.stop)
         patcher=patch.object(accounts,'ProviderVault',return_value=self.vault);patcher.start();self.addCleanup(patcher.stop)
@@ -359,6 +480,25 @@ class AccountLifecycleTests(unittest.TestCase):
             for job in jobs:job.join(timeout=3)
             self.assertEqual(errors,[]);self.assertEqual(results,[[],[],[]]);self.assertEqual(refreshed.call_count,1)
         self.assertEqual(self.vault.get('google',account['id'])['refresh_token'],'rotated-refresh-SENTINEL')
+
+    def test_google_progress_fixed_stages_and_callback_failure_does_not_break_auth(self):
+        class Flow:
+            verifier='synthetic-verifier';redirect_uri='http://127.0.0.1:1234/'
+            def authorization_url(self,config):return oauth.AUTH_URL+'?'+urlencode(config)
+            def wait(self,cancel_event):return 'synthetic-code'
+            def close(self):pass
+        stages=[]
+        with patch.object(oauth,'Loopback',return_value=Flow()),patch.object(http,'request_json',return_value=grant()),patch.object(accounts.GoogleClient,'discover',return_value=[GCAL]):
+            account=accounts.connect_google(None,'Progress fixture',open_browser=lambda url:True,on_progress=stages.append)
+        self.assertEqual(stages,['waiting_authorization','exchanging_token','loading_calendars','saving_credentials'])
+        for value in (ACCESS,REFRESH,CLIENT['client_secret'],'synthetic-code'):self.assertNotIn(value,json.dumps(stages))
+        accounts.disconnect(account)
+        def broken_progress(stage):raise RuntimeError(PAT)
+        output=io.StringIO()
+        with patch.object(oauth,'Loopback',return_value=Flow()),patch.object(http,'request_json',return_value=grant()),patch.object(accounts.GoogleClient,'discover',return_value=[GCAL]),contextlib.redirect_stderr(output),contextlib.redirect_stdout(output):
+            account=accounts.connect_google(None,'Progress disposed',open_browser=lambda url:True,on_progress=broken_progress)
+        self.assertTrue(account['id'].startswith('google-'));self.assertEqual(output.getvalue(),'')
+        with self.assertRaises(ValueError):oauth.notify_progress(stages.append,'unknown-stage')
 
     def test_google_and_calendly_events_import_as_tasks_without_touching_hours(self):
         path=self.base/'notes.json'

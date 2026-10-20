@@ -83,15 +83,17 @@ def _commit(account,payload,cancel_event,access=None):
             raise
 
 
-def connect_google(config_path,label,*,cancel_event=None,open_browser=None):
+def connect_google(config_path,label,*,cancel_event=None,open_browser=None,on_progress=None):
     label=_label(label)
-    credentials=google_oauth.authorize(config_path,cancel_event=cancel_event,open_browser=open_browser)
+    credentials=google_oauth.authorize(config_path,cancel_event=cancel_event,open_browser=open_browser,on_progress=on_progress)
+    google_oauth.notify_progress(on_progress,'loading_calendars')
     calendars=GoogleClient(credentials['access_token'],cancel_event=cancel_event).discover()
     primary=next((calendar['remote_id'] for calendar in calendars if calendar['primary']),calendars[0]['remote_id'])
     identity=_identity('google',credentials['config']['client_id']+'|'+primary)
     account=dict(id=identity,provider='google',label=label,calendars=calendars)
     payload={key:credentials[key] for key in ('config','refresh_token','scope')}
     # Access tokens are held only in RAM, under the same lifecycle lock.
+    google_oauth.notify_progress(on_progress,'saving_credentials')
     return _commit(account,payload,cancel_event,access=(credentials['access_token'],credentials['expires_at']))
 
 

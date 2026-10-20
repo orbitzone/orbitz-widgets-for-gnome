@@ -190,3 +190,33 @@ INV-04 — conclusão local em 19/10/2026: auditoria independente aprovou 62 tes
 ## OPS-01 — Fluxo econômico de agentes
 
 Concluído em documentação em 19/10/2026: auditoria média no fechamento de sprint, alto risco antes da operação, UX sob demanda, testes proporcionais com o responsável, briefs/relatórios curtos e contexto ativo compacto. Histórico dos contratos preservado; fila de próximas revisões criada sem disparar nova sprint/auditoria. Sem alteração de código, instalação ou reinício. Economia de tokens não medida; avaliar retrabalho e necessidade real de revisões nos próximos lotes, sem automação de acompanhamento.
+
+## CAL-04 — diagnóstico de falha após retorno Google (19/10/2026)
+
+Observado: usuário chegou à página local “Autorização recebida”, mas conexão não foi concluída; inspeção limitada de metadados locais confirmou zero contas Google salvas. Callback não comprova troca de tokens/discovery/cofre. Mensagem exata do aplicativo solicitada, aguardando. Melhorar diagnóstico limitado por código OAuth conhecido sem incluir corpo remoto, error_description, tokens ou códigos. Não atribuir falta de secret/consentimento/cofre sem evidência. Configuração/autenticação permanecem pendentes de teste real.
+
+CAL-04 atualização do usuário: o Orbitz permanece aguardando autorização, botão inativo, sem erro visível. A resposta anterior com “Google não verificou” era do navegador. Investigar callback antes de concluir causa; hipótese técnica testável: estado recebido atribuído depois de escrever a resposta pode ser perdido se a escrita falhar. Acrescentar progresso fixo por etapa e erros seguros, mantendo cancelamento/ACK e sem permitir tentativas concorrentes artificiais.
+
+CAL-04: fontes corrigidas e revisão focada concluída; bug BrokenPipe foi reproduzido, mas causa única da tentativa real não certificada. Reteste manual pendente após atualização4arquivos; se persistir, coletar etapa/mensagem exibida no Orbitz sem credenciais. Evidência no parecer CAL-04.
+
+## CAL-05 — Parâmetro ausente no cliente OAuth (19/10/2026)
+
+Instalação atual conferida; probe público sem código válido confirmou invalid_request/client_secret ausente. Completar configuração do mantenedor localmente sem JSON no fluxo normal e sem versão do segredo; ferramenta privada + diagnósticos/testes. JSON Desktop será baixado pelo usuário; autorização real posterior pendente. Esta evidência substitui a hipótese de simples expiração/reinstalação.
+
+CAL-05 evidência adicional: arquivo Desktop indicado pelo mantenedor foi validado localmente sem mostrar valores, ID correspondente e parâmetro presente. Segundo probe oficial com a configuração completa e o mesmo código fictício retornou invalid_grant, sem erro de parâmetro ausente. Isso confirma remoção do bloqueio de configuração, não autenticação/grant real. Preparação privada/testes/revisão em andamento; não inserir arquivo real, valores ou caminho pessoal na documentação.
+
+CAL-05 fechamento local: configuração privada do mantenedor preparada/check OK após permissão,35 testes/6 adversos e revisão sem impeditivo. Duas fontes instaladas ainda precisam atualização; reteste do login pendente. Não confundir preparação local com release público ou autenticação concluída.
+
+## CAL-06 — Conteúdo dos dias marcados
+
+Confirmado Google login/sincronização inicial pelo usuário; manter limites de casos não testados. Corrigir assimetria calendário/Agenda para feriados de outras fontes e atividades locais, distinguir seleção, melhorar legenda/tooltip. Ajuda opcional de ativação Calendar API do projeto para mantenedor. Frontend/testes em andamento; risco médio, revisão no fechamento.
+
+CAL-06 implementado nas fontes com18 testes direcionados aprovados. Motivos das marcações alinhados ao conteúdo da Agenda; seleção distinguida e ajudaAPIopcional adicionada. Aplicação/validação visual pendentes, revisão média agrupada.
+
+## CAL-07 — Fonte padrão reativável
+
+RC-29: Brasil·Datas comemorativas permanente em Gerenciar, toggle persistente, restauração do cadastro excluído, sem duplicação de assinatura legada; inativa não participa de fonte/sync/marcação. Backend/Frontend em paralelo com contrato alinhado, sem credenciais ou dados reais. Risco médio, revisão agrupada.
+
+CAL-07 fontes concluídas/testes locais aprovados:31 testes dirigidos e regressão externa. Plano3arquivos/0comandos; reabrir Workspace após atualização restaura o cadastro excluído e permite testar Ativar/Desativar persistente. GUI/aplicação e revisão média no fechamento permanecem separadas.
+
+Proposta futura (fora CAL-07): guarda enabled em consumidores de alertas para fontes desativáveis que tenham eventos com horário. A fonte pública brasileira atual é de dia inteiro e já não produz alertas temporizados; não ampliar esta entrega nem exigir reload GNOME por hipótese.

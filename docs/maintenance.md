@@ -36,3 +36,9 @@ git diff --check
 Executar testes GJS com a raiz do repositório conforme cada script. Não instalar, reiniciar GNOME, publicar ou acessar acervo real por uma alteração documental.
 
 O [README anterior](archive/2026-10-19-readme-internal.md) foi preservado como histórico dos marcos, resultados e caminhos locais. Contém estados de datas diferentes e instruções ultrapassadas: consultar apenas quando necessário e conferir as fontes atuais antes de operar. Não tratar seus planos antigos ou caminhos da identidade legada como estado instalado atual.
+
+## Referência editorial do README
+
+A apresentação pública prioriza benefícios, recursos, adoção, privacidade e limitações que afetam o uso. Coordenação, resultados de testes, caminhos históricos e estado de aplicação ficam neste índice e em `project-context.md`, sem referências ao ambiente de desenvolvimento no README.
+
+Detalhes de faturamento para manutenção: cancelar a emissão não grava alterações dos perfis; moeda e idioma são independentes; referências de projeto/departamento não substituem os dados fiscais do destinatário. Ver domínio e interface em `extension/planner/invoice*.py`. A versão pública resumida não altera esses contratos.

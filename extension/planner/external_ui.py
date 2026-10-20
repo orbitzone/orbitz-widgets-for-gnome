@@ -11,6 +11,7 @@ import store,ui_state
 import ics_client
 from calendar_selector import CalendarSelector,below
 import provider_connection_ui
+from day_activity import external_activity, local_activity
 
 class ExternalCalendars:
     def __init__(self,window,left,tabs):
@@ -66,11 +67,14 @@ class ExternalCalendars:
 
     def populate(self,select=None):
         previous=select if select is not None else (self.selector.get_active_id() or ui_state.get('external-source','local'))
-        try:self.accounts=remote.read()['accounts']
+        try:
+            remote.ensure_default_calendar()
+            self.accounts=remote.read()['accounts']
         except Exception as error:self.accounts=[];self.status.set_text(str(error))
         self.loading=True;self.selector.remove_all();self.selector.append('local','Somente agenda local')
         ids=[]
         for account in self.accounts:
+            if not account.get('enabled',True):continue
             for calendar in account['calendars']:
                 identity=account['id']+'|'+calendar['id'];ids.append(identity)
                 self.selector.append(identity,self.source_label(account,calendar))
@@ -79,6 +83,7 @@ class ExternalCalendars:
     def context(self):
         identity=self.selector.get_active_id()
         for account in self.accounts:
+            if not account.get('enabled',True):continue
             for calendar in account['calendars']:
                 if identity==account['id']+'|'+calendar['id']:
                     year,month,_=self.window.calendar.get_date()
@@ -103,6 +108,7 @@ class ExternalCalendars:
         if selected:self.sync_context(selected,force)
         else:self.status.set_text('');self.render()
         for account in self.accounts:
+            if not account.get('enabled',True):continue
             for calendar in account['calendars']:
                 context=(account,calendar,month)
                 if context!=selected:self.sync_context(context,force)
@@ -121,7 +127,9 @@ class ExternalCalendars:
 
     def sync_context(self,context,force=False):
         if not self.alive:return
-        account,calendar,month=context;key=remote.cache_key(account['id'],calendar['id'],month)
+        account,calendar,month=context
+        if not account.get('enabled',True):return
+        key=remote.cache_key(account['id'],calendar['id'],month)
         try:
             cache=remote.read()['cache'].get(key,{})
             if not force and cache.get('updated') and (datetime.now(timezone.utc)-datetime.fromisoformat(cache['updated'])).total_seconds()<300:
@@ -135,6 +143,9 @@ class ExternalCalendars:
         cancelled=threading.Event();self.cancel_events.append(cancelled);self.sync_cancels[key]=(account['id'],cancelled)
         if self.context()==context:self.status.set_text('Atualizando eventos…');self.render()
         def work():
+            if cancelled.is_set():return
+            current=next((a for a in remote.read()['accounts'] if a['id']==account['id']),None)
+            if current is None or not current.get('enabled',True):return
             if account['provider'] in ('google','calendly'):
                 import calendar_accounts
                 events=calendar_accounts.events(account,calendar,month,cancel_event=cancelled)
@@ -170,28 +181,22 @@ class ExternalCalendars:
         if 'comemorativa' in description or 'observance' in description:return False
         return description.startswith(('feriado','public holiday','national holiday')) or bool(re.search(r'\b(holiday|feriado)\b',categories)) or event.get('title','').casefold().startswith('feriado')
 
-    def mark_days(self):
-        holidays={};details={}
+    def day_context(self,day,data=None):
+        data=remote.read() if data is None else data
+        return external_activity(self.accounts,data.get('cache',{}),remote.cache_key,
+            self.selector.get_active_id(),day,self.is_holiday,self.source_label)
+
+    def mark_days(self,details=None):
+        holidays={};details=dict(details or {})
         try:
-            year,month,_=self.window.calendar.get_date();month_key=f'{year:04d}-{month+1:02d}'
-            first=date(year,month+1,1);end=(first.replace(day=28)+timedelta(days=4)).replace(day=1)
-            data=remote.read();selected=self.selector.get_active_id()
-            for account in self.accounts:
-                for calendar in account['calendars']:
-                    cache=data['cache'].get(remote.cache_key(account['id'],calendar['id'],month_key),{})
-                    visible=selected==account['id']+'|'+calendar['id']
-                    for event in cache.get('events',[]):
-                        holiday=self.is_holiday(event)
-                        if not visible and not holiday:continue
-                        day=first
-                        while day<end:
-                            if apple.on_day(event,day):
-                                self.window.calendar.mark_day(day.day)
-                                if visible:details.setdefault(day.day,[]).append(event['title'])
-                                if holiday:
-                                    text=event['title']+' · '+self.source_label(account,calendar)
-                                    holidays.setdefault(day.day,[]).append(text)
-                            day+=timedelta(days=1)
+            year,month,_=self.window.calendar.get_date()
+            day=date(year,month+1,1);data=remote.read()
+            while day.month==month+1 and day.year==year:
+                events,others,holiday_text=self.day_context(day,data)
+                if events or others:self.window.calendar.mark_day(day.day)
+                if events:details.setdefault(day.day,[]).extend('Evento: '+e['title'] for e in events if not self.is_holiday(e))
+                if holiday_text:holidays[day.day]=holiday_text
+                day+=timedelta(days=1)
         except Exception as error:self.status.set_text(str(error))
         self.window.calendar.finish_marks(holidays,details)
 
@@ -202,10 +207,10 @@ class ExternalCalendars:
             context,cache=self.selected_cache()
             if not context:
                 self.title.set_text('Calendários externos')
-                self.rows.pack_start(Gtk.Label(label='Use “Integrar calendário” para conectar o iCloud.\nDepois, selecione um calendário para consultar os eventos e criar tarefas.',xalign=0,wrap=True),False,False,0)
+                self.rows.pack_start(Gtk.Label(label='Use “Integrar calendário” para conectar uma fonte.\nDepois, selecione um calendário para consultar os eventos e criar tarefas.',xalign=0,wrap=True),False,False,0)
             else:
                 account,calendar,month=context;self.title.set_text(self.source_label(account,calendar)+' · '+date.fromisoformat(self.window.day).strftime('%d/%m/%Y'))
-                events=[e for e in cache.get('events',[]) if apple.on_day(e,date.fromisoformat(self.window.day))]
+                events,_,_=self.day_context(date.fromisoformat(self.window.day))
                 for event in events:
                     card=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=6,margin_top=8,margin_bottom=8)
                     clock='Dia inteiro' if event['all_day'] else datetime.fromisoformat(event['start']).strftime('%H:%M')+' – '+datetime.fromisoformat(event['end']).strftime('%H:%M')
@@ -216,8 +221,23 @@ class ExternalCalendars:
                     action.set_sensitive(not existing);action.connect('clicked',lambda _,e=event,a=account,c=calendar:self.import_task(e,a,c));card.pack_start(action,False,False,0)
                     self.rows.pack_start(card,False,False,0)
                 if not events:
-                    text='Atualizando eventos deste mês…' if remote.cache_key(account['id'],calendar['id'],month) in self.busy else 'Nenhum evento disponível neste dia.'
+                    text='Atualizando eventos deste mês…' if remote.cache_key(account['id'],calendar['id'],month) in self.busy else 'Nenhum evento nesta fonte neste dia.'
                     self.rows.pack_start(Gtk.Label(label=text,xalign=0,wrap=True),False,False,0)
+            day=date.fromisoformat(self.window.day)
+            _,other_holidays,_=self.day_context(day)
+            for event,source in other_holidays:
+                self.rows.pack_start(Gtk.Label(label='Feriado · '+event['title']+'\nFonte: '+source,xalign=0,wrap=True),False,False,0)
+            tasks,sheets=local_activity(self.window.data,day)
+            if tasks:
+                text='Tarefas locais pendentes: '+str(len(tasks))+'\n'+'\n'.join(t['text'] for t in tasks)
+                self.rows.pack_start(Gtk.Label(label=text,xalign=0,wrap=True),False,False,0)
+                action=Gtk.Button(label='Abrir Tarefas');action.connect('clicked',lambda *_:self.window.show_area('tasks'))
+                self.rows.pack_start(action,False,False,0)
+            for sheet,entries in sheets:
+                self.rows.pack_start(Gtk.Label(label='Horas locais · '+sheet['name']+' · '+str(len(entries))+' registro(s)',xalign=0,wrap=True),False,False,0)
+                action=Gtk.Button(label='Abrir Horas · '+sheet['name'])
+                action.connect('clicked',lambda _,identity=sheet['id']:self.window.focus_sheet(identity))
+                self.rows.pack_start(action,False,False,0)
         except Exception as error:self.rows.pack_start(Gtk.Label(label=str(error),xalign=0,wrap=True),False,False,0)
         self.rows.show_all()
 
@@ -334,7 +354,14 @@ class ExternalCalendars:
             account=success[0];self.populate(account['id']+'|'+account['calendars'][0]['id']);self.selection_changed()
             self.window.show_area('events')
 
+    def set_builtin_enabled(self,account,enabled):
+        if not enabled:self.cancel_sync(account_id=account['id'])
+        remote.set_builtin_enabled(account['id'],enabled)
+        self.populate();self.selection_changed()
+
     def disconnect_account(self,account):
+        if remote.is_builtin(account):
+            self.set_builtin_enabled(account,False);return
         self.cancel_sync(account_id=account['id'])
         if account['provider'] in ('google','calendly'):
             import calendar_accounts
@@ -350,14 +377,28 @@ class ExternalCalendars:
         status=Gtk.Label(xalign=0,wrap=True);dialog.get_content_area().pack_end(status,False,False,8)
         def populate():
             for child in box.get_children():child.destroy()
+            remote.ensure_default_calendar()
             accounts=remote.read()['accounts']
             for account in accounts:
                 row=Gtk.Box(spacing=10);box.add(row)
-                title=Gtk.Label(label=account['label']+'\n'+account.get('email',{'google':'Google Calendar','calendly':'Calendly','ics':'Assinatura por link'}.get(account['provider'],'iCloud')),xalign=0,wrap=True)
+                builtin=remote.is_builtin(account)
+                description=('Fonte pública · Ativada' if account.get('enabled',True) else 'Fonte pública · Desativada') if builtin else account.get('email',{'google':'Google Calendar','calendly':'Calendly','ics':'Assinatura por link'}.get(account['provider'],'iCloud'))
+                title=Gtk.Label(label=('Brasil · Datas comemorativas' if builtin else account['label'])+'\n'+description,xalign=0,wrap=True)
                 title.set_line_wrap_mode(Pango.WrapMode.WORD_CHAR);title.set_max_width_chars(40);row.pack_start(title,True,True,0)
-                remove=Gtk.Button(label='Desconectar');remove.connect('clicked',lambda _,a=account:disconnect(a));row.pack_end(remove,False,False,0)
+                if builtin:
+                    toggle=Gtk.Button(label='Desativar' if account.get('enabled',True) else 'Ativar')
+                    toggle.connect('clicked',lambda _,a=account:change_enabled(a));row.pack_end(toggle,False,False,0)
+                else:
+                    remove=Gtk.Button(label='Desconectar');remove.connect('clicked',lambda _,a=account:disconnect(a));row.pack_end(remove,False,False,0)
             if not accounts:box.add(Gtk.Label(label='Nenhuma conta conectada.',xalign=0))
             box.show_all()
+        def change_enabled(account):
+            try:
+                enabled=not account.get('enabled',True)
+                self.set_builtin_enabled(account,enabled)
+                status.set_text('Fonte pública ativada.' if enabled else 'Fonte pública desativada; cache e atividades locais preservados.')
+                populate()
+            except Exception as error:status.set_text(str(error))
         def disconnect(account):
             confirm=Gtk.MessageDialog(transient_for=dialog,modal=True,message_type=Gtk.MessageType.QUESTION,buttons=Gtk.ButtonsType.OK_CANCEL,text='Desconectar '+account['label']+'?')
             confirm.format_secondary_text('Os eventos baixados desta conexão serão removidos. Tarefas criadas e registros de horas permanecerão salvos.')

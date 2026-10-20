@@ -17,23 +17,54 @@ from calendar_events import CalendarError
 SCOPES=('https://www.googleapis.com/auth/calendar.calendarlist.readonly','https://www.googleapis.com/auth/calendar.events.readonly')
 AUTH_URL='https://accounts.google.com/o/oauth2/v2/auth'
 TOKEN_URL='https://oauth2.googleapis.com/token'
+DEFAULT_CLIENT_ID='227612761270-gua91gpqp9agb5flm164ind5fk7l38hq.apps.googleusercontent.com'
 
 
-def load_config(path):
+def private_config_path(config_home=None):
+    home=Path(config_home) if config_home is not None else Path(os.environ.get('XDG_CONFIG_HOME') or Path.home()/'.config')
+    path=home/'orbitz-widgets/google-client.json'
+    if not path.is_absolute() or path.resolve()!=path:
+        raise CalendarError('Diretório da configuração privada OAuth inválido ou vinculado.')
+    return path
+
+
+def _client_config(data,required_client_id=None,require_secret=False):
+    import re
+    if not isinstance(data,dict) or not isinstance(data.get('client_id'),str) or not re.fullmatch(r'[A-Za-z0-9._-]{1,200}\.apps\.googleusercontent\.com',data['client_id']):raise ValueError()
+    if required_client_id is not None and data['client_id']!=required_client_id:raise ValueError()
+    if data.get('token_uri',TOKEN_URL)!=TOKEN_URL or data.get('auth_uri',AUTH_URL) not in (AUTH_URL,'https://accounts.google.com/o/oauth2/auth'):raise ValueError()
+    result=dict(client_id=data['client_id'])
+    if data.get('client_secret'):result['client_secret']=http.secret(data['client_secret'])
+    if require_secret and 'client_secret' not in result:raise ValueError()
+    return result
+
+
+def read_client_config(path,*,private=False,required_client_id=None):
     try:
-        fd=os.open(Path(path),os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK)
+        path=Path(path).absolute()
+        if private:
+            if path.resolve()!=path:raise ValueError()
+            parent=path.parent.stat()
+            if parent.st_uid!=os.getuid() or stat.S_IMODE(parent.st_mode)&0o077:raise ValueError()
+        fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK)
         with os.fdopen(fd,'rb') as stream:
-            if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):raise ValueError()
+            info=os.fstat(stream.fileno())
+            if not stat.S_ISREG(info.st_mode):raise ValueError()
+            if private and (info.st_uid!=os.getuid() or stat.S_IMODE(info.st_mode)&0o077):raise ValueError()
             raw=stream.read(32769)
         if len(raw)>32768:raise ValueError()
-        data=json.loads(raw)['installed']
-        import re
-        if not isinstance(data,dict) or not isinstance(data.get('client_id'),str) or not re.fullmatch(r'[A-Za-z0-9._-]{1,200}\.apps\.googleusercontent\.com',data['client_id']):raise ValueError()
-        if data.get('token_uri',TOKEN_URL)!=TOKEN_URL or data.get('auth_uri',AUTH_URL) not in (AUTH_URL,'https://accounts.google.com/o/oauth2/auth'):raise ValueError()
-        result=dict(client_id=data['client_id'])
-        if data.get('client_secret'):result['client_secret']=http.secret(data['client_secret'])
-        return result
-    except (OSError,ValueError,KeyError,TypeError):raise CalendarError('Selecione o JSON de um cliente OAuth Google do tipo Desktop válido.') from None
+        return _client_config(json.loads(raw)['installed'],required_client_id,require_secret=private)
+    except (OSError,ValueError,KeyError,TypeError):raise CalendarError('Configuração OAuth Google inválida; confira o cliente Desktop e as permissões privadas configuradas.') from None
+
+
+def load_config(path=None):
+    if path is not None:return read_client_config(path)
+    configured=private_config_path()
+    if os.path.lexists(configured):
+        # Never fall back silently when an installed maintainer configuration is
+        # damaged, linked, world-readable, incomplete or belongs to another ID.
+        return read_client_config(configured,private=True,required_client_id=DEFAULT_CLIENT_ID)
+    return _client_config({'client_id':DEFAULT_CLIENT_ID},required_client_id=DEFAULT_CLIENT_ID)
 
 
 class Loopback:
@@ -62,12 +93,16 @@ class Loopback:
                     elif len(query.get('code',[]))==1 and 0<len(query['code'][0])<=4096:
                         code=http.secret(query['code'][0]);valid=True
                 except (ValueError,TypeError):pass
-                message=('Autorização recebida. Pode fechar esta página.' if valid else 'Resposta de autorização inválida.').encode('utf-8')
-                self.send_response(200 if valid else 400)
-                self.send_header('Content-Type','text/plain; charset=utf-8');self.send_header('Content-Length',str(len(message)))
-                self.send_header('Cache-Control','no-store');self.send_header('Referrer-Policy','no-referrer');self.end_headers()
-                self.wfile.write(message)
+                # Commit only validated results before any response I/O. A closed
+                # browser may break headers/body writes after completing OAuth.
                 if valid:owner.code=code;owner.denied=denied
+                message=('Autorização recebida. Pode fechar esta página.' if valid else 'Resposta de autorização inválida.').encode('utf-8')
+                try:
+                    self.send_response(200 if valid else 400)
+                    self.send_header('Content-Type','text/plain; charset=utf-8');self.send_header('Content-Length',str(len(message)))
+                    self.send_header('Cache-Control','no-store');self.send_header('Referrer-Policy','no-referrer');self.end_headers()
+                    self.wfile.write(message)
+                except (BrokenPipeError,ConnectionResetError):pass
         self.server=Server(('127.0.0.1',0),Handler)
         self.server.timeout=.2
         self.redirect_uri='http://127.0.0.1:'+str(self.server.server_port)+'/'
@@ -104,15 +139,27 @@ def _tokens(response,previous=None):
     except (ValueError,KeyError,TypeError,AttributeError):raise CalendarError('Autorização Google incompleta; conceda os dois escopos de leitura e tente novamente.') from None
 
 
-def authorize(config_path,*,cancel_event=None,open_browser=None):
+PROGRESS_STAGES=frozenset(('waiting_authorization','exchanging_token','loading_calendars','saving_credentials'))
+
+
+def notify_progress(callback,stage):
+    if stage not in PROGRESS_STAGES:raise ValueError('Etapa de autorização inválida.')
+    if callback is not None:
+        try:callback(stage)
+        except Exception:pass  # UI disposal/progress failure must not change grants.
+
+
+def authorize(config_path=None,*,cancel_event=None,open_browser=None,on_progress=None):
     config=load_config(config_path);http.cancelled(cancel_event)
     try:flow=Loopback()
     except OSError:raise CalendarError('Não foi possível abrir o retorno local OAuth. Verifique as permissões de rede local.') from None
     try:
+        notify_progress(on_progress,'waiting_authorization')
         try:opened=(open_browser or webbrowser.open)(flow.authorization_url(config))
         except Exception:raise CalendarError('Não foi possível abrir o navegador para autorizar o Google.') from None
         if opened is False:raise CalendarError('Não foi possível abrir o navegador para autorizar o Google.')
         code=flow.wait(cancel_event)
+        notify_progress(on_progress,'exchanging_token')
         form=dict(config,code=code,code_verifier=flow.verifier,redirect_uri=flow.redirect_uri,grant_type='authorization_code')
         result=_tokens(http.request_json(TOKEN_URL,host='oauth2.googleapis.com',path_prefix='/token',form=form,cancel_event=cancel_event))
         http.cancelled(cancel_event)

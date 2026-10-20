@@ -16,3 +16,8 @@ planner-ui.json
 reminder-state.json
 youtube.json
 invoice-profiles.json
+
+# Maintainer Google OAuth configuration (never commit credentials)
+client_secret*.json
+credentials.json
+google-client.json

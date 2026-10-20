@@ -7,6 +7,8 @@ gi.require_version('Gtk','3.0')
 from gi.repository import Gtk,Gio,GLib,Pango
 import store
 import ui_state
+from day_activity import local_details
+from datetime import timedelta
 import planner_tools
 import planner_menu
 import task_timesheet_ui
@@ -132,15 +134,13 @@ class CalendarWindow(Gtk.ApplicationWindow):
 
     def mark_days(self):
         self.calendar.clear_marks();year,month,_=self.calendar.get_date()
-        for entry in (e for s in self.data.get('timesheets',[]) if not s['archived'] for e in s['timesheet']):
-            day=date.fromisoformat(entry['date'])
-            if day.year==year and day.month==month+1:self.calendar.mark_day(day.day)
-        for task in self.data['tasks']:
-            try:day=date.fromisoformat(task['date'])
-            except (ValueError,KeyError):continue
-            if not task['done'] and day.year==year and day.month==month+1:self.calendar.mark_day(day.day)
-        if hasattr(self,'external'):self.external.mark_days()
-        else:self.calendar.finish_marks()
+        details={};day=date(year,month+1,1)
+        while day.year==year and day.month==month+1:
+            activity=local_details(self.data,day)
+            if activity:self.calendar.mark_day(day.day);details[day.day]=activity
+            day+=timedelta(days=1)
+        if hasattr(self,'external'):self.external.mark_days(details)
+        else:self.calendar.finish_marks(details=details)
 
     def refresh(self):
         if self.restoring:return False

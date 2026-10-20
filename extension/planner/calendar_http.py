@@ -33,6 +33,30 @@ def checked_url(url,host,path_prefix):
     return part
 
 
+def _token_error(error):
+    # Only allowlisted identifiers and two exact templates produce fixed text.
+    # No arbitrary description, header, URL or credential is ever returned.
+    messages={
+        'invalid_client':'Cliente não aceito (invalid_client). Confira a configuração Desktop do projeto.',
+        'invalid_grant':'Código ou autorização recusado/expirado (invalid_grant).',
+        'access_denied':'Autorização não concedida (access_denied).',
+        'invalid_scope':'Escopos de leitura não aceitos (invalid_scope).',
+        'unauthorized_client':'Cliente não autorizado para este fluxo (unauthorized_client).',
+        'invalid_request':'Requisição de autorização rejeitada (invalid_request).',
+    }
+    try:
+        raw=error.read(4097)
+        if len(raw)>4096:return None
+        payload=json.loads(raw)
+        code=payload.get('error') if isinstance(payload,dict) else None
+        if not isinstance(code,str) or code not in messages:return None
+        if code=='invalid_request' and payload.get('error_description') in (
+            'client_secret is missing.', 'Missing required parameter: client_secret'):
+            return 'O endpoint informou que o parâmetro client_secret do cliente Desktop está ausente (invalid_request). Conclua a configuração privada do mantenedor nesta instalação; nenhum valor foi exibido.'
+        return messages[code]
+    except (OSError,ValueError,TypeError):return None
+
+
 def request_json(url,*,host,path_prefix,bearer=None,form=None,cancel_event=None,timeout=15,limit=2*1024*1024):
     cancelled(cancel_event);checked_url(url,host,path_prefix)
     headers={'Accept':'application/json','User-Agent':'OrbitzCalendar/1.0'}
@@ -51,11 +75,25 @@ def request_json(url,*,host,path_prefix,bearer=None,form=None,cancel_event=None,
         if not isinstance(value,dict):raise ValueError()
         return value
     except HTTPError as error:
-        error.close()
-        if error.code in (400,401):message='Autorização indisponível ou expirada; reconecte a conta.'
-        elif error.code==403:message='Permissão recusada; confira os escopos de leitura concedidos.'
-        elif error.code==429:message='Limite de consultas atingido; aguarde antes de atualizar.'
-        else:message='Não foi possível consultar o calendário. Os dados locais foram preservados.'
+        detail=None
+        token_endpoint=url=='https://oauth2.googleapis.com/token' and form is not None
+        try:
+            if token_endpoint:detail=_token_error(error)
+        finally:error.close()
+        status=str(error.code) if type(error.code) is int and 100<=error.code<=599 else 'indisponível'
+        if token_endpoint:
+            message='Google OAuth - troca de token (HTTP '+status+'): '+(detail or 'Resposta de erro não reconhecida; não foi possível concluir esta etapa.')
+        else:
+            if error.code in (400,401):message='Autorização indisponível ou expirada; reconecte a conta.'
+            elif error.code==403:message='Permissão recusada; confira os escopos de leitura concedidos.'
+            elif error.code==429:message='Limite de consultas atingido; aguarde antes de atualizar.'
+            else:message='Não foi possível consultar o calendário. Os dados locais foram preservados.'
+            if host=='www.googleapis.com':
+                path=urlsplit(url).path
+                stage='lista de calendários' if path=='/calendar/v3/users/me/calendarList' else 'consulta de eventos' if path.startswith('/calendar/v3/calendars/') and path.endswith('/events') else 'consulta à API'
+                if error.code==400:message='A API recusou a consulta enviada.'
+                elif error.code==401:message='A API não aceitou a autorização enviada.'
+                message='Google Calendar - '+stage+' (HTTP '+status+'): '+message
         raise CalendarError(message) from None
     except (URLError,OSError,TimeoutError,ValueError,UnicodeError):
         raise CalendarError('Falha de conexão ou resposta inválida do calendário; dados locais preservados.') from None

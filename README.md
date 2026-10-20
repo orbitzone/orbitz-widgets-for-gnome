@@ -4,114 +4,120 @@
 
 # Orbitz Widgets for GNOME
 
-**Seu desktop conectado ao seu trabalho.**
+**Seu dia, seu trabalho e seu computador em um só lugar.**
 
-Acompanhe o computador, organize compromissos e transforme horas trabalhadas em faturas — em um ambiente integrado ao GNOME. O Orbitz combina widgets na área de trabalho com o **Orbitz Workspace**, um espaço para agenda, tarefas, horas e faturamento.
+Monte um desktop que acompanha sua rotina. Com o Orbitz, você vê o que acontece no computador, organiza compromissos e tarefas, registra horas e prepara faturas sem perder o contexto do trabalho.
 
-[Conheça o Workspace](#do-compromisso-à-fatura) · [Explore os widgets](#um-desktop-que-trabalha-com-você) · [Comece por aqui](#comece-por-aqui)
+Os widgets trazem as informações para a área de trabalho. O **Orbitz Workspace** conecta o planejamento à entrega: da agenda ao registro de horas, até o PDF enviado ao cliente.
 
-![Visão dos widgets Orbitz na área de trabalho](docs/images/desktop-widgets.png)
+[Explore os widgets](#seu-desktop-do-seu-jeito) · [Conheça o Workspace](#do-planejamento-à-fatura) · [Primeiros passos](#comece-por-aqui)
 
-## Um desktop que trabalha com você
+![Widgets Orbitz na área de trabalho](docs/images/desktop-widgets.png)
 
-Informações à vista, sem precisar abrir uma janela para cada consulta. Personalize posições, aparência e agrupamentos para montar o seu painel de trabalho.
+## Seu desktop, do seu jeito
 
-| Para acompanhar | O que você encontra |
+Escolha o que acompanhar, ajuste a aparência e organize os widgets em posições e grupos que fazem sentido para você.
+
+| Na sua rotina | No Orbitz |
 |---|---|
-| Seu dia | Relógio, data, clima e alertas de compromissos e tarefas. |
-| O computador | CPU, memória, armazenamento, processos, temperaturas e serviços. |
-| A conexão | Tráfego, qualidade da rede, conexões e portas em escuta. |
-| A manutenção | Atualizações de pacotes, informações do firewall e contêineres Docker. |
-| Suas ferramentas | Controles de mídia, Sticky Notes, player do YouTube e lançadores. |
+| Planejar o dia | Relógio, data, clima e alertas de compromissos e tarefas. |
+| Acompanhar o computador | CPU, memória, armazenamento, processos, temperaturas e serviços. |
+| Entender a conexão | Tráfego, qualidade da rede, conexões e portas em escuta. |
+| Cuidar do sistema | Atualizações de pacotes, informações do firewall e contêineres Docker. |
+| Ter suas ferramentas por perto | Notas adesivas, controles de mídia, player do YouTube e lançadores. |
 
-Os widgets começam pausados ao entrar na sessão. Use o controlador branco para abrir ou fechar o conjunto. Fechar os widgets preserva os dados salvos; ações que você iniciou em terminais continuam com seu próprio ciclo de execução.
+Ao entrar na sessão, os widgets começam pausados. Use o controlador branco para abrir ou fechar o conjunto, preservando seus dados salvos. Ações iniciadas em terminais continuam com seu próprio ciclo de execução.
 
-## Do compromisso à fatura
+## Do planejamento à fatura
 
-O **Orbitz Workspace** reúne cinco áreas para acompanhar o trabalho do início ao fim:
+O **Orbitz Workspace** reúne cinco áreas para organizar o trabalho com continuidade.
 
-| Área | O que você faz |
+| Área | Para você |
 |---|---|
-| **Hoje** | Veja tarefas pendentes, atrasadas, cronômetros e compromissos já sincronizados da fonte selecionada. |
-| **Agenda** | Consulte calendários conectados e transforme eventos em tarefas quando desejar. |
-| **Tarefas** | Organize entregas por data, configure lembretes e registre horas ao concluir uma atividade. |
-| **Horas** | Separe timesheets por empresa ou projeto, registre atividades e acompanhe totais. |
-| **Invoices** | Gere faturas em PDF, consulte emissões anteriores e organize versões dos documentos. |
+| **Hoje** | Um resumo de tarefas pendentes e atrasadas, cronômetros e compromissos sincronizados da fonte selecionada. |
+| **Agenda** | Seus calendários conectados, com a opção de transformar eventos em tarefas. |
+| **Tarefas** | Entregas por data, lembretes e registro de horas ao concluir uma atividade. |
+| **Horas** | Timesheets por empresa ou projeto, registros manuais, cronômetros e totais por período. |
+| **Invoices** | Faturas em PDF, histórico de emissões, versões e acompanhamento manual de pagamentos. |
 
-### Planeje com seus calendários
+### Traga seus calendários
 
-Conecte **Apple/iCloud**, **Google Calendar**, **Calendly** ou assinaturas **ICS**. A integração consulta os eventos; criar uma tarefa a partir de um compromisso é uma ação sua. Desconectar um calendário preserva as tarefas e as horas locais.
+Consulte **Apple/iCloud**, **Google Calendar**, **Calendly** e assinaturas **ICS** no Workspace. Você decide quando um compromisso vira tarefa. As integrações consultam eventos, e desconectar uma conta preserva suas tarefas e horas locais.
 
-A sincronização acontece com o Workspace aberto, com atualização periódica e consulta manual. Os lembretes da extensão podem usar eventos já sincronizados mesmo com a janela fechada; eventos de dia inteiro não geram esses alertas.
+**Brasil · Datas comemorativas** é uma fonte pública padrão, sem login. Ela permanece em Gerenciar conexões: você pode desativá-la e reativá-la quando quiser. Desativada, ela deixa de atualizar e marcar o calendário, preservando suas tarefas e horas.
 
-Cada conexão tem seus requisitos: senha específica de aplicativo no iCloud, configuração OAuth desktop própria no Google e token pessoal no Calendly. Credenciais ficam no cofre do sistema. Veja os [passos e requisitos das integrações](docs/operations/calendar-integrations.md).
+No Google, use **Entrar com Google** e autorize o acesso pelo navegador; a conexão está pronta quando o calendário aparece no seletor. O iCloud exige senha específica de aplicativo, e o Calendly usa token pessoal. As credenciais ficam no cofre do sistema. Consulte o [guia de integrações](docs/operations/calendar-integrations.md) para os requisitos de cada serviço.
 
-### Dê contexto às horas trabalhadas
+Ao escolher um dia, a Agenda explica as marcações do calendário: eventos da fonte selecionada, feriados conhecidos de outras fontes e atividades locais. Tarefas e horas continuam em suas áreas próprias, com atalhos para consulta. A data destacada é a seleção atual; o sublinhado dourado identifica feriado.
 
-Cada timesheet tem um nome e referências opcionais de cliente, contrato ou projeto e departamento ou centro de custo. Registre manualmente ou use o cronômetro; acompanhe totais por dia, semana e mês, recupere rascunhos e exporte CSV.
+A sincronização ocorre com o Workspace aberto, automaticamente em intervalos ou por atualização manual. Com a extensão ativa, os lembretes podem usar eventos já sincronizados mesmo após fechar a janela. Eventos de dia inteiro não geram esses alertas.
 
-Ao concluir uma tarefa, você pode registrar o trabalho na timesheet escolhida. Avisos de sobreposição ajudam na revisão dos horários. Timesheets antigas podem ser arquivadas e consultadas, sem misturar seus registros com os projetos ativos.
+### Transforme atividade em horas organizadas
 
-### Emita e acompanhe suas faturas
+Separe o trabalho por empresa ou projeto, dê um nome a cada timesheet e acrescente referências de cliente, contrato e departamento. Registre horas manualmente ou use o cronômetro, acompanhe totais diários, semanais e mensais e exporte CSV.
 
-Escolha a timesheet e o período: um mês civil, todo o histórico ou um intervalo selecionado no calendário. Preencha emitente, destinatário, valor por hora e moeda; revise a prévia e salve o PDF em **português ou inglês**.
+Rascunhos recuperáveis e avisos de sobreposição ajudam a revisar os registros. Ao concluir uma tarefa, você pode lançar as horas na timesheet escolhida. Projetos encerrados podem ser arquivados para consulta posterior.
 
-Após salvar o PDF, emitente e idioma são lembrados para as próximas emissões; cliente, taxa e moeda ficam separados por timesheet. Cancelar não grava essas alterações.
+### Prepare faturas para seus clientes
 
-O cálculo usa os minutos dos registros concluídos e arredonda o valor apenas no total. Cronômetros em andamento e registros na lixeira ficam de fora. A moeda é independente do idioma. Referências de projeto e departamento aparecem separadas dos dados fiscais do cliente.
+Escolha uma timesheet e o período — mês, histórico completo ou intervalo no calendário. Informe emitente, destinatário, valor por hora e moeda, revise a prévia e salve o PDF em **português ou inglês**.
 
-O histórico organiza as emissões por timesheet, cliente e mês de emissão, mantendo cópias independentes dos arquivos exportados. Avisos ajudam a identificar horas possivelmente faturadas antes, com confirmação para reemissões intencionais. O pagamento pode ser informado manualmente, sem alterar o PDF ou representar confirmação bancária.
+O Orbitz calcula o total a partir dos minutos concluídos, com arredondamento no valor final. Cronômetros em andamento e registros na lixeira ficam fora da cobrança. Seus dados de emissão são lembrados após salvar; cliente, taxa e moeda ficam separados por timesheet.
 
-As faturas são **documentos de serviços**, sem emissão de NFS-e, cálculo de impostos ou integração fiscal oficial.
+O histórico guarda cópias das faturas e organiza as emissões por timesheet, cliente e mês de emissão. Avisos ajudam a reconhecer horas possivelmente faturadas antes. Você também pode registrar pagamentos manualmente, sem alterar o PDF; esse registro não representa confirmação bancária.
 
-### Assine com um fluxo assistido
+As faturas são **documentos de serviços**. O Orbitz não emite NFS-e, não calcula impostos e não oferece integração fiscal oficial.
 
-Salve uma cópia e continue no assinador gov.br pelo navegador. Depois de assinar e baixar o documento manualmente, importe uma versão vinculada à invoice: o original e as versões anteriores permanecem preservados.
+### Continue a assinatura pelo gov.br
 
-As versões importadas ficam com **validação pendente**. O acesso ao portal VALIDAR também é manual; abrir o portal não altera o status. O Orbitz não faz login por você, não guarda senha gov.br, não envia documentos automaticamente e não verifica criptograficamente a assinatura ou a correspondência do arquivo importado.
+Salve uma cópia da fatura, abra o assinador gov.br e conclua a assinatura pelo navegador. Depois, importe o documento como uma versão vinculada à invoice, preservando o original e as versões anteriores.
 
-## Notas, mídia e atalhos por perto
+A assinatura e o acesso ao portal VALIDAR são manuais. Versões importadas ficam com **validação pendente**: o Orbitz não verifica criptograficamente a assinatura nem a correspondência do arquivo, e abrir o portal não altera esse status. Senhas gov.br e envio automático de documentos não fazem parte desse fluxo.
 
-Use **Sticky Notes** para ideias e lembretes soltos, com salvamento local e backups próprios. Controle players compatíveis pelo painel de mídia e abra vídeos em uma janela dedicada do YouTube. Pesquisa e comentários do player exigem uma chave própria da YouTube Data API.
+## Espaço para ideias e pausas
 
-Lançadores para ferramentas como btop e Gemini complementam o desktop, conforme os aplicativos disponíveis no computador.
+Anote ideias com **Sticky Notes**, que salvam localmente e têm backups próprios. Controle players compatíveis pelo painel de mídia e abra vídeos em uma janela dedicada do YouTube. Pesquisa e comentários no player exigem uma chave própria da YouTube Data API.
 
-## Seus dados e seus backups
+Lançadores para ferramentas como btop e Gemini completam o ambiente, conforme os aplicativos disponíveis no computador.
 
-Tarefas, horas, perfis de faturamento e histórico de invoices são armazenados localmente. Conexões externas são usadas para os serviços que você escolhe integrar; as credenciais desses calendários ficam no Secret Service do sistema.
+## Seus dados ficam com você
 
-O **backup completo do Workspace** inclui tarefas, horas, contextos, perfis, invoices, versões, pagamentos manuais e estado da interface. A restauração oferece prévia, confirmação e uma cópia do estado anterior. Encerre os cronômetros e feche outros editores antes de restaurar; depois, reabra o Workspace.
+Tarefas, horas, perfis de faturamento e histórico de invoices são armazenados localmente. Serviços externos são usados nos recursos que você escolhe conectar; as credenciais dos calendários ficam no cofre do sistema.
 
-O backup contém dados privados e **não é criptografado por senha**. Guarde-o em local seguro. Credenciais, calendários externos, Sticky Notes e configurações dos widgets ficam fora desse arquivo; as notas têm seu próprio armazenamento e backup. Excluir uma invoice do histórico remove o registro e suas versões gerenciadas, preservando os PDFs exportados e as horas trabalhadas.
+O **backup completo do Workspace** reúne tarefas, horas, contextos, perfis, invoices, versões, pagamentos manuais e preferências da interface. A restauração apresenta uma prévia, pede confirmação e cria uma cópia do estado anterior. Antes de restaurar, encerre os cronômetros e feche outros editores; depois, reabra o Workspace.
+
+O arquivo contém dados privados e **não é criptografado por senha**: guarde-o em local seguro. Credenciais, calendários externos, Sticky Notes e configurações dos widgets ficam fora desse backup. As notas têm backup próprio.
+
+Excluir uma invoice do histórico remove seu registro e as versões gerenciadas, preservando os PDFs exportados e as horas trabalhadas.
 
 ## Comece por aqui
 
-O Orbitz está em evolução. O ambiente de referência é **Ubuntu 22.04 com GNOME 42.9**; o manifesto declara GNOME **42, 43 e 44**. Não há suporte declarado a GNOME 45 ou posterior, e a instalação completa em máquina limpa ainda não foi validada.
+O ambiente de referência é **Ubuntu 22.04 com GNOME 42.9**. A extensão declara compatibilidade com **GNOME 42, 43 e 44**; versões posteriores não têm suporte declarado.
 
-- **Já utiliza o Orbitz?** Consulte o [guia de atualização local](docs/operations/local-update.md). Alterar ou baixar as fontes não atualiza automaticamente os aplicativos instalados.
-- **Utiliza uma instalação antiga do Desktop Clock/azclock personalizada como Orbitz?** Siga o [guia de migração de identidade](docs/operations/identity-migration.md), preservando configuração e dados. Mantenha somente uma identidade ativa.
-- **É sua primeira instalação?** Consulte a [plataforma e as dependências](stack.md) antes de preparar o ambiente. As ferramentas atuais atendem à atualização e à migração de instalações existentes; ainda não há um instalador completo validado para uma máquina nova.
+- **Já usa o Orbitz?** Siga o [guia de atualização local](docs/operations/local-update.md). Baixar as fontes não atualiza os aplicativos instalados.
+- **Usa uma instalação antiga do Desktop Clock/azclock personalizada como Orbitz?** Consulte o [guia de migração](docs/operations/identity-migration.md) para preservar configurações e dados. Mantenha somente uma identidade ativa.
+- **Vai instalar pela primeira vez?** Confira a [plataforma e as dependências](stack.md). As ferramentas atuais atendem instalações existentes; ainda não há um instalador completo validado para máquina nova.
 
-Os principais requisitos são Python 3, PyGObject, GTK e as bibliotecas do GNOME. A exportação de faturas usa `python3-reportlab` e `fonts-dejavu-core`; o player do YouTube precisa de WebKitGTK. Recursos como Docker, sensores, firewall e consultas de pacotes dependem das ferramentas e permissões disponíveis na máquina.
+Os requisitos principais são Python 3, PyGObject, GTK e bibliotecas do GNOME. Faturas usam `python3-reportlab` e `fonts-dejavu-core`; o player do YouTube precisa de WebKitGTK. Docker, sensores, firewall e consultas de pacotes dependem das ferramentas e permissões disponíveis no computador.
 
-Com a extensão instalada, abra suas preferências com:
+Com a extensão instalada, abra as preferências:
 
 ```bash
 gnome-extensions prefs orbitz-widgets@orbitzone.github.io
 ```
 
-Após atualizar módulos do Workspace, feche e reabra o aplicativo. Atualizações dos coletores do resumo exigem parar e abrir os widgets pelo controlador para iniciar a nova coleta.
+Após atualizar o Workspace, feche e reabra o aplicativo. Para atualizar a coleta dos resumos, pare e abra os widgets pelo controlador.
 
-### O que considerar nesta versão
+### Antes de adotar
 
-As funcionalidades passaram por verificações locais de lógica e integridade, mas a validação interativa de todas as telas, provedores e configurações de hardware ainda está em andamento. A abertura do painel de RAM e o comportamento de dispositivos externos têm pendências conhecidas. Google Calendar e Calendly ainda precisam de validação completa com contas e cofre reais.
+O Orbitz está em evolução. A instalação em máquina limpa e a experiência em todas as versões declaradas ainda precisam de validação. A conexão inicial com Google Calendar foi confirmada em uso; a validação abrangente de contas e fluxos continua em andamento. Calendly ainda aguarda validação com conta real. A abertura do painel de RAM e o comportamento de dispositivos externos têm pendências conhecidas.
 
-Sensores e consultas do sistema podem estar indisponíveis por suporte do hardware ou permissões. A análise do firewall auxilia a inspeção dos registros; não determina, por si só, que houve um ataque. Comandos personalizados executam com as permissões do usuário, e ações de manutenção são iniciadas manualmente.
+Informações de sensores variam conforme o hardware e as permissões. A análise do firewall auxilia a consulta dos registros, sem determinar por si só a ocorrência de um ataque. Comandos personalizados usam as permissões do usuário; ações de manutenção são iniciadas manualmente.
 
-## Projeto e comunidade
+## Faça parte
 
 Desenvolvido e mantido por **Felipe Santiago / orbitzone**.
 
-Encontrou um problema ou tem uma sugestão? [Abra uma issue](https://github.com/orbitzone/orbitz-widgets-for-gnome/issues), informando a versão do GNOME, os passos e o resultado esperado. Remova documentos pessoais, tokens e senhas de capturas ou logs antes de compartilhá-los.
+Tem uma ideia ou encontrou um problema? [Abra uma issue](https://github.com/orbitzone/orbitz-widgets-for-gnome/issues) com a versão do GNOME, os passos e o resultado esperado. Remova dados pessoais, tokens e senhas de capturas ou logs antes de compartilhar.
 
-O projeto tem origem no Desktop Clock/azclock, de Andrew Zaech, e preserva as atribuições de código, recursos e dependências. Consulte os [créditos e licenças](docs/credits.md) e o [LICENSE](LICENSE).
+O Orbitz tem origem no Desktop Clock/azclock, de Andrew Zaech, e preserva as atribuições de código, recursos e dependências. Conheça os [créditos e licenças](docs/credits.md) e o [LICENSE](LICENSE).

@@ -1,4 +1,5 @@
 """Calendar with explicit event contrast and a separate holiday indicator."""
+from day_activity import day_description
 import calendar
 from datetime import date,timedelta
 import gi
@@ -30,7 +31,8 @@ class MonthCalendar(Gtk.Box):
         self.title=Gtk.Label();header.pack_start(self.title,True,True,0)
         nav('›',1,'Próximo mês');nav('»',12,'Próximo ano')
         self.grid=Gtk.Grid(column_homogeneous=True,row_spacing=1,column_spacing=1);self.pack_start(self.grid,False,False,0)
-        legend=Gtk.Label(xalign=0);legend.set_markup('<span foreground="#ffffff" weight="bold">●</span> Evento  <span foreground="#f6c453">━</span> Feriado')
+        legend=Gtk.Label(xalign=0);legend.set_markup('<span foreground="#ffffff" weight="bold">●</span> Atividades  <span foreground="#f6c453">━</span> Feriado\nFundo colorido: seleção')
+        legend.set_line_wrap(True);legend.set_max_width_chars(28)
         self.pack_start(legend,False,False,0);self.redraw()
     def get_date(self):return self.year,self.month-1,self.chosen.day
     def shift(self,months):
@@ -63,8 +65,7 @@ class MonthCalendar(Gtk.Box):
             button=Gtk.Button();button.add(label);style=button.get_style_context();style.add_class('day')
             if selected:style.add_class('selected')
             if holiday:style.add_class('holiday')
-            text=[day.strftime('%d/%m/%Y')]
-            if inside:text+=['Feriado: '+t for t in self.holidays.get(day.day,[])]+self.details.get(day.day,[])
+            text=day_description(day,selected,marked,self.holidays.get(day.day,[]) if inside else (),self.details.get(day.day,[]) if inside else ())
             button.set_tooltip_text('\n'.join(text));button.get_accessible().set_name(' · '.join(text))
             button.connect('clicked',lambda _,d=day:self.click(d));self.grid.attach(button,i%7,i//7+1,1,1)
             if inside:self.buttons[day.day]=button
