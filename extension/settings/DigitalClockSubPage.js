@@ -7,12 +7,47 @@ const _ = Gettext.gettext;
 
 const Settings = Me.imports.settings;
 const {SubPage} = Settings.SubPage;
+const {TimeZoneCatalog} = Settings.timeZoneCatalog;
+const WorldClock = Me.imports.worldClock.WorldClock;
 
 var DigitalClockSubPage = GObject.registerClass({GTypeName: 'OrbitzWidgetsDigitalClockSubPage'},
 class AzClockDigitalClockSubPage extends SubPage {
     _init(settings, params) {
         super._init(settings, params);
 
+        const format = this.getClockElementData('Text_DateFormat') || '';
+        if (WorldClock.isTimeFormat(format)) {
+            const worldClockGroup = new Adw.PreferencesGroup({title: _('World Clock')});
+            this.add(worldClockGroup);
+
+            const worldClockEnabled = this.getClockElementData('WorldClockEnabled', 'bool');
+            const worldClockRow = new Adw.ExpanderRow({
+                title: _('Show an additional clock'),
+                show_enable_switch: true,
+                enable_expansion: worldClockEnabled,
+                expanded: worldClockEnabled,
+            });
+            worldClockRow.connect('notify::enable-expansion', widget => {
+                this.setClockElementData('WorldClockEnabled', widget.enable_expansion);
+                worldTimeZoneRow.sensitive = widget.enable_expansion;
+                worldTimeZoneSelector.sensitive = widget.enable_expansion;
+            });
+            worldClockGroup.add(worldClockRow);
+
+            const worldTimeZoneRow = new Adw.ActionRow({title: _('Time Zone')});
+            worldClockRow.add_row(worldTimeZoneRow);
+            const worldTimeZoneSelector = TimeZoneCatalog.createDropDown(GLib, Gtk,
+                this.getClockElementData('WorldClockTimeZone') || 'America/New_York');
+            worldTimeZoneSelector.set_size_request(390, -1);
+            worldTimeZoneSelector.sensitive = worldClockEnabled;
+            worldTimeZoneSelector.connect('notify::selected', widget => {
+                const selected = widget.orbitzTimeZones[widget.selected];
+                if (!selected) return;
+                this.setClockElementData('WorldClockTimeZone', selected.identifier);
+                this.setClockElementData('WorldClockLabel', `${selected.city} • ${selected.region}`);
+            });
+            worldTimeZoneRow.add_suffix(worldTimeZoneSelector);
+        }
         const timeZoneGroup = new Adw.PreferencesGroup();
         this.add(timeZoneGroup);
 

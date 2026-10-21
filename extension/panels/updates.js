@@ -1,5 +1,5 @@
 // Updates panel methods; state and lifecycle belong to CommandLabel.
-var create = ({Clutter, Gio, GLib, Pango, St, getData}) => ({
+var create = ({Clutter, Gio, GLib, Pango, St, getData, launchTerminalAction}) => ({
     _renderUpdates(data) {
         if (typeof data.text !== 'string' || data.text.length > 128 || typeof data.reboot !== 'boolean' ||
             typeof data.index_updated !== 'string' || data.index_updated.length > 64 ||
@@ -50,7 +50,7 @@ var create = ({Clutter, Gio, GLib, Pango, St, getData}) => ({
             button.connect('clicked', () => {
                 try {
                     const [, argv] = GLib.shell_parse_argv(getData(this.widgetIndex, this.elementIndex, 'Text_Command'));
-                    Gio.Subprocess.new([...argv, '--action', action.id], Gio.SubprocessFlags.NONE);
+                    launchTerminalAction([...argv, '--action', action.id], this);
                     this._networkRefreshStatus.text = 'Comando aberto no terminal; releia a lista após concluir.';
                 } catch (error) { this._networkRefreshStatus.text = 'Não foi possível abrir o terminal.'; }
             });

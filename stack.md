@@ -16,7 +16,7 @@ O conjunto combina uma extensão do GNOME Shell, aplicativos nativos GTK e colet
 | Configurações dos widgets | JavaScript/GJS, GTK 4 e libadwaita; edição de elementos, aparência, posições e grupos. |
 | Calendário, tarefas e timesheets | Python 3, PyGObject e GTK 3; interface nativa, tabelas, histórico, rascunhos e backups. |
 | Sticky Notes | Python 3, GTK 3 e SQLite; notas independentes da extensão, com salvamento e recuperação. |
-| Coletores do sistema | Python 3, `/proc`, `/sys` e ferramentas Linux; CPU, RAM, processos, rede, sensores, serviços, atualizações, firewall e Docker. |
+| Coletores do sistema | Python 3, `/proc`, `/sys` e ferramentas Linux; CPU, RAM, processos, rede, sensores, serviços, atualizações, firewall e Docker. `widgets/fx_rates.py` e `currency-widget.py` consultam o endpoint latest Frankfurter v2; o preset fiat mostra somente par/valor e tem seletor pesquisável. A extensão agenda atualização em quatro horas e oferece modal clicável com atualização manual e inversão persistida. Implementação recente ainda não instalada nem verificada visualmente no GNOME real. |
 | Calendários externos | Python, HTTPS, CalDAV e iCalendar; consulta ao iCloud e assinaturas ICS, com conversão explícita de eventos em tarefas. |
 | YouTube | Python, GTK 3, WebKitGTK e HTML/CSS/JavaScript; janela com player incorporado e servidor HTTP local. |
 | Lançadores | Atalhos para Sticky Notes, YouTube, Gemini e btop; abertura dos respectivos aplicativos. |
@@ -57,7 +57,7 @@ O conjunto combina uma extensão do GNOME Shell, aplicativos nativos GTK e colet
 | libcanberra / `canberra-gtk-play` | Reprodução do som de alarme do sistema. |
 | Tema de sons freedesktop | Disponibiliza o evento sonoro `alarm-clock-elapsed`. |
 | X11 / XWayland | Backend explicitamente solicitado pelos aplicativos GTK lançados pela extensão. |
-| GWeather **4.0**, opcional | Seletor de localização herdado nas preferências; o clima exibido é consultado no Open-Meteo. |
+| tzdata do sistema | Catálogo local de nomes de cidades/regiões e identificadores IANA para seleção de fusos horários; não exige conexão ou GWeather. O clima exibido é consultado no Open-Meteo. |
 
 Os typelibs correspondentes incluem `Gtk-3.0`, `Gtk-4.0`, `Adw-1`, `WebKit2-4.0` e `Secret-1`.
 

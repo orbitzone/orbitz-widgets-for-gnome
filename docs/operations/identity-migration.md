@@ -26,6 +26,8 @@ A revisão dirigida foi concluída em `docs/audits/2026-10-18-identity-audit.md`
 2. Com a nova identidade reconhecida, usar o aplicativo Extensões: desativar Desktop Clock/azclock, confirmar que está inativa e então ativar Orbitz Widgets for GNOME. Nunca habilitar ambas. Se a nova não ativar, mantê-la desativada e voltar à antiga, que não foi removida.
 3. Conferir apenas Orbitz ativa, preferências/página Sobre com nome/GitHub/autor novos, posições/fontes/comandos preservados, controlador e dados existentes. Reabrir aplicativos fechados. Fazer roteiro de teste afetado e informar resultado; nova identidade não corrige automaticamente bugs já pendentes de RAM/dispositivos externos.
 
+Se uma página Sobre já aberta ainda mostrar “Desktop Clock” e versão 7, ela corresponde à preferência da UUID legada `azclock@azclock.gitlab.com` ou a uma janela antiga que continuou aberta durante a troca. Feche essa janela e abra as preferências da UUID Orbitz (`gnome-extensions prefs orbitz-widgets@orbitzone.github.io`); não remova a instalação legada, que permanece como caminho de retorno.
+
 A necessidade de logout para descoberta e o carregamento real da nova extensão precisam ser conferidos no ambiente do usuário. Não afirmar que somente trocar arquivos já mudou o código carregado na sessão atual.
 
 ## Voltar ao legado

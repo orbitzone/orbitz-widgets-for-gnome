@@ -17,6 +17,7 @@ const WidgetType = {
     ANALOG: 1,
     CUSTOM: 2,
     GROUP: 3,
+    CURRENCY: 4,
 };
 
 function init() {
@@ -290,6 +291,8 @@ class AzClockAddWidgetsDialog extends DialogWindow {
         this.pageGroup.title = _('Preset Widgets');
         this.pageGroup.add(this.addPresetWidget(_('Digital Clock Widget'), WidgetType.DIGITAL));
         this.pageGroup.add(this.addPresetWidget(_('Analog Clock Widget'), WidgetType.ANALOG));
+        this.pageGroup.add(this.addPresetWidget(_('Currency Converter'), WidgetType.CURRENCY,
+            _('Show a daily BRL reference rate and choose the target currency.')));
         this.pageGroup.add(this.addPresetWidget('Widget pai · painel', WidgetType.GROUP, 'Alinha subwidgets automaticamente'));
         this.pageGroup.add(this.addPresetWidget(_('Custom Widget'), WidgetType.CUSTOM,
             _('Add your own custom elements')));
@@ -323,6 +326,12 @@ class AzClockAddWidgetsDialog extends DialogWindow {
                 const group = JSON.parse(JSON.stringify(Utils.EmptyWidgetSettings));
                 group[0] = {...group[0], Name: 'Sistema', Widget_Id: GLib.uuid_string_random(), Box_IsGroup: 'true', Group_Columns: '1', Box_Width: '320', Box_Padding: '16', Box_Spacing: '8', Box_BackgroundEnabled: 'true', Box_BackgroundColor: 'rgba(0,0,0,0.2)', Box_BorderEnabled: 'true', Box_BorderWidth: '3', Box_BorderColor: 'rgb(255,255,255)', Box_BorderRadius: '20'};
                 data.push(group);
+            } else if (widgetType === WidgetType.CURRENCY) {
+                const widget = JSON.parse(JSON.stringify(Utils.CurrencyWidgetSettings));
+                widget[0].Widget_Id = GLib.uuid_string_random();
+                const script = GLib.build_filenamev([GLib.get_user_data_dir(), 'orbitz-widgets', 'collectors', 'currency-widget.py']);
+                widget[1].Text_Command = `/usr/bin/python3 ${GLib.shell_quote(script)} --quote USD`;
+                data.push(widget);
             } else {
                 const clone = JSON.parse(JSON.stringify(widgetType));
                 clone[0].Widget_Id = GLib.uuid_string_random();

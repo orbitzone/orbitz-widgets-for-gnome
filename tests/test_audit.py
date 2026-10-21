@@ -82,15 +82,27 @@ class RuntimeTests(unittest.TestCase):
             with patch.object(runtime.shutil, 'which', return_value='/usr/bin/tilix'), patch.object(runtime.subprocess, 'Popen') as launch:
                 runtime.launch_terminal('Test', command)
                 argv = launch.call_args.args[0]
-            self.assertEqual(argv[:2], ['/usr/bin/tilix', '-e'])
+            self.assertEqual(argv[:3], ['/usr/bin/tilix', '--action=app-new-window', '-e'])
             import shlex
-            terminal_command = shlex.split(argv[2])
+            terminal_command = shlex.split(argv[3])
             self.assertEqual(terminal_command[:2], ['bash', '-c'])
             script = terminal_command[2]
             subprocess.run(['bash', '-c', script], input='', text=True, capture_output=True, check=True)
             self.assertFalse(target.exists())
             subprocess.run(['bash', '-c', script], input='\n\n', text=True, capture_output=True, check=True)
             self.assertTrue(target.exists())
+
+    def test_terminal_preserves_argv_and_inherits_launch_context(self):
+        import shlex
+        command = ['python3', '/tmp/path with spaces/action.py', "literal 'quote' ; $value"]
+        with patch.dict(os.environ, {'DESKTOP_STARTUP_ID': 'orbitz-test-startup'}), patch.object(runtime.shutil, 'which', return_value='/usr/bin/tilix'), patch.object(runtime.subprocess, 'Popen') as launch:
+            runtime.launch_terminal_command(command)
+            argv = launch.call_args.args[0]
+            self.assertEqual(argv[:3], ['/usr/bin/tilix', '--action=app-new-window', '-e'])
+            self.assertEqual(shlex.split(argv[3]), command)
+            self.assertTrue(launch.call_args.kwargs['start_new_session'])
+            # Popen inherits the complete environment when env is omitted.
+            self.assertNotIn('env', launch.call_args.kwargs)
 
     def test_terminal_requires_tilix(self):
         with patch.object(runtime.shutil, 'which', return_value=None):

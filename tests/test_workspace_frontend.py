@@ -1,7 +1,7 @@
 """Workspace orchestration with synthetic widgets/data; no GTK session."""
 import ast
 from copy import deepcopy
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 import sys
 import tempfile
@@ -13,6 +13,7 @@ PLANNER=Path(__file__).resolve().parents[1]/'extension/planner'
 sys.path.insert(0,str(PLANNER))
 import workspace_ui
 import workspace_backup_ui
+from day_activity import local_details
 from timesheet_context_ui import context_payload
 from invoice_ui import InvoiceSession, ReissueConfirmation
 from invoice_history_ui import HistorySession
@@ -61,6 +62,8 @@ class Notebook(Actor):
     def get_tab_label(self,page):return self.labels[page]
     def set_current_page(self,index):
         if 0<=index<len(self.children):self.current=index;self.emit('switch-page',self.children[index],index)
+    def set_tab_reorderable(self,page,reorderable):
+        self.reorderable=getattr(self,'reorderable',{});self.reorderable[page]=reorderable
     def remove_page(self,index):self.children.pop(index);self.current=0
 
 
@@ -103,14 +106,15 @@ class WorkspaceTests(unittest.TestCase):
         class External:
             def __init__(self,window,left,mount):self.page=Actor();mount.append_page(self.page,Actor())
             def render(self):pass
-            def mark_days(self):pass
+            def mark_days(self,details):pass
             def selected_cache(self):return None,{}
         history_content=Actor();refresh=Mock()
         namespace=dict(Gtk=gtk,Gio=SimpleNamespace(),GLib=SimpleNamespace(timeout_add_seconds=lambda *args:77,source_remove=Mock()),
-            Pango=SimpleNamespace(WrapMode=SimpleNamespace(WORD_CHAR=0),EllipsizeMode=SimpleNamespace(END=0)),date=date,
+            Pango=SimpleNamespace(WrapMode=SimpleNamespace(WORD_CHAR=0),EllipsizeMode=SimpleNamespace(END=0)),date=date,timedelta=timedelta,
             workspace_ui=workspace_ui,MonthCalendar=Calendar,ExternalCalendars=External,Timesheet=Page,
             planner_menu=SimpleNamespace(add_header=header,update_archive_count=Mock()),
             store=SimpleNamespace(modify=lambda request:deepcopy(data)),ui_state=SimpleNamespace(set=Mock()),
+            local_details=local_details,
             invoice_history_ui=SimpleNamespace(create_history_content=Mock(return_value=(history_content,refresh))),
             invoice_ui=SimpleNamespace(open_invoice=Mock()))
         tree=ast.parse((PLANNER/'calendar-app.py').read_text())
@@ -120,6 +124,7 @@ class WorkspaceTests(unittest.TestCase):
             window=namespace['CalendarWindow'](object())
             self.assertEqual(list(window.workspace.pages),['today','events','tasks','hours','invoices'])
             self.assertEqual(window.tabs.get_n_pages(),2)  # Only timesheets remain in the hours notebook.
+            self.assertEqual(list(window.tabs.reorderable.values()),[True,True])
             self.assertEqual(window.workspace.current,'today')
             window.focus_sheet('two')
             self.assertEqual(window.workspace.current,'hours')

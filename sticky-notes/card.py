@@ -1,10 +1,41 @@
 """GTK sticky card editing, interaction and geometry."""
 import gi
 gi.require_version('Gtk','3.0')
-from gi.repository import Gtk,GLib,Gdk
+from gi.repository import Gtk,GLib,Gdk,Gio,Pango
 from storage import COLORS
+from link_targets import target_at,link_at
 
 NAMES=['Amarelo','Rosa','Verde','Azul','Lilás','Pêssego']
+
+
+def editor_scroll(text):
+    scroll=Gtk.ScrolledWindow();scroll.set_name('sticky-note-scroll')
+    # Show the translucent scrollbar only when the content needs scrolling.
+    scroll.set_policy(Gtk.PolicyType.NEVER,Gtk.PolicyType.AUTOMATIC)
+    scroll.set_overlay_scrolling(False)
+    scroll.set_propagate_natural_height(False);scroll.set_propagate_natural_width(False)
+    scroll.set_min_content_width(1);scroll.set_min_content_height(1)
+    scroll.set_shadow_type(Gtk.ShadowType.NONE)
+    scrollbar=scroll.get_vscrollbar();scrollbar.set_opacity(1.0)
+    text.set_vscroll_policy(Gtk.ScrollablePolicy.MINIMUM)
+    scroll.add(text)
+    return scroll,scrollbar
+
+
+def resize_grip(callback):
+    grip=Gtk.EventBox();grip.set_visible_window(True);grip.set_above_child(True)
+    grip.set_size_request(28,28)
+    grip.set_halign(Gtk.Align.END);grip.set_valign(Gtk.Align.END)
+    grip.set_margin_end(2);grip.set_margin_bottom(2)
+    icon=Gtk.Label(label='◢');icon.set_halign(Gtk.Align.END);icon.set_valign(Gtk.Align.END)
+    icon.set_margin_end(4);icon.set_margin_bottom(4);grip.add(icon)
+    grip.set_tooltip_text('Arraste este canto para redimensionar')
+    grip.get_accessible().set_name('Redimensionar nota')
+    grip.connect('button-press-event',callback)
+    grip.connect('realize',lambda widget:widget.get_window().set_cursor(
+        Gdk.Cursor.new_from_name(widget.get_display(),'se-resize')))
+    return grip
+
 
 class Card(Gtk.ApplicationWindow):
     def __init__(self,app,note):
@@ -26,8 +57,10 @@ class Card(Gtk.ApplicationWindow):
         if visual:self.set_visual(visual)
         self.css=Gtk.CssProvider()
         self.get_style_context().add_class('postit')
-        self.get_style_context().add_provider(self.css,Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
-        outer=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=12,margin=18);self.add(outer)
+        self.get_style_context().add_provider(self.css,Gtk.STYLE_PROVIDER_PRIORITY_USER)
+        outer=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=12,margin=18)
+        outer.set_margin_bottom(30)  # Keep the corner hit target clear of editable text.
+        overlay=Gtk.Overlay();overlay.add(outer);self.add(overlay)
         header=Gtk.EventBox();header.set_visible_window(False)
         title=Gtk.Label(label='STICKY NOTES',xalign=0);title.get_style_context().add_class('heading')
         header.add(title)
@@ -43,20 +76,30 @@ class Card(Gtk.ApplicationWindow):
         header.set_tooltip_text('Arraste para mover · Botão direito para opções')
         header.connect('button-press-event',self.header_press)
         self.text=Gtk.TextView(wrap_mode=Gtk.WrapMode.WORD_CHAR)
+        self.text.set_name('sticky-note-text')
         self.buffer=self.text.get_buffer();self.buffer.set_text(self.saved)
-        scroll=Gtk.ScrolledWindow();scroll.set_policy(Gtk.PolicyType.NEVER,Gtk.PolicyType.AUTOMATIC)
-        scroll.set_min_content_width(1);scroll.set_min_content_height(1);scroll.add(self.text)
+        self.link_tag=self.buffer.create_tag('ctrl-link',weight=Pango.Weight.BOLD)
+        self.hover_link=None
+        self.link_cursor=Gdk.Cursor.new_from_name(display,'pointer')
+        self.edit_cursor=Gdk.Cursor.new_from_name(display,'text')
+        self.scroll,self.scrollbar=editor_scroll(self.text);scroll=self.scroll
         outer.pack_start(scroll,True,True,0)
         self.status=Gtk.Label(xalign=0,wrap=True);self.status.set_no_show_all(True)
         outer.pack_start(self.status,False,False,0)
-        grip=Gtk.EventBox();grip.set_visible_window(False);grip.add(Gtk.Label(label='◢',xalign=1))
-        grip.set_halign(Gtk.Align.END);grip.set_tooltip_text('Arraste para redimensionar')
-        outer.pack_end(grip,False,False,0);grip.connect('button-press-event',self.resize_press)
+        grip=resize_grip(self.resize_press)
+        overlay.add_overlay(grip);overlay.set_overlay_pass_through(grip,False)
         self.apply_color()
         self.buffer.connect('changed',self.changed)
         self.text.connect('populate-popup',self.populate_popup)
+        self.text.connect('button-press-event',self.text_press)
+        self.text.add_events(Gdk.EventMask.POINTER_MOTION_MASK|Gdk.EventMask.ENTER_NOTIFY_MASK|Gdk.EventMask.LEAVE_NOTIFY_MASK)
+        self.text.connect('motion-notify-event',self.link_motion)
+        self.text.connect('enter-notify-event',self.link_motion)
+        self.text.connect('leave-notify-event',lambda *_:self.clear_link_hover())
+        self.connect('key-release-event',self.link_key_release)
+        self.text.set_tooltip_text('Ctrl+clique: abrir pasta, URL ou e-mail no aplicativo padrão')
         self.connect('key-press-event',self.key_press)
-        self.connect('focus-out-event',lambda *_:self.flush() and False)
+        self.connect('focus-out-event',self.focus_out)
         self.connect('configure-event',self.configured)
         self.connect('window-state-event',self.state_changed)
         self.connect('delete-event',self.close_requested)
@@ -64,8 +107,8 @@ class Card(Gtk.ApplicationWindow):
         self.move(note['x'],note['y']);self.show_all()
         # One normal GTK placement, outside the Shell process, after mapping.
         self.move(note['x'],note['y'])
-        for widget in [outer,heading_row,header,title,self.close_button,self.text,scroll,self.status,grip,*grip.get_children()]:
-            widget.get_style_context().add_provider(self.css,Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        for widget in [outer,heading_row,header,title,self.close_button,self.text,scroll,self.scrollbar,self.status,grip,*grip.get_children()]:
+            widget.get_style_context().add_provider(self.css,Gtk.STYLE_PROVIDER_PRIORITY_USER)
 
     def value(self):return self.buffer.get_text(self.buffer.get_start_iter(),self.buffer.get_end_iter(),True)
 
@@ -73,8 +116,14 @@ class Card(Gtk.ApplicationWindow):
         color=self.note['color']
         self.css.load_from_data(f'''
         window.postit {{background-color:{color};border-radius:10px;}}
-        textview, textview text, label, eventbox, scrolledwindow {{background-color:transparent;color:#161616;}}
-        textview {{font:15px Sans;caret-color:#161616;}}
+        textview, textview text, label, eventbox, scrolledwindow, viewport {{background-color:transparent;color:#161616;}}
+        scrolledwindow#sticky-note-scroll, scrolledwindow#sticky-note-scroll viewport, scrolledwindow#sticky-note-scroll undershoot, scrolledwindow#sticky-note-scroll overshoot, scrolledwindow#sticky-note-scroll junction {{border:none;border-width:0;border-style:none;background-color:transparent;background-image:none;box-shadow:none;}}
+        textview#sticky-note-text, textview#sticky-note-text.view, textview#sticky-note-text:focus, textview#sticky-note-text.view:focus, textview#sticky-note-text text {{border:none;border-width:0;border-style:none;border-color:transparent;background-color:transparent;background-image:none;box-shadow:none;outline:none;padding:0;}}
+        scrolledwindow#sticky-note-scroll scrollbar, scrolledwindow#sticky-note-scroll scrollbar * {{opacity:1;background-color:transparent;background-image:none;border-color:transparent;box-shadow:none;}}
+        scrolledwindow#sticky-note-scroll scrollbar slider {{background-color:rgba(22,22,22,0.20);border-radius:8px;}}
+        scrolledwindow#sticky-note-scroll scrollbar slider:hover, scrolledwindow#sticky-note-scroll scrollbar slider:focus {{background-color:rgba(22,22,22,0.30);}}
+        scrolledwindow#sticky-note-scroll scrollbar slider:active {{background-color:rgba(22,22,22,0.40);}}
+        textview#sticky-note-text {{font:15px Sans;caret-color:#161616;}}
         label.heading {{font:bold 12px Sans;}}
         button {{background:transparent;border:0;box-shadow:none;color:#161616;padding:0;min-width:18px;min-height:18px;}}
         button:hover {{background-color:rgba(0,0,0,0.08);border-radius:4px;}}
@@ -85,6 +134,7 @@ class Card(Gtk.ApplicationWindow):
 
     def changed(self,*_):
         if self.loading:return
+        self.clear_link_hover()
         self.dirty=self.value()!=self.saved
         # A committed transaction per text change survives an application crash.
         self.flush()
@@ -113,6 +163,7 @@ class Card(Gtk.ApplicationWindow):
         self.dirty=self.value()!=self.saved;self.flush()
 
     def key_press(self,_widget,event):
+        if Gdk.keyval_name(event.keyval) in ('Control_L','Control_R'):self.refresh_link_hover()
         if event.state&Gdk.ModifierType.CONTROL_MASK:
             key=(Gdk.keyval_name(event.keyval) or '').lower()
             if key in ('z','y'):self.undo(key=='y' or bool(event.state&Gdk.ModifierType.SHIFT_MASK));return True
@@ -123,6 +174,61 @@ class Card(Gtk.ApplicationWindow):
                 if self.flush():self.hide()
                 return True
         return False
+
+    def clear_link_hover(self):
+        self.buffer.remove_tag(self.link_tag,self.buffer.get_start_iter(),self.buffer.get_end_iter())
+        self.hover_link=None
+        window=self.text.get_window(Gtk.TextWindowType.TEXT)
+        if window:window.set_cursor(self.edit_cursor)
+        return False
+
+    def update_link_hover(self,window,x,y,control):
+        link=None
+        if control:
+            kind=self.text.get_window_type(window)
+            bx,by=self.text.window_to_buffer_coords(kind,int(x),int(y))
+            found,where=self.text.get_iter_at_location(bx,by)
+            if found:link=link_at(self.value(),where.get_offset())
+        if link==self.hover_link:return False
+        self.clear_link_hover()
+        if link:
+            self.buffer.apply_tag(self.link_tag,self.buffer.get_iter_at_offset(link[0]),self.buffer.get_iter_at_offset(link[1]))
+            self.hover_link=link
+            self.text.get_window(Gtk.TextWindowType.TEXT).set_cursor(self.link_cursor)
+        return False
+
+    def link_motion(self,_widget,event):
+        return self.update_link_hover(event.window,event.x,event.y,bool(event.state&Gdk.ModifierType.CONTROL_MASK))
+
+    def refresh_link_hover(self):
+        window=self.text.get_window(Gtk.TextWindowType.TEXT)
+        if window:
+            pointer=self.get_display().get_default_seat().get_pointer()
+            _child,x,y,_state=window.get_device_position(pointer)
+            self.update_link_hover(window,x,y,True)
+
+    def link_key_release(self,_widget,event):
+        if Gdk.keyval_name(event.keyval) in ('Control_L','Control_R'):self.clear_link_hover()
+        return False
+
+    def focus_out(self,*_):
+        self.clear_link_hover();self.flush()
+        return False
+
+    def text_press(self,_widget,event):
+        if event.button!=1 or not event.state&Gdk.ModifierType.CONTROL_MASK:return False
+        kind=self.text.get_window_type(event.window)
+        x,y=self.text.window_to_buffer_coords(kind,int(event.x),int(event.y))
+        found,where=self.text.get_iter_at_location(x,y)
+        if not found:return False
+        uri=target_at(self.value(),where.get_offset())
+        if not uri:return False
+        try:
+            context=self.get_display().get_app_launch_context();context.set_timestamp(event.time)
+            Gio.AppInfo.launch_default_for_uri(uri,context)
+        except Exception:
+            self.status.set_text('Não foi possível abrir o destino no aplicativo padrão.');self.status.show()
+        return True
 
     def header_press(self,_widget,event):
         if event.button==1:

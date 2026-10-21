@@ -1,5 +1,5 @@
 // Resources panel methods; state and lifecycle belong to CommandLabel.
-var create = ({Clutter, Gio, GLib, Pango, St, getData}) => ({
+var create = ({Clutter, Gio, GLib, Pango, St, getData, launchTerminalAction}) => ({
     _renderPressure(data) {
         const averagesValid = values => Array.isArray(values) && values.length === 3 &&
             values.every(value => Number.isFinite(value) && value >= 0 && value <= 100);
@@ -154,7 +154,7 @@ var create = ({Clutter, Gio, GLib, Pango, St, getData}) => ({
             button.connect('clicked', () => {
                 try {
                     const [, argv] = GLib.shell_parse_argv(getData(this.widgetIndex, this.elementIndex, 'Text_Command'));
-                    Gio.Subprocess.new([...argv, '--action', action.id], Gio.SubprocessFlags.NONE);
+                    launchTerminalAction([...argv, '--action', action.id], this);
                     this._networkRefreshStatus.text = 'Confira o comando e confirme com Enter no terminal.';
                 } catch (error) {
                     this._networkRefreshStatus.text = 'Não foi possível abrir a ação.';

@@ -51,6 +51,16 @@ function setData(data, widgetIndex, elementIndex, elementKey, newValue) {
     settings.set_value('widget-data', new GLib.Variant('aaa{ss}', desktopWidgets));
 }
 
+function getCommandPollingInterval(command, configuredInterval) {
+    if (command.includes('/currency-widget.py'))
+        return 14400000;
+    if (command.includes('/firewall-widget.py'))
+        return 60000;
+    if (command.includes('/clima-widget.py'))
+        return 300000;
+    return Math.max(Number(configuredInterval) || 0, 250);
+}
+
 var DigitalClockSettings = [
     {
         'Name': 'Digital Clock Widget',
@@ -87,6 +97,9 @@ var DigitalClockSettings = [
 
         'TimeZoneOverrideEnabled': 'false',
         'TimeZoneOverride': 'UTC',
+        'WorldClockEnabled': 'false',
+        'WorldClockTimeZone': 'America/New_York',
+        'WorldClockLabel': 'New York',
 
         'Text_ShadowEnabled': 'true',
         'Text_ShadowColor': 'black',
@@ -344,4 +357,22 @@ var EmptyWidgetSettings = [
         'Box_VerticalLayout': 'true',
         'Box_AnchorPoint': '0'
     }
+];
+
+var CurrencyWidgetSettings = [
+    {
+        ...EmptyWidgetSettings[0],
+        'Name': 'Conversor de moedas',
+        'Widget_Id': '',
+        'Box_BackgroundEnabled': 'true',
+        'Box_BackgroundColor': 'rgba(0, 0, 0, .35)',
+        'Box_Padding': '12',
+    },
+    {
+        ...CommandLabel,
+        'Name': 'Cotação BRL / USD',
+        'Text_Command': '',
+        'Text_PollingInterval': '14400000',
+        'Text_Size': '20',
+    },
 ];

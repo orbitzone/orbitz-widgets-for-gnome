@@ -1,19 +1,24 @@
 # Fila de sprint e revisões
 
-Atualizado em 20/10/2026. Lote lógico, sem agenda automática. Política: [workflow](agents/workflow.md). Prioridades de produto continuam em [backlog](backlog.md).
+Atualizado em 21/10/2026. Lote lógico, sem agenda automática. Política: [workflow](agents/workflow.md). Prioridades de produto continuam em [backlog](backlog.md).
 
 ## Estado atual
 
-INV-01–04 já auditadas; último conjunto passou em 62 testes dirigidos. WSP-01 está implementado e auditado nas fontes; não iniciar auditoria retroativa das entregas anteriores. O usuário confirmou teste funcional de Google Calendar e Datas comemorativas em 20/10. Revisão independente média de CAL-06/07 permanece pendente para fechamento da sprint; GTK de invoices/versões e teste real do Calendly são pendências distintas. Próximos pedidos serão agrupados abaixo antes de convocar auditoria; usuário mantém prioridades.
+INV-01–04 já auditadas; WSP-01 está implementado e auditado nas fontes. O usuário confirmou Google Calendar e Datas comemorativas em 20/10; em 21/10 confirmou que feriados persistem em todos os calendários e aprovou visualmente as Sticky Notes. A revisão independente consolidada deste lote não encontrou defeitos reproduzíveis. Permanecem pendentes os testes interativos de GTK para invoices/chooser e o aceite real de WID-02. O usuário autorizou publicar todas as alterações atuais.
 
 | Item | Estado | Risco / responsável | Próxima ação |
 |---|---|---|---|
 | OPS-01 — fluxo econômico | Documentação ajustada | Baixo / supervisor | Aplicar nos próximos briefs; sem auditor ou UX para esta alteração |
 | INV-01–04 — conjunto atual | Auditoria local concluída | Parecer INV-04 | Reusar evidência se o alvo não mudar; não reauditar por hábito |
-| Invoices: histórico/versões e chooser em GTK real | Pendente manual | Frontend/usuário | Registrar resultado quando houver teste permitido; o smoke de calendários foi confirmado em 20/10 |
-| CAL-06/07 — revisão média consolidada | Testes locais; usuário confirmou Google e fonte de feriados funcionando. Persistência do toggle CAL-07 não confirmada; auditoria pendente | Auditor no fechamento da sprint | Revisar uma vez o alvo atual e integração antes de próximo lote de publicação; não repetir testes já cobertos |
+| Invoices: histórico/versões e chooser em GTK real | 62 testes sintéticos passaram (PDF, histórico, versões, chooser/fluxos); GTK não inicializou neste processo, portanto interação/chooser nativos continuam sem validação | Frontend/usuário | Validar no Workspace instalado: gerar invoice de teste, abrir histórico/versões, exportar e abrir chooser; sem usar dados fiscais reais |
+| CAL-06/07 — revisão média consolidada | Auditoria independente concluída sem defeito reproduzível; usuário confirmou Google, fonte de feriados funcionando e persistência em todos os calendários | Auditoria e validação do usuário concluídas | Fechado |
 | CAL-01 — Calendly real | Integração por token implementada; conta real não confirmada | Usuário, se/quando desejar testar | Teste manual separado; não bloqueia funcionamento já confirmado do Google e da fonte pública |
 | Formato decimal PT e rótulos de timesheets homônimas | Propostas opcionais | Baixo / frontend | Priorizar com futuro lote de UI; não ativar UX/auditor agora |
+| STICKY-01 — borda e scrollbar translúcida sob demanda | Testes de contrato passam; usuário confirmou a apresentação atual das Sticky Notes como correta | Baixo / frontend | Fechado por validação do usuário |
+| STICKY-02 — Ctrl+clique e feedback visual | Implementado; testes sintéticos passam; usuário confirmou que as Sticky Notes estão ótimas | Médio / frontend | Fechado por validação do usuário |
+| STICKY-03 — alça de redimensionamento | Alvo 28×28 px junto à borda, cursor se-resize e gutter preservado; usuário aprovou a apresentação atual das Sticky Notes | Baixo / frontend | Fechado por validação do usuário |
+| TERM-01 — foco automático do Tilix | Concluído conforme confirmação do usuário após atualização/reinício da sessão; testes dirigidos passaram e auditoria focada não encontrou bloqueio. | Médio / frontend | Fechado. Não generalizar a outras sessões/ambientes além do teste confirmado pelo usuário. |
+| FX-01 — conversores fiat/cripto | Fiat chama latest Frankfurter; saída simplificada instalada. Frontend implementou na fonte modal acessível pelo widget, atualização manual, inversão persistida e polling 4h; testes dirigidos passaram. Cripto USD↔ativo selecionável continua pendente. Taxa Frankfurter é diária, não tempo real. | Médio / backend (latest/erros) + frontend (modal/polling/persistência); supervisor (requisitos e docs) | Instalação e verificação visual GNOME reais pendentes; confirmar os dois sentidos e persistência após reabrir. Sem histórico/previsão/fallback. Definir provedor/cobertura/licença/cadência cripto. Auditoria média agrupada no fechamento da sprint. |
 
 ## Cadastro de próxima tarefa
 
@@ -25,6 +30,16 @@ Uma linha por mudança: ID, escopo/arquivos, risco, responsável, critérios, ev
 2. Acionar auditor uma vez para mudanças pendentes e integração; não repetir itens já revistos sem mudança.
 3. Corrigir impeditivos e verificar somente o que foi afetado, ampliando se necessário.
 4. Supervisor atualiza estados, limites, comando de atualização e roteiro de teste. Publicação segue autorização do usuário e revisões exigidas; nenhuma é disparada automaticamente.
+
+## QA consolidado — 21/10/2026
+
+Suíte Python completa: 267 testes aprovados e 3 pulados (dois cenários de socket bloqueados no sandbox e smoke de geometria GTK sem display acessível). Os 27 testes Node e os dois testes GJS passaram; `git diff --check` passou. Checagens dirigidas adicionais: FX 12/12, Sticky Links 10/10, `test_audit.py` 22/22; smoke de layout GTK passou nos testes de contrato e pulou a geometria pela falta de display. Auditoria independente consolidada concluída sem defeito reproduzível nos caminhos revisados. A rota e o formato da Frankfurter foram conferidos com a documentação oficial; consulta externa direta não foi possível neste ambiente.
+
+GTK nativo para invoice/chooser e o seletor real de WID-02 permanecem pendentes de sessão interativa. O usuário validou as Sticky Notes e confirmou a persistência de feriados em todos os calendários, então esses itens foram fechados sem exigir teste GTK adicional. A revisão independente não encontrou defeitos reproduzíveis. O usuário autorizou publicar as alterações atuais; WID-02 continua explicitamente pendente e não é declarado concluído.
+
+## WID-02 — Relógio mundial: requisito de seletor ainda não resolvido
+
+Em 20/10/2026 o usuário informou que a opção continua aparecendo apenas no relógio analógico e reiterou que precisa estar disponível também no digital como dropdown com região/cidade, sem input manual. Embora exista tentativa de implementação local e testes sintéticos do catálogo, isso não atende como evidência de aceite. Manter pendente; quando retomado, verificar a página de configuração digital e a analógica na UI real, corrigir a exposição/seleção e só então atualizar o estado. O usuário pediu seguir outras implementações enquanto isso.
 
 ## WSP-01 — Orbitz Workspace (revisado, 19/10/2026)
 
@@ -77,3 +92,7 @@ CAL-07/RC-29 em implementação: fonte pública padrão permanente com Ativar/De
 CAL-07 testes locais aprovados:31 dirigidos (7persistência+16frontend+8atividade) e regressão dados externos, sintaxe/diff. Plano3arquivos/0comandos. Risco médio, revisão na fila de fechamento; sem auditor/UX extra. Sem dados reais ou instalação alterados. Teste manual: reabrir→Gerenciar→fonte padrão recuperada→Desativar→reabrir e confirmar desativada→Ativar. Sem logout necessário.
 
 Validação manual do usuário em 20/10/2026: a fonte Brasil · Datas comemorativas funcionou na instalação atual. Não há confirmação explícita do ciclo desativar→reabrir→reativar; manter esse caso como teste manual opcional de fechamento. A revisão independente média continua agrupada para a sprint.
+
+## WID-02 — relógio mundial adicional
+
+Implementação local: opção na configuração do relógio digital para ativar o relógio secundário, escolher cidade/região em catálogo pesquisável e mostrar a localidade com hora formatada. O catálogo vem da base tzdata do sistema e não depende de GWeather; o mesmo seletor substitui o campo manual de sobrescrita de fuso nos relógios digitais e analógicos. Testes do catálogo e formatação/timezone passam. Risco médio; revisão independente fica no fechamento da sprint. GTK/preferências e visual ainda não conferidos em sessão real; não instalado.

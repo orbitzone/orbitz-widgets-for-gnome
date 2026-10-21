@@ -17,6 +17,8 @@ let widgetDragKeySignal = 0;
 const activeCommandRuns = new Set();
 const pendingStops = new Set();
 const Utils = Me.imports.utils;
+const WorldClock = Me.imports.worldClock;
+const launchTerminalAction = Me.imports.terminalLaunch.create({Gio, global});
 const Calendar = Me.imports.planner.calendar;
 
 const Gettext = imports.gettext.domain(Me.metadata['gettext-domain']);
@@ -541,10 +543,10 @@ class AzClockDesktopWidget extends St.Widget {
                 button.set_child(new St.Icon({gicon: Gio.icon_new_for_string(GLib.build_filenamev([Me.path, notes ? 'notes-widget' : btop ? 'media' : gemini ? 'gemini-widget' : 'youtube-widget', notes ? 'notes.svg' : btop ? 'btop.png' : gemini ? 'gemini.svg' : 'youtube.svg'])), icon_size: 32}));
                 bindDesktopLauncher(button, async () => {
                     try {
-                        const argv = notes ? ['/usr/bin/env', 'GDK_BACKEND=x11', '/usr/bin/python3', GLib.build_filenamev([GLib.get_user_data_dir(), 'orbitz-postits', 'app', 'postits.py'])] : btop ? ['/usr/bin/tilix', '-e', '/usr/bin/btop'] : gemini
+                        const argv = notes ? ['/usr/bin/env', 'GDK_BACKEND=x11', '/usr/bin/python3', GLib.build_filenamev([GLib.get_user_data_dir(), 'orbitz-postits', 'app', 'postits.py'])] : btop ? ['/usr/bin/tilix', '--action=app-new-window', '-e', '/usr/bin/btop'] : gemini
                             ? ['/usr/bin/google-chrome', '--app=https://gemini.google.com/', '--window-size=1100,900']
                             : ['/usr/bin/python3', GLib.build_filenamev([Me.path, 'youtube-widget', 'youtube-widget.py'])];
-                        const proc = Gio.Subprocess.new(argv, Gio.SubprocessFlags.NONE);
+                        const proc = btop ? launchTerminalAction(argv, this) : Gio.Subprocess.new(argv, Gio.SubprocessFlags.NONE);
                         await proc.wait_async(null);
                         if (!proc.get_successful()) throw new Error('O aplicativo encerrou com erro.');
                     } catch (error) {
@@ -1087,7 +1089,14 @@ class AzClockDigitalClock extends Label {
         const elementDate = getClockDate(this.widgetIndex, this.elementIndex, date);
 
         if (dateFormat) {
-            const next = elementDate.toLocaleFormat(dateFormat);
+            let next = elementDate.toLocaleFormat(dateFormat);
+            if (getData(this.widgetIndex, this.elementIndex, 'WorldClockEnabled', 'bool')) {
+                const zone = getData(this.widgetIndex, this.elementIndex, 'WorldClockTimeZone');
+                const label = getData(this.widgetIndex, this.elementIndex, 'WorldClockLabel') || zone;
+                const worldTime = WorldClock.format(GLib, zone, '%H∶%M');
+                if (worldTime)
+                    next += `\n<span size="small">${GLib.markup_escape_text(label, -1)} · ${worldTime}</span>`;
+            }
             if (this.text === next)
                 return;
             this.text = next;
@@ -1318,6 +1327,11 @@ Me.imports.commandPanels.install(class AzClockCommandLabel extends Label {
         }
         if (this._networkDestroyed || !this._networkDialog?.visible)
             return;
+        const currentCommand = getData(this.widgetIndex, this.elementIndex, 'Text_Command');
+        if (currentCommand.includes('/currency-widget.py')) {
+            this._refreshCurrencyDialog();
+            return;
+        }
         if (this._networkRefreshRun) {
             if (this._networkRefreshRun.generation !== this._networkGeneration)
                 this._networkRefreshPending = true;
@@ -1477,6 +1491,8 @@ Me.imports.commandPanels.install(class AzClockCommandLabel extends Label {
             this._buildDockerDialog();
         if (firewall && !this._networkDialog)
             this._buildFirewallDialog();
+        if (getData(this.widgetIndex, this.elementIndex, 'Text_Command').includes('/currency-widget.py') && !this._networkDialog)
+            this._buildCurrencyDialog();
         if (!this._networkDialog) {
             this._networkBackdrop = new St.Widget({reactive: true, visible: false});
             this._networkBackdrop.add_constraint(new Clutter.BindConstraint({source: global.stage, coordinate: Clutter.BindCoordinate.ALL}));
@@ -1689,9 +1705,8 @@ Me.imports.commandPanels.install(class AzClockCommandLabel extends Label {
         const command = getData(this.widgetIndex, this.elementIndex, 'Text_Command');
         if (metricMode(command) || command.includes('/atualizacoes-widget.py') || command.startsWith('playerctl -p spotify,chromium metadata'))
             return;
-        const interval = command.includes('/firewall-widget.py') ? 60000 : command.includes('/clima-widget.py')
-            ? 300000
-            : Math.max(getData(this.widgetIndex, this.elementIndex, 'Text_PollingInterval'), 250);
+        const interval = Utils.getCommandPollingInterval(command,
+            getData(this.widgetIndex, this.elementIndex, 'Text_PollingInterval'));
         this._pollingIntervalId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, interval, () => {
             this._executeCommand();
             return GLib.SOURCE_CONTINUE;
@@ -1843,6 +1858,8 @@ Me.imports.commandPanels.install(class AzClockCommandLabel extends Label {
     _executeCommand() {
         if (!widgetsEnabled || this._networkDestroyed) return;
         const command = getData(this.widgetIndex, this.elementIndex, 'Text_Command');
+        if (command.includes('/currency-widget.py'))
+            this._scheduleNetworkClick();
         if (metricMode(command)) {
             if (['cpu', 'processes', 'network'].includes(metricMode(command)))
                 this._scheduleNetworkClick();
@@ -2005,7 +2022,8 @@ Me.imports.commandPanels.install(class AzClockCommandLabel extends Label {
                 this._execCommand(pending.command, pending.input, pending.cancellable);
         }
     }
-}, {Clutter, Gio, GLib, Main, Me, Pango, St, Utils, getData, readCommandOutput, stopCommandRun, global}));
+}, {Clutter, Gio, GLib, Main, Me, Pango, St, Utils, getData, getWidgetData: () => WIDGETDATA,
+    readCommandOutput, stopCommandRun, global, launchTerminalAction}));
 
 // eslint-disable-next-line no-unused-vars
 function init() {

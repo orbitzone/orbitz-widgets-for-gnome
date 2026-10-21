@@ -1,5 +1,5 @@
 // Storage panel methods; state and lifecycle belong to CommandLabel.
-var create = ({Gio, GLib, Main, Pango, St, getData}) => ({
+var create = ({Gio, GLib, Main, Pango, St, getData, launchTerminalAction}) => ({
     _buildStorageDialog() {
         this._storageDialog = true;
         this._buildUpdatesDialog();
@@ -85,7 +85,7 @@ var create = ({Gio, GLib, Main, Pango, St, getData}) => ({
                     const [, argv] = GLib.shell_parse_argv(getData(this.widgetIndex, this.elementIndex, 'Text_Command'));
                     const script = argv.find(arg => arg.endsWith('/cpu-ram-widget.py'));
                     if (!script) throw new Error('Comando de hardware desconhecido.');
-                    Gio.Subprocess.new(['/usr/bin/python3', GLib.build_filenamev([GLib.path_get_dirname(script), 'hardware-details.py']), '--read-firmware'], Gio.SubprocessFlags.NONE);
+                    launchTerminalAction(['/usr/bin/python3', GLib.build_filenamev([GLib.path_get_dirname(script), 'hardware-details.py']), '--read-firmware'], this);
                     this._networkRefreshStatus.text = 'Autorize no terminal e clique em Atualizar após a leitura.';
                 } catch (error) { this._networkRefreshStatus.text = 'Não foi possível abrir a leitura do firmware.'; }
             });
@@ -176,7 +176,7 @@ var create = ({Gio, GLib, Main, Pango, St, getData}) => ({
                     const script = argv.find(arg => arg.endsWith('/cpu-ram-widget.py') || arg.endsWith('/armazenamento-widget.py'));
                     if (!script) throw new Error('Comando de armazenamento desconhecido.');
                     const helper = GLib.build_filenamev([GLib.path_get_dirname(script), 'limpeza-linux.py']);
-                    Gio.Subprocess.new(['/usr/bin/python3', helper, '--launch'], Gio.SubprocessFlags.NONE);
+                    launchTerminalAction(['/usr/bin/python3', helper, '--launch'], this);
                     this._networkRefreshStatus.text = 'Analise e confirme no terminal. Após concluir, clique em Atualizar.';
                 } catch (error) {
                     this._networkRefreshStatus.text = 'Não foi possível abrir a limpeza.';

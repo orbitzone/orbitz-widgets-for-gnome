@@ -26,6 +26,22 @@ Registro inicial em 17/10/2026. As entradas documentam instruções explícitas 
 
 Não há aprovação registrada dessas alternativas, responsáveis de implementação definidos ou prazos assumidos.
 
+## D-36 — Pesquisa inicial de fontes para FX-01 (20/10/2026)
+
+Parecer técnico, não decisão de provedor nem autorização de gasto: Frankfurter v2 oferece cotações diárias de 223 moedas oriundas de 104 bancos centrais/fontes oficiais, sem chave; atualiza em dias úteis e é informativa, não cotação transacional. Adequado como candidato para o widget fiduciário, com data da taxa exibida e conversão calculada localmente. Fontes: [documentação Frankfurter](https://frankfurter.dev/v1/) e [metodologia/atualização ECB](https://www.ecb.europa.eu/stats/policy_and_exchange_rates/euro_reference_exchange_rates/html/index.en.html).
+
+Implementação inicial (20/10/2026): adotada como fonte técnica do protótipo fiat, não como garantia de cotação em tempo real. `widgets/fx_rates.py` usa v2 e valida moeda/par/valor/data; `currency-widget.py` e o preset Settings apresentam conversão diária, seletor pesquisável e inversão. A data é validada internamente, mas não aparece no estado normal do widget. Essa escolha não inclui cripto nem serviço pago; teste GTK real pendente.
+
+Para cripto, CoinPaprika declara o plano sem chave como uso pessoal e exige Enterprise para redistribuir dados a clientes; CoinGecko Demo gratuito não concede direitos comerciais de exibição; CoinMarketCap tem API keyless com subconjunto e limites compartilhados por IP, mas sua documentação recomenda chave Basic gratuita para produção. A fonte definitiva não foi escolhida: antes de implementar widget publicamente distribuível, definir se usaremos integração sem chave sob termos explícitos, API key própria do usuário, ou plano/licença financiada pelo projeto; não embutir segredo compartilhado no app. Fonte primária: [CoinPaprika](https://coinpaprika.com/api), [termos/licença CoinGecko](https://www.coingecko.com/en/api_terms) e [API Keyless/planos CoinMarketCap](https://coinmarketcap.com/api/documentation/pro-api-reference/keyless-public-api/).
+
+## D-37 — Cadência e fonte de conversão fiat (20/10/2026)
+
+Requisito confirmado pelo usuário: consultar somente o endpoint da cotação mais recente, sem previsão, busca de datas históricas ou fallback de cache antigo; atualização automática a cada quatro horas e ação manual na modal do widget. A taxa Frankfurter é diária em dias úteis, portanto o polling de quatro horas apenas verifica se a publicação diária mudou e pode retornar o mesmo valor. Fins de semana/feriados podem ter data anterior sem constituir busca histórica; não impor um limite que rejeite essa publicação normal. Apenas par e valor aparecem no widget. Frontend implementou na fonte polling de 14.400.000 ms, modal acionável no widget, atualização manual e inversão persistida no comando; verificação visual/instalação ainda pendente. Esta decisão atualiza a proposta inicial D-36 de exibir data junto à taxa.
+
+## D-38 — Precisão visível do conversor fiduciário (20/10/2026)
+
+Pedido explícito: remover dígitos decimais excessivos e mostrar duas casas, com truncamento no formato do widget (`0.19829` aparece como `0.19`). Valores positivos abaixo de `0.01` aparecem como `0.00`; o valor original segue intacto na consulta, mas essa apresentação não deve ser reutilizada para moedas cripto ou ativos baratos sem escolha de precisão própria.
+
 ## D-13 — Equipe especializada (18/10/2026)
 
 Usuário autorizou criação de três chats dedicados e comunicação entre supervisor, backend, frontend e auditor; backend/frontend podem alinhar interfaces entre si. Supervisor centraliza documentação e encaminha entregas ao auditor. Refatoração de todo código próprio autorizada, preservando contratos e sem alterações na instalação ativa. Divisão e critérios: `agents/team.md`.

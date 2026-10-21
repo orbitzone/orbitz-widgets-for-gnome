@@ -97,7 +97,9 @@ def launch_terminal_command(command):
     terminal = shutil.which('tilix')
     if not terminal:
         raise FileNotFoundError('Tilix não está instalado; instale Tilix para executar ações interativas.')
-    subprocess.Popen([terminal, '-e', shlex.join(command)], start_new_session=True)
+    # Inherit DESKTOP_STARTUP_ID from the GNOME launch context. A new window
+    # keeps each confirmation visible even when Tilix already has a session.
+    subprocess.Popen([terminal, '--action=app-new-window', '-e', shlex.join(command)], start_new_session=True)
 
 
 def launch_terminal(name, command, effect=''):

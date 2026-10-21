@@ -47,6 +47,8 @@ CAL-01/RC-22: Google Calendar (OAuth desktop leitura) e Calendly (PAT pessoal le
 
 WSP-01 implementado e auditado: [parecer integrado](audits/2026-10-19-workspace-audit.md), 169/169 Python e restauração temporária aprovados; PDFPT/EN inspecionado. Essa evidência pertence ao alvo WSP; não equivale a GUI/autenticação dos provedores novos.
 
+FX-01 conversor fiat: usuário confirmou que o widget apareceu após aplicar cinco arquivos (`ATUALIZACAO_OK`); saída só com par e valor está instalada (hash igual à fonte), sem arquivos pendentes naquele momento. Backend chama apenas endpoint latest Frankfurter, sem cache, histórico, timer backend ou fallback; 12 testes FX passam. Frontend implementou na fonte polling de 4h, modal acionável no widget com atualização manual/inversão persistida e formatador que trunca a saída para 2 casas (exemplo `0.19829 → 0.19`). Valores abaixo de `0.01` exibem `0.00`; isso não serve a cripto de baixa unidade sem precisão própria. Modal, cadência e precisão ainda não foram instaladas nem verificadas em GTK/GNOME real. README e backlog atualizados. Requisitos cripto USD↔ativo selecionável continuam pendentes, conforme `docs/requirements.md` e `docs/backlog.md`. WID-02 relógio mundial permanece não resolvido conforme relato do usuário; não tratar tentativa local como aceite.
+
 ## Último estado verificado das fontes
 
 - Refatoração modular, identidade Orbitz e marca 1.0 implementadas. Usuário confirmou em 20/10 que o clique RAM não é mais um problema; BUG-01 encerrado por observação manual. Diferenças de dispositivos externos/alertas permanecem pendência separada (BUG-02).

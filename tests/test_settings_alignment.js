@@ -7,8 +7,8 @@ class ComboRow {
     connect(name, handler) { this.change = handler; }
 }
 class StringList { constructor() { this.items = []; } append(value) { this.items.push(value); } }
-const settings = {TimeZoneDialog: {}, WidgetsData: {}};
-const Me = {metadata: {}, imports: {utils: {}, settings}};
+const settings = {TimeZoneDialog: {}, WidgetsData: {}, timeZoneCatalog: {TimeZoneCatalog: {}}};
+const Me = {metadata: {}, imports: {utils: {}, settings, worldClock: {WorldClock: {isTimeFormat: () => false}}}};
 const gi = {Adw: {PreferencesPage: class {}, ComboRow}, Gtk: {StringList}, Gdk: {}, GLib: {},
     GObject: {registerClass: (...args) => args.at(-1), ParamSpec: {int() {}}, ParamFlags: {}}};
 const imports = {gi, misc: {extensionUtils: {getCurrentExtension: () => Me}}, gettext: {domain: () => ({gettext: text => 'tr:' + text})}};

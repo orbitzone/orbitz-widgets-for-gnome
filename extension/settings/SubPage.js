@@ -3,7 +3,7 @@ const Me = ExtensionUtils.getCurrentExtension();
 
 const {Adw, Gdk, GLib, GObject, Gtk} = imports.gi;
 
-const {GWeather, TimeZoneDialog} = Me.imports.settings.TimeZoneDialog;
+const {TimeZoneCatalog} = Me.imports.settings.timeZoneCatalog;
 
 const Gettext = imports.gettext.domain(Me.metadata['gettext-domain']);
 const Utils = Me.imports.utils;
@@ -196,10 +196,7 @@ var SubPage = GObject.registerClass({
     }
 
     createTimeZoneRow() {
-        const timeZoneRow = new Adw.ActionRow({
-            title: _('Time Zone'),
-            activatable: true,
-        });
+        const timeZoneRow = new Adw.ActionRow({title: _('Time Zone'), activatable: true});
 
         const timeZoneExpanderRow = new Adw.ExpanderRow({
             title: _('Override Time Zone'),
@@ -212,62 +209,16 @@ var SubPage = GObject.registerClass({
         });
         timeZoneExpanderRow.add_row(timeZoneRow);
 
-        if (!GWeather) {
-            const linkButton = new Gtk.LinkButton({
-                label: _('Time Zones Guide'),
-                uri: 'https://en.wikipedia.org/wiki/List_of_tz_database_time_zones#List',
-                css_classes: ['caption'],
-                valign: Gtk.Align.CENTER,
-            });
-            timeZoneExpanderRow.add_action(linkButton);
-            timeZoneExpanderRow.subtitle = `${_('Search Disabled')}\n${_('Missing dependency GWeather v4')}`;
-            timeZoneRow.title = _('Time Zone Database Name');
-
-            const timeZoneEntry = new Gtk.Entry({
-                valign: Gtk.Align.CENTER,
-                halign: Gtk.Align.FILL,
-                hexpand: true,
-                text: this.getClockElementData('TimeZoneOverride') || 'UTC',
-            });
-
-            const timeZoneApplyButton = new Gtk.Button({
-                icon_name: 'object-select-symbolic',
-                tooltip_text: _('Set Time Zone'),
-                valign: Gtk.Align.CENTER,
-            });
-            timeZoneApplyButton.connect('clicked', () => {
-                this.setClockElementData('TimeZoneOverride', timeZoneEntry.get_text());
-            });
-
-            timeZoneRow.add_suffix(timeZoneEntry);
-            timeZoneRow.add_suffix(timeZoneApplyButton);
-
-            return timeZoneExpanderRow;
-        }
-
-        const timeZoneLabel = new Gtk.Label({
-            label: this.getClockElementData('TimeZone') ?? this.getClockElementData('TimeZoneOverride'),
-            use_markup: true,
+        const selector = TimeZoneCatalog.createDropDown(GLib, Gtk,
+            this.getClockElementData('TimeZoneOverride') || 'UTC');
+        selector.set_size_request(390, -1);
+        selector.connect('notify::selected', widget => {
+            const selected = widget.orbitzTimeZones[widget.selected];
+            if (!selected) return;
+            this.setClockElementData('TimeZoneOverride', selected.identifier);
+            this.setClockElementData('TimeZone', `${selected.city} • ${selected.region}`);
         });
-        const goNext = new Gtk.Image({icon_name: 'go-next-symbolic'});
-
-        timeZoneRow.add_suffix(timeZoneLabel);
-        timeZoneRow.add_suffix(goNext);
-
-        timeZoneRow.connect('activated', () => {
-            const timeZoneDialog = new TimeZoneDialog({
-                title: _('Select Time Zone'),
-                transient_for: this.get_root(),
-                modal: true,
-            });
-            timeZoneDialog.show();
-
-            timeZoneDialog.connect('time-zone-changed', (_self, timeZone, label) => {
-                this.setClockElementData('TimeZoneOverride', timeZone);
-                this.setClockElementData('TimeZone', label);
-                timeZoneLabel.label = label;
-            });
-        });
+        timeZoneRow.add_suffix(selector);
 
         return timeZoneExpanderRow;
     }

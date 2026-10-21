@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 const factories = {};
-for (const name of ['common', 'updates', 'temperatures', 'storage', 'resources', 'network', 'docker', 'firewall']) {
+for (const name of ['common', 'updates', 'temperatures', 'storage', 'resources', 'network', 'docker', 'firewall', 'currency']) {
     const context = vm.createContext({});
     vm.runInContext(fs.readFileSync(path.join(__dirname, '../extension/panels', name + '.js'), 'utf8'), context);
     factories[name] = context;
@@ -18,6 +18,8 @@ assert(host instanceof Label);
 assert.equal(host.lifecycle(), 'alive');
 assert.equal(host._temperatureCategory({group: 'coretemp', name: 'Core 0'}), 'CPU');
 assert.equal(host._temperatureColumns([]).length, 4);
-assert.equal(Object.getOwnPropertyNames(CommandLabel.prototype).length, 26);
+assert.equal(typeof host._buildCurrencyDialog, 'function');
+assert.equal(typeof host._refreshCurrencyDialog, 'function');
+assert.equal(Object.getOwnPropertyNames(CommandLabel.prototype).length, 31);
 assert.throws(() => context.install(CommandLabel, {}), /Duplicate command panel method/);
 console.log('OK: panel composition preserves superclass, lifecycle, sibling dispatch and rejects collisions.');

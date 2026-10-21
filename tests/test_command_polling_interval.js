@@ -1,0 +1,12 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
+const context = vm.createContext({imports: {gi: {GLib: {}}, misc: {extensionUtils: {}}}});
+vm.runInContext(fs.readFileSync('extension/utils.js', 'utf8'), context);
+const interval = context.getCommandPollingInterval;
+assert.equal(interval('/usr/bin/python3 /data/currency-widget.py --quote USD', 3600000), 14400000);
+assert.equal(interval('/usr/bin/python3 /data/currency-widget.py --quote USD', 250), 14400000);
+assert.equal(interval('/usr/bin/python3 /data/firewall-widget.py', 5000), 60000);
+assert.equal(interval('/usr/bin/python3 /data/clima-widget.py', 5000), 300000);
+assert.equal(interval('/usr/bin/python3 /data/other-widget.py', 3600000), 3600000);
+console.log('OK: persisted FX widgets use 4-hour polling at runtime; existing special and normal intervals remain intact.');

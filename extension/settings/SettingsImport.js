@@ -22,8 +22,9 @@ function validateWidgets(data) {
             }
             if (element.Text_Command)
                 commands.push(element.Text_Command);
+            const maxPollingInterval = (element.Text_Command || '').includes('/currency-widget.py') ? 14400000 : 3600000;
             if (element.Element_Type === 'Command_Label' && (!Number.isFinite(Number(element.Text_PollingInterval)) ||
-                Number(element.Text_PollingInterval) < 250 || Number(element.Text_PollingInterval) > 3600000))
+                Number(element.Text_PollingInterval) < 250 || Number(element.Text_PollingInterval) > maxPollingInterval))
                 throw new Error('Intervalo de comando inválido.');
         }
         if (widget[0].Widget_Type !== 'Widget_Box')
