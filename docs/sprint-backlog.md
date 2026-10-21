@@ -4,7 +4,7 @@ Atualizado em 21/10/2026. Lote lógico, sem agenda automática. Política: [work
 
 ## Estado atual
 
-INV-01–04 já auditadas; WSP-01 está implementado e auditado nas fontes. O usuário confirmou Google Calendar e Datas comemorativas em 20/10; em 21/10 confirmou que feriados persistem em todos os calendários e aprovou visualmente as Sticky Notes. A revisão independente consolidada deste lote não encontrou defeitos reproduzíveis. Permanecem pendentes os testes interativos de GTK para invoices/chooser e o aceite real de WID-02. O usuário autorizou publicar todas as alterações atuais.
+INV-01–04 já auditadas; WSP-01 está implementado e auditado nas fontes. O usuário confirmou Google Calendar e Datas comemorativas em 20/10; em 21/10 confirmou que feriados persistem em todos os calendários e aprovou visualmente as Sticky Notes. A revisão independente das mudanças desde 20/10 encontrou defeitos reproduzíveis e dados identificáveis em screenshots públicos. Os defeitos foram corrigidos com testes direcionados, as capturas foram redigidas e a documentação técnica harmonizada. A revalidação independente final não encontrou novos achados nos deltas verificados. Testes interativos de GTK para invoices/chooser e o aceite real de WID-02 continuam pendentes. Esta revisão não alterou a instalação nem publicou alterações.
 
 | Item | Estado | Risco / responsável | Próxima ação |
 |---|---|---|---|
@@ -18,7 +18,8 @@ INV-01–04 já auditadas; WSP-01 está implementado e auditado nas fontes. O us
 | STICKY-02 — Ctrl+clique e feedback visual | Implementado; testes sintéticos passam; usuário confirmou que as Sticky Notes estão ótimas | Médio / frontend | Fechado por validação do usuário |
 | STICKY-03 — alça de redimensionamento | Alvo 28×28 px junto à borda, cursor se-resize e gutter preservado; usuário aprovou a apresentação atual das Sticky Notes | Baixo / frontend | Fechado por validação do usuário |
 | TERM-01 — foco automático do Tilix | Concluído conforme confirmação do usuário após atualização/reinício da sessão; testes dirigidos passaram e auditoria focada não encontrou bloqueio. | Médio / frontend | Fechado. Não generalizar a outras sessões/ambientes além do teste confirmado pelo usuário. |
-| FX-01 — conversores fiat/cripto | Fiat chama latest Frankfurter; saída simplificada instalada. Frontend implementou na fonte modal acessível pelo widget, atualização manual, inversão persistida e polling 4h; testes dirigidos passaram. Cripto USD↔ativo selecionável continua pendente. Taxa Frankfurter é diária, não tempo real. | Médio / backend (latest/erros) + frontend (modal/polling/persistência); supervisor (requisitos e docs) | Instalação e verificação visual GNOME reais pendentes; confirmar os dois sentidos e persistência após reabrir. Sem histórico/previsão/fallback. Definir provedor/cobertura/licença/cadência cripto. Auditoria média agrupada no fechamento da sprint. |
+| FX-01 — widget único conversor fiat/cripto | Fiat/cripto integrados; testes cobrem persistência, Configure, reconstrução, lifecycle, direção, erros de parse e precisão. Backend implementa CoinPaprika sem chave para uso pessoal; catálogo por IDs contém somente ativos cotados no plano. Unidade USD→cripto preserva frações; Fiat e cripto→USD usam duas casas pt-BR. 24 testes FX passam; auditoria independente final sem novos achados nos deltas conferidos. | Médio / backend + frontend + supervisor | Validar instalação e visualmente no GNOME; o usuário ainda precisa confirmar os dois modos e sentidos. Sem histórico/previsão/fallback; polling 4h. Plano gratuito pessoal, uso comercial voltado a clientes exige licença compatível. |
+| CFG-01 — Configure e atualização dos elementos do conversor | `Adw.SwitchRow` ausente em libadwaita 1.1 abortava a construção da página; substituído por `Gtk.Switch`/`Adw.ActionRow`. Foi corrigida também a corrida em que o callback do catálogo substituía `ElementAdded` antes do debounce do Shell: marcadores estruturais pendentes são mesclados e a topologia armazenada é comparada à árvore ativa. Teste executa Configure → janela → subpáginas e adicionar elemento → callback assíncrono → atualização do Shell, cobrindo Fiat + Crypto, edição simples e exclusão. | Médio / frontend | Testes de fonte passaram; instalar e conferir visualmente no GNOME; usuário confirma que os dois elementos aparecem e Configure/remover funcionam. |
 
 ## Cadastro de próxima tarefa
 
@@ -33,9 +34,9 @@ Uma linha por mudança: ID, escopo/arquivos, risco, responsável, critérios, ev
 
 ## QA consolidado — 21/10/2026
 
-Suíte Python completa: 267 testes aprovados e 3 pulados (dois cenários de socket bloqueados no sandbox e smoke de geometria GTK sem display acessível). Os 27 testes Node e os dois testes GJS passaram; `git diff --check` passou. Checagens dirigidas adicionais: FX 12/12, Sticky Links 10/10, `test_audit.py` 22/22; smoke de layout GTK passou nos testes de contrato e pulou a geometria pela falta de display. Auditoria independente consolidada concluída sem defeito reproduzível nos caminhos revisados. A rota e o formato da Frankfurter foram conferidos com a documentação oficial; consulta externa direta não foi possível neste ambiente.
+Suíte Python completa: 284 testes executados, 281 aprovados e 3 pulados (dois cenários de socket bloqueados no sandbox e smoke de geometria GTK sem display acessível). Os 31 testes Node e os dois testes GJS passaram; `git diff --check` passou. Checagens dirigidas: FX 24/24 e Sticky Links 15/15. Os testes cobrem os defeitos encontrados: CLI com JSON aninhado, expoente inválido e inteiros acima do limite do parser, limites Decimal, renomeação/identidade do catálogo, descarte de resposta antiga, precisão USD→cripto, regex de email de tempo limitado e URI local malformada. A auditoria independente revalidou os últimos deltas e não encontrou novos achados; instalação e interação visual no GNOME continuam pendentes. A rota e o formato da Frankfurter foram conferidos com a documentação oficial; consulta externa direta não foi possível neste ambiente.
 
-GTK nativo para invoice/chooser e o seletor real de WID-02 permanecem pendentes de sessão interativa. O usuário validou as Sticky Notes e confirmou a persistência de feriados em todos os calendários, então esses itens foram fechados sem exigir teste GTK adicional. A revisão independente não encontrou defeitos reproduzíveis. O usuário autorizou publicar as alterações atuais; WID-02 continua explicitamente pendente e não é declarado concluído.
+GTK nativo para invoice/chooser, inspeção visual dos widgets de moeda e o seletor real de WID-02 permanecem pendentes de sessão interativa. O usuário validou as Sticky Notes e confirmou a persistência de feriados em todos os calendários. A instalação não foi atualizada nesta revisão; a fonte e os testes não comprovam a experiência visual nem a versão carregada pela sessão GNOME. WID-02 continua explicitamente pendente e não é declarado concluído.
 
 ## WID-02 — Relógio mundial: requisito de seletor ainda não resolvido
 
@@ -96,3 +97,22 @@ Validação manual do usuário em 20/10/2026: a fonte Brasil · Datas comemorati
 ## WID-02 — relógio mundial adicional
 
 Implementação local: opção na configuração do relógio digital para ativar o relógio secundário, escolher cidade/região em catálogo pesquisável e mostrar a localidade com hora formatada. O catálogo vem da base tzdata do sistema e não depende de GWeather; o mesmo seletor substitui o campo manual de sobrescrita de fuso nos relógios digitais e analógicos. Testes do catálogo e formatação/timezone passam. Risco médio; revisão independente fica no fechamento da sprint. GTK/preferências e visual ainda não conferidos em sessão real; não instalado.
+
+## FX-01 — formatação com centavos corrigida (21/10/2026)
+
+Usuário esclareceu a apresentação Fiat: duas casas decimais arredondadas metade para cima, vírgula decimal e ponto de milhar (`0.19829 → 0,20`, `5.04 → 5,04`, `83060.16777893 → 83.060,17`). Fiat abaixo de `0.005` aparece `0,00`; USD→cripto é exceção e preserva os dígitos fornecidos para não zerar o ativo pequeno. JSON mantém a taxa original. Testes FX dirigidos passaram; instalação e validação visual pendentes.
+
+## FX-02 — calculadora na modal (21/10/2026)
+
+Pedido confirmado: informar um valor livre na modal e ver o total convertido para o par/sentido selecionado, fiat ou cripto. Campo inicia em 1 e recalcula ao digitar, sem nova consulta de rede. Aceita vírgula decimal e milhares brasileiros (`1.000,50`), ou ponto decimal sem agrupamento; `1.000` significa mil. Zero permitido; vazio, negativo, notação científica e entradas malformadas não geram total. Valor digitado é temporário na modal, não salvo nas configurações. Resultado com duas casas e separadores pt-BR. Multiplicação decimal exata da taxa JSON original via BigInt, arredondando metade para cima somente no total; nunca calcular sobre o valor unitário exibido. Atualizar/inverter invalida o total até resposta válida; erro não mantém total antigo. Sem efeito em invoices ou gravação financeira.
+
+Implementação fonte e verificações dirigidas concluídas (19 testes Python FX, Node modal/erros/calculadora e composição; sintaxe/diff). Revisão focada independente concluída sem defeito bloqueador reproduzido; auditor confirmou os exemplos de multiplicação e arredondamento também no GJS real. Instalação e validação visual/interativa GNOME pendentes.
+
+Diagnóstico de instalação FX-01/FX-02 em 21/10: hashes SHA-256 do painel `currency.js` e do coletor `currency-widget.py` instalado conferem com a fonte atual. Usuário mostra modal sem calculadora e cripto com formato antigo ao abrir, embora o coletor já apresente centavos: evidência compatível com JavaScript antigo ainda carregado no Shell. Sessão declarada Wayland; orientar sair/entrar na sessão para carregar módulos atualizados, sem reinício automático. Calculadora/visual continuam sem aceite real após nova sessão; não repetir aplicação como solução para arquivos já iguais.
+
+
+## FX-03 — precisão completa na calculadora cripto (21/10/2026)
+
+Pedido confirmado pela captura: o total cripto não deve desaparecer como `0,00`. Na calculadora em modo Crypto, em ambos os sentidos, exibir o produto decimal da quantidade pela taxa recebida sem limite de duas casas nem notação científica; remover apenas zeros finais. A cotação unitária USD→ativo também preserva as casas fornecidas; ativo→USD permanece em centavos. Exemplo: `400 × 0.000016273845678 = 0,0065095382712 BTC`. Sem inventar precisão além da taxa recebida.
+
+Implementado na fonte com BigInt; testes Node da calculadora/modal e composição aprovados. Revisão média agrupada no fechamento; instalação e validação visual GNOME pendentes.

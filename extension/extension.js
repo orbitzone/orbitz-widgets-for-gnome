@@ -510,6 +510,7 @@ class AzClockDesktopWidget extends St.Widget {
         this.destroy_all_children();
 
         const clockData = WIDGETDATA[this._widgetIndex];
+        this._elementLayout = JSON.stringify(clockData.slice(1).map(element => element.Element_Type));
 
         this._analogClocks = [];
         this._digitalClocks = [];
@@ -2441,7 +2442,8 @@ class AzClock {
         } else if (elementType && (!Number.isInteger(elementIndex_) || elementIndex_ < 0 || !WIDGETDATA[widgetIndex]?.[elementIndex_])) {
             this.widgets[widgetIndex].createElements();
             this.widgets[widgetIndex].updateComponents(0);
-        } else if (elementDeleted || elementAdded || elementIndexChanged) {
+        } else if (elementDeleted || elementAdded || elementIndexChanged ||
+            this.widgets[widgetIndex]._elementLayout !== JSON.stringify(WIDGETDATA[widgetIndex].slice(1).map(element => element.Element_Type))) {
             debugLog(`element added/deleted/index-changed at widget ${widgetIndex}`);
 
             this.widgets[widgetIndex].createElements();

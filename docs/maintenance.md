@@ -1,6 +1,6 @@
 # Manutenção e contexto técnico
 
-Atualizado em 19/10/2026. O README principal é a apresentação pública do produto; este índice concentra manutenção, evidências e contexto de desenvolvimento, sem dados pessoais ou credenciais.
+Atualizado em 21/10/2026. O README principal é a apresentação pública do produto; este índice concentra manutenção, evidências e contexto de desenvolvimento, sem dados pessoais ou credenciais.
 
 ## Fontes de verdade
 
@@ -14,6 +14,7 @@ Atualizado em 19/10/2026. O README principal é a apresentação pública do pro
 - [Workspace](audits/2026-10-19-workspace-audit.md):169 testes Python; integração temporária de contexto/fatura/versão/pagamento/backup/restauração. QA PDF do supervisor é separada da interação GTK.
 - [Calendários](audits/2026-10-19-calendar-audit.md):27 testes de calendário e8 do planner aprovados,2 skips de socket; teste Node de identidade e integração temporária. Atualização manual em 20/10: usuário confirmou Google Calendar e Brasil · Datas comemorativas funcionando. Calendly com conta real permanece sem confirmação; revisão média CAL-06/07 segue para fechamento.
 - [Invoices e assinatura assistida](audits/2026-10-19-invoice-signatures-audit.md):62 testes dirigidos no alvo daquele marco. Não é resultado da suíte global atual, nem assinatura validada.
+- Revisão de mudanças desde 20/10: corrigidos defeitos de resposta JSON aninhada, expoente inválido e inteiro excessivo (mensagem técnica era exposta), arredondamento Decimal em extremos, salvamento do seletor após renomear, descarte de cotação obsoleta, precisão USD→cripto, custo quadrático na busca de links das Sticky Notes e exceção em URI `file://` malformada. Screenshots do README foram redigidos para ocultar path, contas/calendários, dados de timesheets e campos de invoice. A evidência consolidada de testes e limitações interativas fica em [sprint-backlog.md](sprint-backlog.md); instalação e inspeção GNOME continuam estados separados.
 
 Não repetir testes amplos ou transformar contagens históricas em execução atual. Ao publicar, conferir diff e hashes das fontes afetadas contra o relatório pertinente. Instalação/ativação e validação visual devem ter evidências próprias; alterações no repositório não atualizam a instalação.
 

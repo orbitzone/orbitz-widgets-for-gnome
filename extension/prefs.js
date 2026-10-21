@@ -235,7 +235,7 @@ var WidgetRow = GObject.registerClass({
             return true;
         });
 
-        this.connect('activated', () => {
+        const openWidgetSettings = () => {
             const widgetSettingsWindow = new WidgetSettingsPage(this._settings, this._homePage, {
                 title: widgetSettings['Name'],
                 widget_index: this.widget_index,
@@ -247,16 +247,16 @@ var WidgetRow = GObject.registerClass({
             });
             widgetSettingsWindow.connect('notify::title', () => (this.title = `<b>${GLib.markup_escape_text(widgetSettingsWindow.title, -1)}</b>`));
             widgetSettingsWindow.present();
-        });
+        };
+        this.connect('activated', openWidgetSettings);
 
-        const configureLabel = new Gtk.Label({
+        const configureButton = new Gtk.Button({
             label: _('Configure'),
-            halign: Gtk.Align.END,
+            has_frame: false,
             valign: Gtk.Align.CENTER,
-            hexpand: false,
-            vexpand: false,
         });
-        this.add_suffix(configureLabel);
+        configureButton.connect('clicked', openWidgetSettings);
+        this.add_suffix(configureButton);
 
         const goNextImage = new Gtk.Image({
             gicon: Gio.icon_new_for_string('go-next-symbolic'),

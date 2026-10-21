@@ -5,8 +5,9 @@ import sys
 import tempfile
 from types import SimpleNamespace,MethodType
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock,patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'sticky-notes'))
+import link_targets
 from link_targets import target_at,link_at
 
 class StickyLinkTests(unittest.TestCase):
@@ -43,6 +44,45 @@ class StickyLinkTests(unittest.TestCase):
         self.assertIsNone(target_at('https://user:password@example.org',12))
         self.assertIsNone(target_at('https://example.org',999))
 
+    def test_email_candidates_have_bounded_validation_work_on_long_lines(self):
+        # No wall-clock assertion: the expensive validator only sees a single
+        # clicked candidate, bounded independently of the note's line length.
+        fullmatch=link_targets.re.fullmatch
+        for size in (4000,16000,100000):
+            for text in ('a'*size,('a@'*(size//2)),('a.'*(size//2))):
+                with patch.object(link_targets.re,'fullmatch',wraps=fullmatch) as validate:
+                    self.assertIsNone(target_at(text,len(text)//2))
+                    validate.assert_not_called()
+            text=('a@b.com '*(size//8))+'last@example.org'
+            with patch.object(link_targets.re,'fullmatch',wraps=fullmatch) as validate:
+                self.assertEqual(target_at(text,len(text)-2),'mailto:last@example.org')
+                self.assertEqual(validate.call_count,1)
+                self.assertLessEqual(len(validate.call_args.args[1]),254)
+
+    def test_email_limits_reject_overlong_runs_without_matching_a_suffix(self):
+        valid='a'*64+'@example.org'
+        self.assertEqual(target_at(valid,63),'mailto:'+valid)
+        for invalid in ('a'*65+'@example.org','a'*100000+'@example.org'):
+            self.assertIsNone(target_at(invalid,len(invalid)-3))
+        domain='b'*63+'.'+'c'*63+'.'+'d'*57+'.com'
+        at_limit='a'*64+'@'+domain
+        self.assertEqual(len(at_limit),254)
+        self.assertEqual(target_at(at_limit,100),'mailto:'+at_limit)
+        too_long=at_limit+'.x'
+        self.assertIsNone(target_at(too_long,100))
+        email='mailto:pessoa+tag@example.org'
+        self.assertEqual(target_at(email,2),'mailto:pessoa%2Btag@example.org')
+
+    def test_malformed_file_uri_and_ipv6_authorities_have_no_destination(self):
+        for value in ('file://[bad','file://[::1/tmp','file://[bad]/tmp',
+                'file://[vXYZ]/tmp','file://[::1]/tmp','file:///tmp/%00'):
+            with self.subTest(value=value):
+                self.assertIsNone(link_targets.directory_uri(value))
+                self.assertIsNone(target_at(value,0))
+        with tempfile.TemporaryDirectory() as folder:
+            path=Path(folder)/'pasta com espaços';path.mkdir()
+            self.assertEqual(target_at(path.as_uri(),0),path.as_uri())
+
     def handler(self):
         tree=ast.parse((Path(__file__).resolve().parents[1]/'sticky-notes/card.py').read_text())
         cls=next(n for n in tree.body if isinstance(n,ast.ClassDef))
@@ -71,6 +111,14 @@ class StickyLinkTests(unittest.TestCase):
         event.state=4;event.button=3;self.assertFalse(handler(host,None,event))
         event.button=1;host.text.get_iter_at_location.return_value=(False,None)
         self.assertFalse(handler(host,None,event));launch.assert_not_called()
+
+    def test_ctrl_click_malformed_file_uri_preserves_editing_without_launch(self):
+        handler,host,event,launch,context=self.handler()
+        text='file://[bad';host.value=lambda:text
+        self.assertFalse(handler(host,None,event))
+        launch.assert_not_called();context.set_timestamp.assert_not_called()
+        host.text.get_buffer.assert_not_called();host.status.show.assert_not_called()
+        self.assertEqual(host.value(),text)
 
     def test_failed_default_app_shows_error_without_editing_note(self):
         handler,host,event,launch,_=self.handler();launch.side_effect=RuntimeError('synthetic')
@@ -104,6 +152,14 @@ class StickyHoverTests(unittest.TestCase):
         self.assertIsNone(host.hover_link);window.set_cursor.assert_called_with('text')
         host.buffer.remove_tag.assert_called()
         host.buffer.set_text.assert_not_called()
+
+    def test_ctrl_hover_malformed_uri_clears_old_highlight_without_editing(self):
+        host,window=self.host();host.value=lambda:'file://[bad'
+        host.hover_link=(0,5,'https://example.org')
+        self.assertFalse(host.update_link_hover(window,3,5,True))
+        self.assertIsNone(host.hover_link)
+        host.buffer.apply_tag.assert_not_called();host.buffer.set_text.assert_not_called()
+        window.set_cursor.assert_called_with('text')
 
     def test_press_ctrl_without_moving_mouse_refreshes_hover(self):
         host,window=self.host();host.refresh_link_hover()

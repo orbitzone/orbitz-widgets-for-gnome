@@ -20,6 +20,8 @@ assert.equal(host._temperatureCategory({group: 'coretemp', name: 'Core 0'}), 'CP
 assert.equal(host._temperatureColumns([]).length, 4);
 assert.equal(typeof host._buildCurrencyDialog, 'function');
 assert.equal(typeof host._refreshCurrencyDialog, 'function');
-assert.equal(Object.getOwnPropertyNames(CommandLabel.prototype).length, 31);
+assert.equal(typeof host._currencyProduct, 'function');
+assert.equal(typeof host._updateCurrencyCalculation, 'function');
+assert.equal(Object.getOwnPropertyNames(CommandLabel.prototype).length, 33);
 assert.throws(() => context.install(CommandLabel, {}), /Duplicate command panel method/);
 console.log('OK: panel composition preserves superclass, lifecycle, sibling dispatch and rejects collisions.');

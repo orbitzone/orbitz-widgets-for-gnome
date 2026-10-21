@@ -9,16 +9,35 @@
 O Orbitz reúne informações do computador e ferramentas de organização em um desktop GNOME que você adapta à sua rotina. Acompanhe o sistema sem perder de vista seus compromissos, tarefas e horas de trabalho.
 
 <p align="center">
-  <img src="docs/images/desktop-widgets.png" alt="Widgets Orbitz organizados na área de trabalho GNOME">
+  <img src="docs/images/desktop-widgets-current.png" alt="Widgets Orbitz organizados na área de trabalho GNOME">
 </p>
 
 ## Um desktop que trabalha com você
 
 Escolha os widgets, organize posições e grupos e ajuste a aparência. Use o controlador na área de trabalho para mostrar ou pausar o conjunto. De um relance, acompanhe relógio, clima e agenda; recursos do computador, como processador, memória, armazenamento e rede; e informações de sistema, como atualizações, serviços e contêineres.
 
-O **Currency Converter** mostra a conversão de BRL para a moeda fiduciária escolhida em duas casas decimais, permite inverter o sentido e atualizar a cotação manualmente pela modal do widget. A consulta automática ocorre a cada quatro horas. A fonte publica referências diárias em dias úteis, não cotações em tempo real; várias consultas podem retornar o mesmo valor.
+O **Currency Converter** reúne conversões fiduciárias e cripto no mesmo widget. No modo Fiat, converte BRL para a moeda escolhida, com duas casas decimais e separadores de milhar, e permite inverter o sentido. No modo Crypto, consulta USD para o ativo selecionado (BTC por padrão) e também permite inverter a conversão. A modal oferece atualização manual e uma calculadora que usa a mesma cotação; para cripto, preserva as casas decimais necessárias para mostrar frações pequenas. As consultas automáticas ocorrem a cada quatro horas. Fiat usa a última referência diária disponível da [Frankfurter](https://frankfurter.dev/), publicada em dias úteis e não em tempo real. Cripto usa os tickers da [CoinPaprika](https://coinpaprika.com/api), cuja atribuição aparece na modal; o catálogo inclui os ativos com preço disponível nessa fonte, não todas as criptomoedas.
+
+O plano gratuito da CoinPaprika é para uso pessoal e exige atribuição. Exibir ou redistribuir os dados para clientes comerciais requer licença compatível; consulte os [planos](https://coinpaprika.com/api/pricing) e os [termos da API](https://coinpaprika.com/terms-api) antes desse uso.
 
 Notas adesivas, controles de mídia, um player dedicado do YouTube e lançadores deixam suas ferramentas à mão. A busca e os comentários do YouTube precisam de uma chave própria da API. As informações de hardware variam conforme o computador, os sensores e as permissões disponíveis.
+
+## Capturas de tela
+
+<table>
+  <tr>
+    <td align="center"><img src="docs/images/workspace-calendar.png" alt="Agenda do Orbitz Workspace com calendário e eventos" width="480"><br><sub>Agenda e calendário</sub></td>
+    <td align="center"><img src="docs/images/calendar-sources.png" alt="Seletor de calendários conectados" width="320"><br><sub>Calendários conectados</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/images/workspace-timesheets.png" alt="Timesheet com atividades, horários e totais" width="480"><br><sub>Registro de horas</sub></td>
+    <td align="center"><img src="docs/images/currency-converter.png" alt="Modal do conversor de moedas com cálculo e atualização manual" width="400"><br><sub>Conversor de moedas</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/images/system-updates.png" alt="Painel de atualizações do sistema" width="420"><br><sub>Atualizações do sistema</sub></td>
+    <td align="center"><img src="docs/images/invoice-history.png" alt="Histórico de invoices com dados identificáveis e valores ocultos" width="420"><br><sub>Histórico de invoices</sub></td>
+  </tr>
+</table>
 
 ## Do compromisso à entrega
 

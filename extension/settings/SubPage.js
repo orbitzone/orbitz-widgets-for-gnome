@@ -230,6 +230,13 @@ var SubPage = GObject.registerClass({
 
     setClockElementData(elementType, newValue) {
         const changedData = this.getChangedData(elementType);
+        const pending = this._settings.get_value('changed-data').deep_unpack();
+        // Catalog callbacks may arrive before the Shell consumes an add/delete event.
+        if (pending.WidgetIndex === changedData.WidgetIndex) {
+            for (const flag of ['ElementAdded', 'ElementDeleted', 'ElementIndexChanged']) {
+                if (pending[flag] === 'true') changedData[flag] = 'true';
+            }
+        }
         this._settings.set_value('changed-data', new GLib.Variant('a{ss}', changedData));
         Utils.setData(Utils.unpackData(this._settings), this.widget_index,
             this.element_index, elementType, newValue);
