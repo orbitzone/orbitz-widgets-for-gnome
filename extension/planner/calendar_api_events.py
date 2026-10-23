@@ -1,4 +1,5 @@
 """Normalize API events to the existing cached read-only planner contract."""
+from ui_language import ui as _i18n
 from datetime import date,datetime,timedelta,timezone
 from zoneinfo import ZoneInfo
 import hashlib
@@ -11,7 +12,7 @@ def window(month):
         if first.strftime('%Y-%m')!=month:raise ValueError()
         last=(first.replace(day=28)+timedelta(days=4)).replace(day=1)
         return datetime.combine(first,datetime.min.time(),ZONE)-timedelta(days=2),datetime.combine(last,datetime.min.time(),ZONE)+timedelta(days=2)
-    except (TypeError,ValueError):raise CalendarError('Mês de consulta inválido.') from None
+    except (TypeError,ValueError):raise _i18n.exception(CalendarError, 'domain.calendar_api_events.invalid_query_month') from None
 
 
 def instant(value,zone=None):
@@ -55,7 +56,7 @@ def google(item,account_id,calendar):
             minutes=value.get('minutes') if isinstance(value,dict) else None
             if value.get('method') in ('popup','email') and type(minutes) is int and 0<=minutes<=10080:alarms.append(minutes)
         return event(account_id,calendar['id'],item['id'],occurrence,item.get('summary','Sem título'),start,end,all_day=all_day,alarms=alarms,location=item.get('location',''))
-    except (KeyError,TypeError,ValueError,AttributeError):raise CalendarError('Evento Google inválido; cache anterior preservado.') from None
+    except (KeyError,TypeError,ValueError,AttributeError):raise _i18n.exception(CalendarError, 'domain.calendar_api_events.invalid_google_event_previous_cache_preserved') from None
 
 
 def calendly(item,account_id,calendar):
@@ -71,4 +72,4 @@ def calendly(item,account_id,calendar):
         location=item.get('location') or {}
         return event(account_id,calendar['id'],part.path.rsplit('/',1)[-1],'single',item.get('name','Sem título'),
                      instant(item['start_time']),instant(item['end_time']),location=location.get('location',''))
-    except (KeyError,TypeError,ValueError,AttributeError):raise CalendarError('Evento Calendly inválido; cache anterior preservado.') from None
+    except (KeyError,TypeError,ValueError,AttributeError):raise _i18n.exception(CalendarError, 'domain.calendar_api_events.invalid_calendly_event_previous_cache_preserved') from None

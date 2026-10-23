@@ -1,6 +1,6 @@
 // Compose panel methods before GObject registration; no runtime prototype mutation.
 const Me = imports.misc.extensionUtils.getCurrentExtension();
-const modules = ['common', 'updates', 'temperatures', 'storage', 'resources', 'network', 'docker', 'firewall', 'currency'];
+const modules = ['common', 'updates', 'temperatures', 'storage', 'resources', 'network', 'docker', 'firewall', 'currency', 'weather'];
 
 var install = function (klass, dependencies) {
     for (const name of modules) {

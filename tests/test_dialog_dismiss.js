@@ -15,5 +15,5 @@ for (const match of source.matchAll(pattern)) {
     assert.equal(handler(null, {get_source: () => ({})}), 1); assert.equal(closed, 1);
     count++;
 }
-assert.equal(count, 5);
-console.log('OK: outside click closes all five dialog backdrops; inside click remains interactive.');
+assert.equal(count, 6);
+console.log('OK: outside click closes all six dialog backdrops; inside click remains interactive.');

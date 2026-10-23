@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Contadores TCP; atividade de rede não implica invasão."""
+from orbitz_i18n import t
 import html
 import sys
 import ctypes
@@ -43,7 +44,7 @@ def hostnames(ips):
         fd = os.open(cache_path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
         with os.fdopen(fd, 'rb') as stream:
             if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
-                raise ValueError('Cache inválido')
+                raise ValueError(t('widgets.seguranca_widget.invalid_cache'))
             raw = stream.read(262145)
         if len(raw) > 262144:
             raise ValueError('Cache grande')
@@ -123,12 +124,12 @@ def main():
                     continue
             ports.add(port)
         if '--summary' in sys.argv:
-            text = f'Conexões externas: {external}\nEscutando portas: {len(ports)}'
+            text = t('widgets.seguranca_widget.external_connections_value0_listening_ports_value1', value0=external, value1=len(ports))
             print('AZCLOCK_NETWORK:' + json.dumps({'text': text}, ensure_ascii=False))
             sys.exit(0)
         ordered = sorted(ports, key=int)
         details = '\n'.join(f'{port}/TCP' for port in ordered)
-        tooltip = details or 'Nenhuma porta escutando'
+        tooltip = details or t('widgets.seguranca_widget.no_listening_ports')
         resolved = hostnames({ip for ip, port in peers})
         connection_rows = []
         connection_items = []
@@ -137,11 +138,11 @@ def main():
             connection_items.append({'hostname': name or '', 'display': display_hostname(name), 'ip': ip, 'port': port})
             name_part = f'<span foreground="#82cfff">{html.escape(name)}</span> ' if name else ''
             connection_rows.append(name_part + f'<span foreground="#c8c8c8">({html.escape(ip)})</span> — <span foreground="#ffd479">{html.escape(port)}</span>')
-        connections = '\n'.join(connection_rows) or 'Nenhuma conexão externa'
-        text = f'Conexões externas: {external}\nEscutando portas: {len(ports)}'
+        connections = '\n'.join(connection_rows) or t('widgets.seguranca_widget.no_external_connections')
+        text = t('widgets.seguranca_widget.external_connections_value0_listening_ports_value1', value0=external, value1=len(ports))
         print('AZCLOCK_NETWORK:' + json.dumps({'text': text, 'tooltip': tooltip, 'connections': connections, 'connection_items': connection_items}, ensure_ascii=False))
     except (OSError, ValueError, subprocess.SubprocessError):
-        print('Leitura indisponível')
+        print(t('widgets.seguranca_widget.reading_unavailable'))
 
 
 if __name__ == '__main__':

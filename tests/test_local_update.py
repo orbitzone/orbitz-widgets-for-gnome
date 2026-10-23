@@ -101,10 +101,12 @@ class LocalUpdateTests(unittest.TestCase):
     def exercise_apply(self, fail=False):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            source = root / 'source'; source.write_text('new\n')
-            target = root / 'target'; target.write_text('old\n')
-            extra_source = root / 'new-source'; extra_source.write_text('module\n')
-            extra_target = root / 'new-target'
+            repo=root/'repo';(repo/'widgets').mkdir(parents=True)
+            collectors=root/'collectors';collectors.mkdir()
+            source = repo / 'widgets/source.py'; source.write_text('new\n')
+            target = collectors / 'source.py'; target.write_text('old\n')
+            extra_source = repo / 'widgets/new-source.py'; extra_source.write_text('module\n')
+            extra_target = collectors / 'new-source.py'
             state = ['old-settings']
             def settings(action, *args):
                 if action == 'get': return state[0]
@@ -115,7 +117,8 @@ class LocalUpdateTests(unittest.TestCase):
                 if fail and source_path == extra_source:
                     raise OSError('simulated failure')
                 real_copy(source_path, destination)
-            with patch.object(update, 'BACKUPS', root / 'backups'), patch.object(update, 'preflight'), \
+            with patch.object(update, 'BACKUPS', root / 'backups'), patch.object(update,'REPO',repo), \
+                 patch.object(update,'COLLECTORS',collectors), patch.object(update, 'preflight'), \
                  patch.object(update, 'files', return_value=[(source, target), (extra_source, extra_target)]), \
                  patch.object(update, 'settings', side_effect=settings), \
                  patch.object(update, 'migrate', return_value=('new-settings', 1)), \

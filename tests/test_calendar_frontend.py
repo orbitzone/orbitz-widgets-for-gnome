@@ -12,6 +12,7 @@ from unittest.mock import Mock, patch
 PLANNER=Path(__file__).resolve().parents[1]/'extension/planner'
 sys.path.insert(0,str(PLANNER))
 from provider_connection_ui import ConnectionAttempt, launch_google_auth, GOOGLE_PROGRESS
+from ui_language import ui as language
 
 
 class ConnectionTests(unittest.TestCase):
@@ -75,7 +76,7 @@ class ConnectionTests(unittest.TestCase):
         tree=ast.parse((PLANNER/'provider_connection_ui.py').read_text())
         dialog=next(n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name=='connect_provider')
         callbacks=[n for n in dialog.body if isinstance(n,ast.FunctionDef) and n.name in ('progress','failed','complete','start')]
-        namespace=dict(GOOGLE_PROGRESS=GOOGLE_PROGRESS,pending=[attempt],result=[None],alive=lambda:True,
+        namespace=dict(ui=language,GOOGLE_PROGRESS=GOOGLE_PROGRESS,pending=[attempt],result=[None],alive=lambda:True,
             status=Mock(),name=Mock(),credential=None,dialog=Mock(),Gtk=SimpleNamespace(ResponseType=SimpleNamespace(OK=1,ACCEPT=2)))
         namespace.update(ConnectionAttempt=ConnectionAttempt,calendar_accounts=attempt.service,provider='google',google=True,
             controller=SimpleNamespace(cancel_events=[],executor=SimpleNamespace(submit=lambda work:work())),
@@ -87,7 +88,7 @@ class ConnectionTests(unittest.TestCase):
         attempt=ConnectionAttempt(SimpleNamespace(),'google')
         ui=self.ui_callbacks(attempt)
         ui['progress'](attempt,'loading_calendars')
-        ui['status'].set_text.assert_called_once_with(GOOGLE_PROGRESS['loading_calendars'])
+        ui['status'].set_text.assert_called_once_with(str(GOOGLE_PROGRESS['loading_calendars']))
         ui['status'].reset_mock()
         ui['progress'](attempt,'untrusted-token-or-error')
         ui['status'].set_text.assert_not_called()
@@ -103,6 +104,37 @@ class ConnectionTests(unittest.TestCase):
         ui['dialog'].response.assert_not_called()
         self.assertTrue(attempt.cancelled.is_set())
 
+    def test_google_progress_changes_language_in_the_open_status(self):
+        attempt=ConnectionAttempt(SimpleNamespace(),'google')
+        state=self.ui_callbacks(attempt)
+        try:
+            language.refresh('pt-BR')
+            state['progress'](attempt,'loading_calendars')
+            state['status'].set_text.assert_called_with('Consultando seus calendários Google…')
+            language.refresh('en-US')
+            state['status'].set_text.assert_called_with('Fetching your Google calendars…')
+            self.assertIs(state['pending'][0],attempt)
+            language.refresh('pt-BR')
+            state['status'].set_text.assert_called_with('Consultando seus calendários Google…')
+        finally:language.refresh('pt-BR')
+
+    def test_failed_orbitz_error_already_displayed_tracks_locale_without_restarting_login(self):
+        attempt=ConnectionAttempt(SimpleNamespace(),'google')
+        state=self.ui_callbacks(attempt)
+        try:
+            language.refresh('pt-BR')
+            error=language.exception(ValueError,'domain.calendar_http.token_exchange_failure',status=401,detail='USER detail')
+            original=error.args
+            state['failed'](attempt,error)
+            state['status'].set_text.assert_called_with(original[0])
+            language.refresh('en-US')
+            state['status'].set_text.assert_called_with('Google OAuth - token exchange (HTTP 401): USER detail')
+            self.assertEqual(error.args,original);self.assertIs(type(error.args[0]),str)
+            self.assertIsNone(state['pending'][0])
+            state['dialog'].response.assert_not_called()
+            state['name'].set_sensitive.assert_called_once_with(True)
+        finally:language.refresh('pt-BR')
+
     def test_worker_backend_failure_after_progress_reenables_login(self):
         def connect(*args,**kwargs):
             kwargs['on_progress']('exchanging_token')
@@ -112,7 +144,7 @@ class ConnectionTests(unittest.TestCase):
         ui['start']('Teste',None)
         self.assertIsNone(ui['pending'][0])
         self.assertEqual(ui['status'].set_text.call_args_list[0].args,
-            (GOOGLE_PROGRESS['exchanging_token'],))
+            (str(GOOGLE_PROGRESS['exchanging_token']),))
         ui['status'].set_text.assert_called_with('Falha segura de autorização')
         ui['dialog'].set_response_sensitive.assert_called_once_with(1,True)
         ui['name'].set_sensitive.assert_called_once_with(True)
@@ -133,13 +165,13 @@ class SyncTests(unittest.TestCase):
         apple_client=SimpleNamespace(events=Mock(return_value=events))
         apple=SimpleNamespace(AppleClient=Mock(return_value=apple_client))
         ics=SimpleNamespace(events=Mock(return_value=events))
-        namespace={'threading':threading,'datetime':datetime,'timezone':timezone,'remote':remote,'apple':apple,'ics_client':ics,
+        namespace={'ui':language,'threading':threading,'datetime':datetime,'timezone':timezone,'remote':remote,'apple':apple,'ics_client':ics,
             'Gtk':SimpleNamespace(),'GLib':SimpleNamespace()}
         node=next(node for node in ast.parse((PLANNER/'external_ui.py').read_text()).body if isinstance(node,ast.ClassDef))
         exec(compile(ast.Module(body=[node],type_ignores=[]),'external_ui.py','exec'),namespace)
         obj=object.__new__(namespace['ExternalCalendars'])
         obj.alive=True;obj.busy=set();obj.cancel_events=[];obj.sync_cancels={}
-        obj.context=lambda:context;obj.status=SimpleNamespace(set_text=Mock());obj.render=Mock()
+        obj.context=lambda:context;obj.status=Mock();obj.render=Mock()
         obj.window=SimpleNamespace(mark_days=Mock());obj.selected_cache=lambda:(context,{})
         obj.cache_status=Mock()
         def run(work,done):
@@ -222,11 +254,19 @@ class BuiltinSourceTests(unittest.TestCase):
             Orientation=SimpleNamespace(VERTICAL=1),ResponseType=SimpleNamespace(CLOSE=1))
         namespace=obj.manage.__globals__;namespace['Gtk']=gtk
         namespace['Pango']=SimpleNamespace(WrapMode=SimpleNamespace(WORD_CHAR=1))
-        for enabled,expected in ((True,'Desativar'),(False,'Ativar')):
-            labels.clear();account['enabled']=enabled;obj.manage()
-            self.assertEqual(labels,[expected])
-            self.assertTrue(any(call.kwargs.get('label','').startswith('Brasil · Datas comemorativas')
-                for call in gtk.Label.call_args_list))
+        previous_locale=language.get_locale()
+        self.addCleanup(language.refresh,previous_locale)
+        for locale,disable,enable,title in (
+                ('pt-BR','Desativar','Ativar','Brasil · Datas comemorativas'),
+                ('en-US','Disable','Enable','Brazil · Holidays')):
+            with self.subTest(locale=locale):
+                language.refresh(locale)
+                for enabled,expected in ((True,disable),(False,enable)):
+                    labels.clear();gtk.Label.reset_mock();account['enabled']=enabled;obj.manage()
+                    self.assertEqual(labels,[expected])
+                    self.assertTrue(any(call.kwargs.get('label','').startswith(title)
+                        for call in gtk.Label.call_args_list))
+        remote.remove_account.assert_not_called()
         remote.ensure_default_calendar.assert_called()
 
     def test_periodic_sync_skips_disabled_and_keeps_other_accounts(self):

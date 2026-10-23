@@ -1,4 +1,6 @@
 """Review a service invoice and explicitly export a private local PDF."""
+from ui_language import ui
+from invoice_messages import warning_message,warning_messages
 from copy import deepcopy
 from datetime import date
 from pathlib import Path
@@ -7,7 +9,7 @@ import invoice
 import invoice_profiles
 import store
 from invoice_period_ui import InvoicePeriodPicker
-from workspace_ui import context_text
+from workspace_ui import context_message
 
 
 def check_external_destination(filename):
@@ -18,15 +20,15 @@ def check_external_destination(filename):
         target = Path(filename).expanduser().absolute()
         managed = target.is_relative_to(root) or target.resolve().is_relative_to(root.resolve())
     except (ImportError, OSError, RuntimeError, TypeError, AttributeError):
-        raise ValueError('Não foi possível verificar o destino do PDF. Escolha uma pasta fora do histórico de invoices.') from None
+        raise ui.exception(ValueError, 'workspace.invoice_ui.nao_foi_possivel_verificar_o_destino_do_pdf_escolha_uma_pasta_fora_do_historico_') from None
     if managed:
-        raise ValueError('Escolha uma pasta fora do histórico de invoices para salvar o PDF.')
+        raise ui.exception(ValueError, 'workspace.invoice_ui.escolha_uma_pasta_fora_do_historico_de_invoices_para_salvar_o_pdf')
 
 
 
 class ReissueConfirmation(ValueError):
     def __init__(self, result):
-        super().__init__('Possível reemissão de horas já faturadas. Confirme a intenção antes de salvar.')
+        super().__init__(ui.tr('workspace.dialogs.invoice_ui.reissue_exception'))
         self.result = result
 
 
@@ -46,7 +48,7 @@ class InvoiceSession:
         self.invalidate()
         sheet = next((s for s in self.read_data().get('timesheets', []) if s['id'] == sheet_id), None)
         if sheet is None:
-            raise ValueError('Esta timesheet não está mais disponível.')
+            raise ui.exception(ValueError, 'workspace.invoice_ui.esta_timesheet_nao_esta_mais_disponivel')
         snapshot = invoice.build_snapshot(sheet, issuer=values['issuer'], client=values['client'],
             rate=values['rate'], currency=values['currency'], language=values['language'],
             reference=values['reference'], issued_on=values['issued_on'],
@@ -61,11 +63,11 @@ class InvoiceSession:
             import invoice_history
             return invoice_history.possible_duplicates(deepcopy(self.snapshot))
         except Exception:
-            return {'matches': [], 'warnings': ['Não foi possível conferir todo o histórico de invoices.'], 'incomplete': True}
+            return {'matches': [], 'warnings': [ui.tr('workspace.dialogs.invoice_ui.history_check_error')], 'incomplete': True}
 
     def export(self, filename, overwrite=False, confirmed_reissue=False):
         if self.snapshot is None:
-            raise ValueError('Revise a prévia antes de salvar o PDF.')
+            raise ui.exception(ValueError, 'workspace.invoice_ui.revise_a_previa_antes_de_salvar_o_pdf')
         check_external_destination(filename)
         duplicates = self.duplicate_check()
         if (duplicates['matches'] or duplicates['warnings'] or duplicates['incomplete']) and not confirmed_reissue:
@@ -74,17 +76,17 @@ class InvoiceSession:
             import invoice_pdf
             path = invoice_pdf.write(deepcopy(self.snapshot), filename, overwrite=overwrite)
         except ImportError:
-            raise ValueError('A exportação PDF requer ReportLab. Instale a dependência para gerar a invoice.') from None
+            raise ui.exception(ValueError, 'workspace.invoice_ui.a_exportacao_pdf_requer_reportlab_instale_a_dependencia_para_gerar_a_invoice') from None
         warnings = []
         try:
             import invoice_history
             invoice_history.record(deepcopy(self.snapshot), path)
         except Exception:
-            warnings.append('O PDF foi salvo, mas não foi possível guardar a cópia no histórico de invoices.')
+            warnings.append(ui.tr('workspace.dialogs.invoice_ui.archive_warning'))
         try:
             invoice_profiles.save(self.sheet_id, deepcopy(self.profile))
         except Exception:
-            warnings.append('O PDF foi salvo, mas não foi possível salvar os dados para a próxima invoice.')
+            warnings.append(ui.tr('workspace.dialogs.invoice_ui.profile_warning'))
         return path, '\n'.join(warnings)
 
 
@@ -97,7 +99,7 @@ def open_invoice(window):
         data = store.modify({'action': 'get'})
         sheets = data.get('timesheets', [])
         if not sheets:
-            window.status.set_text('Crie uma timesheet para gerar uma invoice de serviços.')
+            ui.call(window.status,'set_text',ui.msg('workspace.invoice_ui.crie_uma_timesheet_para_gerar_uma_invoice_de_servicos'))
             return
         session = InvoiceSession()
         preferred = getattr(window, 'selected_sheet_id', None) or window.last_tab
@@ -105,12 +107,12 @@ def open_invoice(window):
         first_sheet = next(s for s in sheets if s['id'] == first)
         initial = invoice_profiles.load(first, context=first_sheet.get('context', {}))
     except Exception:
-        window.status.set_text('Não foi possível carregar os dados da invoice. Os dados locais foram preservados.')
+        ui.call(window.status,'set_text',ui.msg('workspace.invoice_ui.nao_foi_possivel_carregar_os_dados_da_invoice_os_dados_locais_foram_preservados'))
         return
 
-    dialog = Gtk.Dialog(title='Gerar invoice de serviços / PDF', transient_for=window, modal=True)
-    dialog.add_buttons('Cancelar', Gtk.ResponseType.CANCEL, 'Revisar prévia', Gtk.ResponseType.APPLY,
-        'Salvar PDF…', Gtk.ResponseType.OK)
+    dialog = ui.widget(Gtk.Dialog,title=ui.msg('workspace.invoice_ui.gerar_invoice_de_servicos_pdf'), transient_for=window, modal=True)
+    ui.buttons(dialog,ui.msg('workspace.invoice_ui.cancelar'), Gtk.ResponseType.CANCEL, ui.msg('workspace.invoice_ui.revisar_previa'), Gtk.ResponseType.APPLY,
+        ui.msg('workspace.invoice_ui.salvar_pdf'), Gtk.ResponseType.OK)
     width, height = 640, 680
     parent_window = window.get_window()
     monitor = window.get_display().get_monitor_at_window(parent_window) if parent_window else None
@@ -121,77 +123,73 @@ def open_invoice(window):
     dialog.set_size_request(360, 280)
     dialog.set_default_response(Gtk.ResponseType.APPLY)
     dialog.set_response_sensitive(Gtk.ResponseType.OK, False)
-    scroll = Gtk.ScrolledWindow()
+    scroll = ui.widget(Gtk.ScrolledWindow,)
     scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
     dialog.get_content_area().pack_start(scroll, True, True, 0)
-    form = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10, margin=16)
+    form = ui.widget(Gtk.Box,orientation=Gtk.Orientation.VERTICAL, spacing=10, margin=16)
     scroll.add(form)
     fields = {}
 
     def caption(text, widget):
-        label = Gtk.Label.new_with_mnemonic(text)
+        label = ui.mnemonic_label(Gtk,text)
         label.set_xalign(0)
         label.set_line_wrap(True)
         label.set_line_wrap_mode(Pango.WrapMode.WORD_CHAR)
         label.set_max_width_chars(58)
         label.set_mnemonic_widget(widget)
         form.pack_start(label, False, False, 0)
-        widget.get_accessible().set_name(text.replace('_', ''))
+        ui.call(widget.get_accessible(),'set_name',ui.transform(text,'replace','_',''))
 
     def field(key, title, value='', maximum=200):
-        entry = Gtk.Entry(text=value, hexpand=True)
+        entry = ui.widget(Gtk.Entry,text=value, hexpand=True)
         entry.set_max_length(maximum)
         caption(title, entry)
         form.pack_start(entry, False, False, 0)
         fields[key] = entry
         return entry
 
-    sheet_choice = Gtk.ComboBoxText(hexpand=True)
+    sheet_choice = ui.widget(Gtk.ComboBoxText,hexpand=True)
     for renderer in sheet_choice.get_cells():
         renderer.set_property('ellipsize', Pango.EllipsizeMode.END)
         renderer.set_property('max-width-chars', 36)
     for sheet in sheets:
-        sheet_choice.append(sheet['id'], 'TS - ' + sheet['name'] + (' · arquivada' if sheet['archived'] else ''))
-    caption('_Timesheet', sheet_choice)
+        ui.combo_append(sheet_choice,sheet['id'], 'TS - ' + sheet['name'] + (ui.msg('workspace.dialogs.invoice_ui.archived') if sheet['archived'] else ''))
+    caption(ui.msg('workspace.dialogs.invoice_ui.sheet_caption'), sheet_choice)
     form.add(sheet_choice)
-    sheet_context = Gtk.Label(xalign=0, wrap=True, selectable=True)
+    sheet_context = ui.widget(Gtk.Label,xalign=0, wrap=True, selectable=True)
     sheet_context.set_max_width_chars(58);sheet_context.set_line_wrap_mode(Pango.WrapMode.WORD_CHAR);form.add(sheet_context)
-    field('reference', '_Referência do documento', 'INV-' + date.today().strftime('%Y%m%d') + '-' + uuid4().hex[:8], 80)
-    field('issued_on', '_Data de emissão · AAAA-MM-DD', date.today().isoformat(), 10)
-    field('issuer_name', 'Nome do _emitente', initial.get('issuer', {}).get('name', ''))
-    field('issuer_tax_id', 'CPF/CNPJ do emitente', initial.get('issuer', {}).get('tax_id', ''), 30)
-    field('client_name', 'Nome do _cliente / destinatário fiscal')
-    field('client_tax_id', 'CPF/CNPJ do cliente', maximum=30)
-    address = Gtk.TextView(wrap_mode=Gtk.WrapMode.WORD_CHAR)
+    field('reference', ui.msg('workspace.dialogs.invoice_ui.reference'), 'INV-' + date.today().strftime('%Y%m%d') + '-' + uuid4().hex[:8], 80)
+    field('issued_on', ui.msg('workspace.dialogs.invoice_ui.issue_date'), date.today().isoformat(), 10)
+    field('issuer_name', ui.msg('workspace.dialogs.invoice_ui.issuer_name'), initial.get('issuer', {}).get('name', ''))
+    field('issuer_tax_id', ui.msg('workspace.dialogs.invoice_ui.issuer_tax'), initial.get('issuer', {}).get('tax_id', ''), 30)
+    field('client_name', ui.msg('workspace.dialogs.invoice_ui.client_name'))
+    field('client_tax_id', ui.msg('workspace.dialogs.invoice_ui.client_tax'), maximum=30)
+    address = ui.widget(Gtk.TextView,wrap_mode=Gtk.WrapMode.WORD_CHAR)
     address.set_accepts_tab(False)
-    address_scroll = Gtk.ScrolledWindow()
+    address_scroll = ui.widget(Gtk.ScrolledWindow,)
     address_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
     address_scroll.set_min_content_height(74)
     address_scroll.set_max_content_height(130)
     address_scroll.add(address)
-    caption('Endereço _fiscal do cliente', address)
+    caption(ui.msg('workspace.dialogs.invoice_ui.address'), address)
     form.pack_start(address_scroll, False, False, 0)
-    field('rate', '_Valor por hora', maximum=24)
-    field('currency', '_Moeda · código de 3 letras (ex.: BRL, USD)', 'BRL', 3)
-    language = Gtk.ComboBoxText()
+    field('rate', ui.msg('workspace.dialogs.invoice_ui.rate'), maximum=24)
+    field('currency', ui.msg('workspace.dialogs.invoice_ui.currency'), 'BRL', 3)
+    language = ui.widget(Gtk.ComboBoxText,)
     language.append('pt', 'Português')
     language.append('en', 'English')
     language.set_active_id(initial.get('language', 'pt'))
-    caption('_Idioma do PDF', language)
+    caption(ui.msg('workspace.dialogs.invoice_ui.language'), language)
     form.add(language)
-    notice = Gtk.Label(label='Fatura de serviços, sem emissão de nota fiscal eletrônica.\n'
-        'O cronômetro em andamento não entra no PDF; somente registros concluídos.\n'
-        'Os dados serão lembrados somente após salvar o PDF.\n'
-        'Uma cópia privada do PDF será guardada no Histórico de invoices.\n'
-        'Emitente e idioma são globais; cliente, taxa e moeda são lembrados por timesheet.', xalign=0, wrap=True)
+    notice = ui.widget(Gtk.Label,label=ui.msg('workspace.invoice_ui.fatura_de_servicos_sem_emissao_de_nota_fiscal_eletronica_o_cronometro_em_andamen'), xalign=0, wrap=True)
     notice.set_max_width_chars(58)
     notice.set_line_wrap_mode(Pango.WrapMode.WORD_CHAR)
     form.add(notice)
-    preview = Gtk.Label(label='Preencha os dados e revise a prévia.', xalign=0, wrap=True, selectable=True)
+    preview = ui.widget(Gtk.Label,label=ui.msg('workspace.invoice_ui.preencha_os_dados_e_revise_a_previa'), xalign=0, wrap=True, selectable=True)
     preview.set_max_width_chars(58)
     preview.set_line_wrap_mode(Pango.WrapMode.WORD_CHAR)
     form.add(preview)
-    error = Gtk.Label(xalign=0, wrap=True, selectable=True)
+    error = ui.widget(Gtk.Label,xalign=0, wrap=True, selectable=True)
     error.set_max_width_chars(58)
     error.set_line_wrap_mode(Pango.WrapMode.WORD_CHAR)
     dialog.get_content_area().pack_end(error, False, False, 8)
@@ -204,8 +202,8 @@ def open_invoice(window):
             return
         session.invalidate()
         dialog.set_response_sensitive(Gtk.ResponseType.OK, False)
-        preview.set_text('Dados alterados · revise novamente antes de salvar.')
-        error.set_text('')
+        ui.call(preview,'set_text',ui.msg('workspace.invoice_ui.dados_alterados_revise_novamente_antes_de_salvar'))
+        ui.call(error,'set_text','')
         dialog.set_response_sensitive(Gtk.ResponseType.APPLY, period.model.ready)
 
     def client_values():
@@ -214,28 +212,29 @@ def open_invoice(window):
             'address': buffer.get_text(buffer.get_start_iter(), buffer.get_end_iter(), True)}
 
     def change_sheet(*_):
+        if getattr(sheet_choice,'_orbitz_language_updating',False):return
         previous = selected[0]
         if previous:
             drafts[previous] = {'client': client_values(), 'rate': fields['rate'].get_text(),
                 'currency': fields['currency'].get_text()}
         identity = sheet_choice.get_active_id()
         current = next((sheet for sheet in sheets if sheet['id'] == identity), None)
-        sheet_choice.set_tooltip_text(current['name'] if current else '')
-        sheet_context.set_text(context_text(current) if current else '')
+        ui.call(sheet_choice,'set_tooltip_text',current['name'] if current else '')
+        ui.call(sheet_context,'set_text',context_message(current) if current else '')
         try:
             profile = drafts.get(identity) or invoice_profiles.load(identity, context=current.get('context', {}) if current else {})
         except Exception:
-            error.set_text('Não foi possível carregar o perfil desta timesheet.')
+            ui.call(error,'set_text',ui.msg('workspace.invoice_ui.nao_foi_possivel_carregar_o_perfil_desta_timesheet'))
             session.invalidate()
             dialog.set_response_sensitive(Gtk.ResponseType.OK, False)
             return
         loading[0] = True
         client = profile.get('client', {})
-        fields['client_name'].set_text(client.get('name', ''))
-        fields['client_tax_id'].set_text(client.get('tax_id', ''))
-        address.get_buffer().set_text(client.get('address', ''))
-        fields['rate'].set_text(profile.get('rate', ''))
-        fields['currency'].set_text(profile.get('currency', 'BRL'))
+        ui.call(fields['client_name'],'set_text',client.get('name', ''))
+        ui.call(fields['client_tax_id'],'set_text',client.get('tax_id', ''))
+        ui.call(address.get_buffer(),'set_text',client.get('address', ''))
+        ui.call(fields['rate'],'set_text',profile.get('rate', ''))
+        ui.call(fields['currency'],'set_text',profile.get('currency', 'BRL'))
         selected[0] = identity
         loading[0] = False
         invalidate()
@@ -268,33 +267,29 @@ def open_invoice(window):
                 break
             if response == Gtk.ResponseType.APPLY:
                 dialog.set_response_sensitive(Gtk.ResponseType.OK, False)
-                preview.set_text('Validando os dados da prévia…')
+                ui.call(preview,'set_text',ui.msg('workspace.invoice_ui.validando_os_dados_da_previa'))
                 try:
                     if selected[0] != sheet_choice.get_active_id():
-                        raise ValueError('Selecione novamente a timesheet para carregar os dados.')
+                        raise ui.exception(ValueError, 'workspace.invoice_ui.selecione_novamente_a_timesheet_para_carregar_os_dados')
                     snapshot = session.prepare(sheet_choice.get_active_id(), values())
                     duplicate_result = session.duplicate_check()
-                    preview.set_text(context_text({'name': snapshot['sheet_name'], 'context': snapshot.get('context', {})}) + '\n' + f"Período: {'Todo o histórico · ' if snapshot['period']['all_history'] else ''}{snapshot['period']['start']} a {snapshot['period']['end']}\n"
-                        f"Horas: {snapshot['hours']} ({snapshot['minutes']} minutos)\n"
-                        f"Taxa/hora: {snapshot['currency']} {invoice.format_money(snapshot['rate'], 'pt')}\n"
-                        f"Total: {snapshot['currency']} {invoice.format_money(snapshot['total'], 'pt')}\n"
-                        'Confira os dados antes de escolher onde salvar o PDF.' +
-                        ('\n' + '\n'.join(snapshot['warnings']) if snapshot.get('warnings') else '') +
-                        ('\nAtenção: possível reemissão ou conferência incompleta; será solicitada confirmação.'
+                    ui.call(preview,'set_text',ui.msg('workspace.dialogs.invoice_ui.preview', context=context_message({'name':snapshot['sheet_name'],'context':snapshot.get('context',{})}), all_history=ui.msg('workspace.dialogs.invoice_ui.all_history') if snapshot['period']['all_history'] else '', start=ui.date_text(snapshot['period']['start']), end=ui.date_text(snapshot['period']['end']), hours=snapshot['hours'], minutes=snapshot['minutes'], currency=snapshot['currency'], rate=invoice.format_money(snapshot['rate'],'pt'), total=invoice.format_money(snapshot['total'],'pt')) +
+                        ('\n' + ui.join('\n',warning_messages(snapshot['warnings'])) if snapshot.get('warnings') else '') +
+                        (ui.msg('workspace.dialogs.invoice_ui.duplicate_warning')
                          if duplicate_result['matches'] or duplicate_result['warnings'] or duplicate_result['incomplete'] else ''))
                     dialog.set_response_sensitive(Gtk.ResponseType.OK, True)
-                    error.set_text('')
+                    ui.call(error,'set_text','')
                     preview.grab_focus()
                 except Exception as failure:
                     session.invalidate()
                     dialog.set_response_sensitive(Gtk.ResponseType.OK, False)
-                    preview.set_text('Prévia indisponível · corrija os dados e revise novamente.')
-                    error.set_text(str(failure))
+                    ui.call(preview,'set_text',ui.msg('workspace.invoice_ui.previa_indisponivel_corrija_os_dados_e_revise_novamente'))
+                    ui.call(error,'set_text',ui.error_message(failure))
                     error.grab_focus()
                 continue
-            chooser = Gtk.FileChooserDialog(title='Salvar invoice em PDF', transient_for=dialog,
+            chooser = ui.widget(Gtk.FileChooserDialog,title=ui.msg('workspace.invoice_ui.salvar_invoice_em_pdf'), transient_for=dialog,
                 modal=True, action=Gtk.FileChooserAction.SAVE)
-            chooser.add_buttons('Cancelar', Gtk.ResponseType.CANCEL, 'Salvar PDF', Gtk.ResponseType.ACCEPT)
+            ui.buttons(chooser,ui.msg('workspace.invoice_ui.cancelar'), Gtk.ResponseType.CANCEL, ui.msg('workspace.dialogs.invoice_ui.save_pdf'), Gtk.ResponseType.ACCEPT)
             chooser.set_do_overwrite_confirmation(True)
             overwrite_target = [None]
             def confirm_overwrite(file_chooser):
@@ -302,8 +297,8 @@ def open_invoice(window):
                 return Gtk.FileChooserConfirmation.CONFIRM
             chooser.connect('confirm-overwrite', confirm_overwrite)
             chooser.set_current_name('invoice-' + date.today().isoformat() + '.pdf')
-            pdf_filter = Gtk.FileFilter()
-            pdf_filter.set_name('Documento PDF')
+            pdf_filter = ui.widget(Gtk.FileFilter,)
+            ui.call(pdf_filter,'set_name',ui.msg('workspace.dialogs.invoice_ui.pdf_document'))
             pdf_filter.add_pattern('*.pdf')
             chooser.add_filter(pdf_filter)
             try:
@@ -311,31 +306,31 @@ def open_invoice(window):
                     continue
                 filename = chooser.get_filename()
                 if not filename or not filename.lower().endswith('.pdf'):
-                    raise ValueError('Escolha um arquivo local com nome terminado em .pdf.')
+                    raise ui.exception(ValueError, 'workspace.invoice_ui.escolha_um_arquivo_local_com_nome_terminado_em_pdf')
                 try:
                     result, warning = session.export(filename, overwrite=overwrite_target[0] == filename)
                 except ReissueConfirmation as duplicate:
-                    confirm = Gtk.MessageDialog(transient_for=chooser, modal=True, message_type=Gtk.MessageType.WARNING,
-                        buttons=Gtk.ButtonsType.YES_NO, text='Reemitir estas horas intencionalmente?')
+                    confirm = ui.widget(Gtk.MessageDialog,transient_for=chooser, modal=True, message_type=Gtk.MessageType.WARNING,
+                        buttons=Gtk.ButtonsType.YES_NO, text=ui.msg('workspace.invoice_ui.reemitir_estas_horas_intencionalmente'))
                     confirm.set_default_response(Gtk.ResponseType.NO)
                     matches = duplicate.result['matches']
-                    reasons={'entry_id_and_time':'mesmos registros e horários','time_overlap_legacy':'horários de invoice antiga','time_overlap':'horários sobrepostos'}
-                    lines = [f"{item['reference']} · {item['minutes']} minutos · {reasons.get(item['basis'],'conferência de horas')}" for item in matches[:12]]
-                    lines += duplicate.result['warnings']
-                    confirm.format_secondary_text('\n'.join(lines) + '\nA nova invoice não substituirá as anteriores. Confirme somente se a reemissão ou correção for intencional.')
+                    reasons={'entry_id_and_time':ui.msg('workspace.dialogs.invoice_ui.same_records'),'time_overlap_legacy':ui.msg('workspace.dialogs.invoice_ui.legacy_overlap'),'time_overlap':ui.msg('workspace.dialogs.invoice_ui.overlap')}
+                    lines = [ui.msg('workspace.dialogs.invoice_ui.duplicate_line', reference=item['reference'], minutes=item['minutes'], reason=reasons.get(item['basis'],ui.msg('workspace.dialogs.invoice_ui.review_hours'))) for item in matches[:12]]
+                    lines += warning_messages(duplicate.result['warnings'])
+                    ui.call(confirm,'format_secondary_text',ui.join('\n',lines) + ui.msg('workspace.dialogs.invoice_ui.reissue_notice'))
                     accepted = confirm.run() == Gtk.ResponseType.YES;confirm.destroy()
                     if not accepted:continue
                     result, warning = session.export(filename, overwrite=overwrite_target[0] == filename, confirmed_reissue=True)
-                window.status.set_text(warning or 'Invoice em PDF salva e guardada no histórico.')
+                ui.call(window.status,'set_text',warning_message(warning) if warning else ui.msg('workspace.dialogs.invoice_ui.saved'))
                 if warning:
-                    info = Gtk.MessageDialog(transient_for=dialog, modal=True,
+                    info = ui.widget(Gtk.MessageDialog,transient_for=dialog, modal=True,
                         message_type=Gtk.MessageType.WARNING, buttons=Gtk.ButtonsType.CLOSE,
-                        text=warning)
+                        text=warning_message(warning))
                     info.run()
                     info.destroy()
                 break
             except Exception as failure:
-                error.set_text(str(failure))
+                ui.call(error,'set_text',ui.error_message(failure))
             finally:
                 chooser.destroy()
             error.grab_focus()

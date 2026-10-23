@@ -20,7 +20,7 @@ const vm = require('node:vm');
     };
     let response = JSON.stringify({error: 'serviço temporariamente indisponível'});
     let command="/usr/bin/python3 '/user-data/orbitz-widgets/collectors/currency-widget.py' --quote USD";
-    const methods = context.create({
+    const methods = context.create({Language: require('./helpers/ui_language').create({Gio},'pt-BR'),
         Gio, GLib,
         Me: {}, Utils: {},
         getData: () => command,
@@ -58,7 +58,7 @@ const vm = require('node:vm');
         connect(signal, fn) { this.signals[signal] = fn; }
         get_text() { return this.text; }
     }
-    const ui = context.create({Gio, GLib, getData: () => command,
+    const ui = context.create({Language: require('./helpers/ui_language').create({Gio},'pt-BR'), Gio, GLib, getData: () => command,
         St: {Widget: Actor, BoxLayout: Actor, Label: Actor, Button: Actor, Icon: Actor, Entry: Actor},
         Clutter: {BindConstraint: class {}, BindCoordinate: {ALL: 0}, ActorAlign: {CENTER: 0}},
         Pango: {EllipsizeMode: {NONE: 0}}, global: {stage: {}}, Main: {uiGroup: new Actor()}});

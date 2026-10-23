@@ -1,4 +1,5 @@
 """Google Calendar REST: calendar list and expanded events, strictly read-only."""
+from ui_language import ui as _i18n
 import hashlib
 import re
 import time
@@ -21,14 +22,14 @@ class GoogleClient:
             http.check_page(index,deadline,len(items),self.cancel_event)
             page=http.request_json(BASE+path+'?'+urlencode(params),host='www.googleapis.com',path_prefix='/calendar/v3/',bearer=self.token,cancel_event=self.cancel_event)
             batch=page.get('items',[])
-            if not isinstance(batch,list):raise CalendarError('Resposta Google inválida.')
+            if not isinstance(batch,list):raise _i18n.exception(CalendarError, 'domain.google_client.invalid_google_response')
             items.extend(batch);http.check_page(index,deadline,len(items),self.cancel_event)
             token=page.get('nextPageToken')
             if not token:return items
             token=http.page_token(token)
-            if token in seen:raise CalendarError('Paginação Google repetida; cache anterior preservado.')
+            if token in seen:raise _i18n.exception(CalendarError, 'domain.google_client.repeated_google_pagination_previous_cache_preserved')
             seen.add(token);params=dict(params,pageToken=token)
-        raise CalendarError('Calendário excedeu o limite de páginas; cache anterior preservado.')
+        raise _i18n.exception(CalendarError, 'domain.google_client.page_limit_previous_cache_preserved')
 
     def discover(self):
         calendars=[]
@@ -47,14 +48,14 @@ class GoogleClient:
                 if not isinstance(reminders,list):raise ValueError()
                 reminders=[dict(method=r['method'],minutes=r['minutes']) for r in reminders if isinstance(r,dict) and r.get('method') in ('popup','email') and type(r.get('minutes')) is int and 0<=r['minutes']<=10080]
                 calendars.append(dict(id=hashlib.sha256(remote_id.encode()).hexdigest(),remote_id=remote_id,name=name[:200],color=color,timezone=zone,primary=item.get('primary') is True,default_reminders=reminders))
-            except (ValueError,KeyError,TypeError):raise CalendarError('Lista de calendários Google inválida.') from None
-        if not calendars:raise CalendarError('Nenhum calendário foi encontrado nesta conta Google.')
+            except (ValueError,KeyError,TypeError):raise _i18n.exception(CalendarError, 'domain.google_client.invalid_google_calendar_list') from None
+        if not calendars:raise _i18n.exception(CalendarError, 'domain.google_client.no_calendars_were_found_in_this_google_account')
         return calendars
 
     def events(self,calendar,account_id,month):
         start,end=normalized.window(month)
         remote_id=calendar.get('remote_id')
-        if not isinstance(remote_id,str) or not 0<len(remote_id)<=1024:raise CalendarError('Calendário Google inválido.')
+        if not isinstance(remote_id,str) or not 0<len(remote_id)<=1024:raise _i18n.exception(CalendarError, 'domain.google_client.invalid_google_calendar')
         params=dict(timeMin=start.isoformat(),timeMax=end.isoformat(),singleEvents='true',showDeleted='true',maxResults=1000,orderBy='startTime')
         result={}
         for item in self._pages('/calendars/'+quote(remote_id,safe='')+'/events',params):

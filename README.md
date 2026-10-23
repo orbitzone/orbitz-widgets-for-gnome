@@ -8,6 +8,8 @@
 
 O Orbitz reúne informações do computador e ferramentas de organização em um desktop GNOME que você adapta à sua rotina. Acompanhe o sistema sem perder de vista seus compromissos, tarefas e horas de trabalho.
 
+A interface está disponível em Português (Brasil) e English (United States); escolha o idioma em Settings.
+
 <p align="center">
   <img src="docs/images/desktop-widgets-current.png" alt="Widgets Orbitz organizados na área de trabalho GNOME">
 </p>
@@ -16,11 +18,13 @@ O Orbitz reúne informações do computador e ferramentas de organização em um
 
 Escolha os widgets, organize posições e grupos e ajuste a aparência. Use o controlador na área de trabalho para mostrar ou pausar o conjunto. De um relance, acompanhe relógio, clima e agenda; recursos do computador, como processador, memória, armazenamento e rede; e informações de sistema, como atualizações, serviços e contêineres.
 
+Clique no widget de clima para abrir uma previsão de sete dias em colunas, alternar entre °C e °F e atualizar a previsão manualmente. Para mudar o local, pesquise uma cidade e selecione uma opção apresentada como Cidade · Região · País. A busca usa a [Geocoding API da Open-Meteo](https://open-meteo.com/en/docs/geocoding-api), que retorna até dez correspondências por consulta com dados geográficos do GeoNames; atribuição aparece na interface. A fonte meteorológica é a [Open-Meteo](https://open-meteo.com/). O uso gratuito da previsão requer atribuição e é não comercial; consulte os [termos](https://open-meteo.com/en/terms) para outras modalidades.
+
 O **Currency Converter** reúne conversões fiduciárias e cripto no mesmo widget. No modo Fiat, converte BRL para a moeda escolhida, com duas casas decimais e separadores de milhar, e permite inverter o sentido. No modo Crypto, consulta USD para o ativo selecionado (BTC por padrão) e também permite inverter a conversão. A modal oferece atualização manual e uma calculadora que usa a mesma cotação; para cripto, preserva as casas decimais necessárias para mostrar frações pequenas. As consultas automáticas ocorrem a cada quatro horas. Fiat usa a última referência diária disponível da [Frankfurter](https://frankfurter.dev/), publicada em dias úteis e não em tempo real. Cripto usa os tickers da [CoinPaprika](https://coinpaprika.com/api), cuja atribuição aparece na modal; o catálogo inclui os ativos com preço disponível nessa fonte, não todas as criptomoedas.
 
 O plano gratuito da CoinPaprika é para uso pessoal e exige atribuição. Exibir ou redistribuir os dados para clientes comerciais requer licença compatível; consulte os [planos](https://coinpaprika.com/api/pricing) e os [termos da API](https://coinpaprika.com/terms-api) antes desse uso.
 
-Notas adesivas, controles de mídia, um player dedicado do YouTube e lançadores deixam suas ferramentas à mão. A busca e os comentários do YouTube precisam de uma chave própria da API. As informações de hardware variam conforme o computador, os sensores e as permissões disponíveis.
+Notas adesivas, controles de mídia, um player dedicado do YouTube e lançadores deixam suas ferramentas à mão. Nas notas, você pode configurar um PIN de quatro dígitos, marcar notas como secretas e ocultá-las automaticamente após 15 segundos fora da janela. A busca e os comentários do YouTube precisam de uma chave própria da API. As informações de hardware variam conforme o computador, os sensores e as permissões disponíveis.
 
 ## Capturas de tela
 
@@ -54,7 +58,7 @@ Tarefas e horas são mantidas localmente e continuam sob seu controle ao conecta
 
 Tarefas, horas, perfis de faturamento e histórico de invoices ficam no computador. As credenciais dos calendários são guardadas no cofre de senhas do sistema. Conecte apenas os serviços que quiser usar.
 
-O Workspace permite criar um backup de tarefas, horas, perfis e histórico de faturas. O arquivo não é criptografado por senha; guarde-o em um local privado. Credenciais, calendários externos, configurações dos widgets e Sticky Notes não fazem parte desse backup. As notas têm cópias de segurança próprias.
+O Workspace permite criar um backup de tarefas, horas, perfis e histórico de faturas. O arquivo não é criptografado por senha; guarde-o em um local privado. Credenciais, calendários externos, configurações dos widgets e Sticky Notes não fazem parte desse backup. As notas têm cópias de segurança próprias. O PIN das Sticky Notes apenas bloqueia a interface: o conteúdo continua sem criptografia no SQLite e nesses backups, portanto quem tiver acesso direto aos arquivos poderá lê-lo.
 
 ## Transparência no faturamento
 

@@ -12,7 +12,7 @@ const context = {Clutter: {ActorAlign: {CENTER: 0}}, St: {BoxLayout: Actor, Labe
 vm.createContext(context);
 context.render = require('./helpers/command_panels').load(context)._renderProcesses;
 const tooltips = [];
-const host = {_updatesRows: new Actor(), _updatesActions: new Actor(), _renderPressure() {}, _attachActionTooltip(actor, text) {tooltips.push(text);}};
+const host = {_updatesRows: new Actor(), _updatesActions: new Actor(), _renderPressure() {}, _attachActionTooltip(actor, text) {tooltips.push(context.Language.text(text));}};
 const rows = Array.from({length:7}, (_,i) => ({pid:i+1, name:'Process '+i, cpu:i*10, memory:i*100}));
 const data = {summary:'Resumo detalhado', notices:['Observação detalhada'], cpu_rows:rows, memory_rows:rows, actions:[{id:'monitor',name:'Ver processos',command:'top',effect:'Revisar processos'}]};
 context.render.call(host, data);

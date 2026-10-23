@@ -11,6 +11,7 @@ const settings = {TimeZoneDialog: {}, WidgetsData: {}, timeZoneCatalog: {TimeZon
 const Me = {metadata: {}, imports: {utils: {}, settings, worldClock: {WorldClock: {isTimeFormat: () => false}}}};
 const gi = {Adw: {PreferencesPage: class {}, ComboRow}, Gtk: {StringList}, Gdk: {}, GLib: {},
     GObject: {registerClass: (...args) => args.at(-1), ParamSpec: {int() {}}, ParamFlags: {}}};
+Me.imports.uiLanguage={Language:require('./helpers/ui_language').create({})};
 const imports = {gi, misc: {extensionUtils: {getCurrentExtension: () => Me}}, gettext: {domain: () => ({gettext: text => 'tr:' + text})}};
 const load = name => {
     const context = vm.createContext({imports});
@@ -26,9 +27,9 @@ for (const name of ['TextLabelSubPage', 'DigitalClockSubPage']) {
         const host = {getClockElementData: () => value, setClockElementData: (...args) => {saved = args;}};
         const row = Class.prototype.createComboRow.call(host, 'Alignment', 'Text_Align');
         assert.equal(row.selected, selected);
-        assert.deepEqual(row.model.items, ['tr:Start', 'tr:Center', 'tr:End']);
-        row.change({selected_item: {string: 'tr:End'}});
-        assert.deepEqual(saved, ['Text_Align', 'tr:End']);
+        assert.deepEqual(row.model.items, ['Start', 'Center', 'End']);
+        row.change({selected: 2});
+        assert.deepEqual(saved, ['Text_Align', 'End']);
     }
 }
 console.log('OK: text and digital pages inherit identical alignment selection, translation and persistence.');

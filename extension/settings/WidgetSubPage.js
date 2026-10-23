@@ -1,9 +1,10 @@
 const ExtensionUtils = imports.misc.extensionUtils;
 const Me = ExtensionUtils.getCurrentExtension();
+const Language = Me.imports.uiLanguage.Language;
 
 const {Adw, GLib, GObject, Gtk} = imports.gi;
 const Gettext = imports.gettext.domain(Me.metadata['gettext-domain']);
-const _ = Gettext.gettext;
+const _ = Language.tr;
 
 const Settings = Me.imports.settings;
 const {SubPage} = Settings.SubPage;
@@ -18,32 +19,32 @@ class AzClockWidgetClockSubPage extends SubPage {
 
         this._addGroupingControls(generalGroup);
         const grouped = !!this.getClockElementData('Parent_Id');
-        const xLocationRow = this.createSpinRow(_('Location X'), 'Location_X', 0, 10000);
+        const xLocationRow = this.createSpinRow(Language.msg('settings.location_x'), 'Location_X', 0, 10000);
         generalGroup.add(xLocationRow);
 
-        const yLocationRow = this.createSpinRow(_('Location Y'), 'Location_Y', 0, 10000);
+        const yLocationRow = this.createSpinRow(Language.msg('settings.location_y'), 'Location_Y', 0, 10000);
         generalGroup.add(yLocationRow);
 
-        const boxAnchorPoint = this.createComboRow(_('Anchor Point'), 'Box_AnchorPoint');
+        const boxAnchorPoint = this.createComboRow(Language.msg('settings.anchor_point'), 'Box_AnchorPoint');
         generalGroup.add(boxAnchorPoint);
         this._groupPositionRows = [xLocationRow, yLocationRow, boxAnchorPoint];
         for (const row of this._groupPositionRows) row.sensitive = !grouped;
 
-        const boxWidthRow = this.createSpinRow('Widget width (px; 0 = default)', 'Box_Width', 0, 2000);
+        const boxWidthRow = this.createSpinRow(Language.msg('settings.widget_width'), 'Box_Width', 0, 2000);
         generalGroup.add(boxWidthRow);
 
-        const boxSpacingRow = this.createSpinRow(_('Widget Spacing'), 'Box_Spacing', 0, 500);
+        const boxSpacingRow = this.createSpinRow(Language.msg('settings.widget_spacing'), 'Box_Spacing', 0, 500);
         generalGroup.add(boxSpacingRow);
 
-        const boxPaddingRow = this.createSpinRow(_('Widget Padding'), 'Box_Padding', 0, 500);
+        const boxPaddingRow = this.createSpinRow(Language.msg('settings.widget_padding'), 'Box_Padding', 0, 500);
         generalGroup.add(boxPaddingRow);
 
-        const verticalLayoutSwitch = new Gtk.Switch({
+        const verticalLayoutSwitch = Language.widget(Gtk.Switch, {
             valign: Gtk.Align.CENTER,
             active: this.getClockElementData('Box_VerticalLayout', 'bool'),
         });
-        const verticalLayoutRow = new Adw.ActionRow({
-            title: _('Vertical Layout'),
+        const verticalLayoutRow = Language.widget(Adw.ActionRow, {
+            title: Language.msg('settings.vertical_layout'),
             activatable_widget: verticalLayoutSwitch,
         });
         verticalLayoutSwitch.connect('notify::active', widget => {
@@ -54,8 +55,8 @@ class AzClockWidgetClockSubPage extends SubPage {
 
         const borderEnabled = this.getClockElementData('Box_BorderEnabled', 'bool');
 
-        const borderOptionsRow = new Adw.ExpanderRow({
-            title: _('Enable Border'),
+        const borderOptionsRow = Language.widget(Adw.ExpanderRow, {
+            title: Language.msg('settings.enable_border'),
             show_enable_switch: true,
             enable_expansion: borderEnabled,
         });
@@ -64,15 +65,15 @@ class AzClockWidgetClockSubPage extends SubPage {
             this.setClockElementData('Box_BorderEnabled', widget.enable_expansion);
         });
 
-        const borderWidthRow = this.createSpinRow(_('Border Width'), 'Box_BorderWidth', 0, 15);
+        const borderWidthRow = this.createSpinRow(Language.msg('settings.border_width'), 'Box_BorderWidth', 0, 15);
         borderOptionsRow.add_row(borderWidthRow);
-        const borderColorRow = this.createColorRow(_('Border Color'), 'Box_BorderColor');
+        const borderColorRow = this.createColorRow(Language.msg('settings.border_color'), 'Box_BorderColor');
         borderOptionsRow.add_row(borderColorRow);
 
         const backgroundEnabled = this.getClockElementData('Box_BackgroundEnabled', 'bool');
 
-        const widgetBackgroundRow = new Adw.ExpanderRow({
-            title: _('Enable Background'),
+        const widgetBackgroundRow = Language.widget(Adw.ExpanderRow, {
+            title: Language.msg('settings.enable_background'),
             show_enable_switch: true,
             enable_expansion: backgroundEnabled,
         });
@@ -82,9 +83,9 @@ class AzClockWidgetClockSubPage extends SubPage {
             this.setClockElementData('Box_BackgroundEnabled', widget.enable_expansion);
         });
 
-        const widgetBackgroundColorRow = this.createColorRow(_('Background Color'), 'Box_BackgroundColor');
+        const widgetBackgroundColorRow = this.createColorRow(Language.msg('settings.background_color'), 'Box_BackgroundColor');
         widgetBackgroundRow.add_row(widgetBackgroundColorRow);
-        const borderRadiusRow = this.createSpinRow(_('Background Radius'), 'Box_BorderRadius', 0, 999);
+        const borderRadiusRow = this.createSpinRow(Language.msg('settings.background_radius'), 'Box_BorderRadius', 0, 999);
         widgetBackgroundRow.add_row(borderRadiusRow);
     }
 
@@ -93,19 +94,20 @@ class AzClockWidgetClockSubPage extends SubPage {
         const current = data[this.widget_index][0];
         const candidates = data.map((widget,index) => ({meta:widget[0],index})).filter(item =>
             item.index !== this.widget_index && item.meta.Box_IsGroup === 'true' && !item.meta.Parent_Id);
-        const model = new Gtk.StringList(); model.append('Desktop · sem pai');
-        for (const item of candidates) model.append(item.meta.Name);
-        const combo = new Adw.ComboRow({title: 'Widget pai · mover para', model,
+
+        const combo = Language.widget(Adw.ComboRow, {title: Language.msg('settings.parent_move'),
             selected: Math.max(0, candidates.findIndex(item => item.meta.Widget_Id === current.Parent_Id) + 1),
             sensitive: current.Box_IsGroup !== 'true'});
+        Language.items(combo, Gtk.StringList, [Language.msg('settings.desktop_without_parent'), ...candidates.map(item => item.meta.Name)]);
         combo.connect('notify::selected', () => {
+            if (combo.orbitzLanguageUpdating) return;
             this.setClockElementData('Parent_Id', combo.selected ? candidates[combo.selected - 1].meta.Widget_Id : '');
             for (const row of this._groupPositionRows || []) row.sensitive = combo.selected === 0;
             toggle.sensitive = combo.selected === 0;
         });
         group.add(combo);
-        const toggle = new Gtk.Switch({active: current.Box_IsGroup === 'true', valign: Gtk.Align.CENTER, sensitive: !current.Parent_Id});
-        const row = new Adw.ActionRow({title:'Usar como widget pai', subtitle:'Um nível de agrupamento; os filhos mantêm seus comandos e modais.'});
+        const toggle = Language.widget(Gtk.Switch, {active: current.Box_IsGroup === 'true', valign: Gtk.Align.CENTER, sensitive: !current.Parent_Id});
+        const row = Language.widget(Adw.ActionRow, {title:Language.msg('settings.use_as_parent'), subtitle:Language.msg('settings.grouping_note')});
         row.add_suffix(toggle); group.add(row);
         toggle.connect('notify::active', () => {
             if (!current.Widget_Id) { current.Widget_Id = GLib.uuid_string_random(); this.setClockElementData('Widget_Id', current.Widget_Id); }
@@ -120,23 +122,18 @@ class AzClockWidgetClockSubPage extends SubPage {
             }
             combo.sensitive = !toggle.active;
         });
-        group.add(this.createSpinRow('Colunas dos subwidgets', 'Group_Columns', 1, 4));
+        group.add(this.createSpinRow(Language.msg('settings.subwidget_columns'), 'Group_Columns', 1, 4));
     }
 
     createComboRow(title, setting) {
         const value = this.getClockElementData(setting);
-        const stringList = new Gtk.StringList();
-        stringList.append(_('Top Left'));
-        stringList.append(_('Bottom Left'));
-        stringList.append(_('Top Right'));
-        stringList.append(_('Bottom Right'));
-
-        const comboRow = new Adw.ComboRow({
-            title: _(title),
-            model: stringList,
+        const comboRow = Language.widget(Adw.ComboRow, {
+            title,
             selected: value,
         });
+        Language.items(comboRow, Gtk.StringList, ['settings.top_left', 'settings.bottom_left', 'settings.top_right', 'settings.bottom_right'].map(key => Language.msg(key)));
         comboRow.connect('notify::selected', widget => {
+            if (widget.orbitzLanguageUpdating) return;
             this.setClockElementData(setting, widget.selected);
         });
         return comboRow;

@@ -1,4 +1,5 @@
 """Private, atomic PT/EN service invoice PDFs, with embedded Unicode fonts."""
+from ui_language import ui as _i18n
 import os
 from pathlib import Path
 import stat
@@ -21,7 +22,7 @@ def fonts():
         if 'OrbitzInvoice' not in pdfmetrics.getRegisteredFontNames():
             folder = Path('/usr/share/fonts/truetype/dejavu')
             if not (folder/'DejaVuSans.ttf').is_file() or not (folder/'DejaVuSans-Bold.ttf').is_file():
-                raise ValueError('Fonte DejaVu Sans indisponível; instale fonts-dejavu-core.')
+                raise _i18n.exception(ValueError, 'domain.invoice_pdf.dejavu_sans_font_unavailable_install_fonts_dejavu_core')
             pdfmetrics.registerFont(TTFont('OrbitzInvoice',str(folder/'DejaVuSans.ttf')))
             pdfmetrics.registerFont(TTFont('OrbitzInvoiceBold',str(folder/'DejaVuSans-Bold.ttf')))
             pdfmetrics.registerFontFamily('OrbitzInvoice',normal='OrbitzInvoice',bold='OrbitzInvoiceBold',italic='OrbitzInvoice',boldItalic='OrbitzInvoiceBold')
@@ -37,7 +38,7 @@ def _build(snapshot, stream):
     glyphs = fonts()
     for value in (snapshot['reference'],snapshot['sheet_name'],snapshot['issuer']['name'],snapshot['client']['name'],snapshot['client']['address'],*(entry['description'] for entry in snapshot['entries']),*snapshot.get('context',{}).values()):
         if any(ord(character) not in glyphs and character not in '\n\t' for character in value):
-            raise ValueError('O texto contém caracteres não suportados pela fonte do PDF; revise antes de exportar.')
+            raise _i18n.exception(ValueError, 'domain.invoice_pdf.the_text_contains_characters_unsupported_by_the_pdf_font_review_b')
     labels = LABELS[snapshot['language']]
     base = ParagraphStyle('Body',fontName='OrbitzInvoice',fontSize=9,leading=14,spaceAfter=6,splitLongWords=True)
     title = ParagraphStyle('Title',parent=base,fontName='OrbitzInvoiceBold',fontSize=24,leading=30,spaceAfter=14)
@@ -77,7 +78,7 @@ def _build(snapshot, stream):
         while True:
             parts = remaining.split(323, 280)
             if not parts:
-                raise ValueError('Não foi possível paginar a descrição da atividade.')
+                raise _i18n.exception(ValueError, 'domain.invoice_pdf.could_not_paginate_the_activity_description')
             chunks.append(parts[0])
             if len(parts) == 1:
                 break
@@ -103,7 +104,7 @@ def _build(snapshot, stream):
 def _stamp(path):
     info = path.lstat()
     if not stat.S_ISREG(info.st_mode):
-        raise ValueError('Destino do PDF deve ser um arquivo regular, sem link simbólico.')
+        raise _i18n.exception(ValueError, 'domain.invoice_pdf.the_pdf_destination_must_be_a_regular_file_without_a_symlink')
     return info.st_dev,info.st_ino,info.st_size,info.st_mtime_ns
 
 
@@ -111,13 +112,13 @@ def write(snapshot, path, *, overwrite=False):
     snapshot = invoice.validate_snapshot(snapshot)
     path = Path(path).expanduser().absolute()
     if path.suffix.lower() != '.pdf':
-        raise ValueError('Escolha um arquivo com extensão .pdf.')
+        raise _i18n.exception(ValueError, 'domain.invoice_pdf.choose_a_file_with_a_pdf_extension')
     if type(overwrite) is not bool:
-        raise ValueError('Confirmação de sobrescrita inválida.')
+        raise _i18n.exception(ValueError, 'domain.invoice_pdf.invalid_overwrite_confirmation')
     previous = None
     if path.exists() or path.is_symlink():
         if not overwrite:
-            raise FileExistsError('O PDF já existe; confirme a substituição na interface.')
+            raise _i18n.exception(FileExistsError, 'domain.invoice_pdf.the_pdf_already_exists_confirm_replacement_in_the_interface')
         previous = _stamp(path)
     fd, temporary = tempfile.mkstemp(prefix='.invoice-',suffix='.pdf',dir=path.parent)
     try:
@@ -128,7 +129,7 @@ def write(snapshot, path, *, overwrite=False):
             os.fsync(stream.fileno())
         if previous is not None:
             if _stamp(path) != previous:
-                raise FileExistsError('O arquivo mudou durante a geração; substituição cancelada.')
+                raise _i18n.exception(FileExistsError, 'domain.invoice_pdf.the_file_changed_during_generation_replacement_cancelled')
             os.replace(temporary,path)
         else:
             # Atomic no-clobber publication, including a target created during rendering.

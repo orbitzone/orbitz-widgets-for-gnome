@@ -9,6 +9,7 @@ lookup or a fallback to a locally cached rate.
 Crypto uses CoinPaprika Free (personal use, attribution required), bounded
 responses and fresh provider timestamps. No price or catalog is saved locally.
 """
+from orbitz_i18n import t
 
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
@@ -38,13 +39,13 @@ def _get_json(url, opener=urlopen, *, max_response=MAX_RESPONSE):
         with opener(request, timeout=6) as response:
             raw = response.read(max_response + 1)
     except (HTTPError, URLError, HTTPException, TimeoutError, OSError) as error:
-        raise FxError('Cotação indisponível; confira a conexão e tente novamente.') from error
+        raise FxError(t('widgets.fx_rates.quote_unavailable_check_your_connection_and_try_again')) from error
     if len(raw) > max_response:
-        raise FxError('Resposta de cotação excedeu o limite permitido.')
+        raise FxError(t('widgets.fx_rates.quote_response_exceeded_the_allowed_size'))
     try:
         return json.loads(raw.decode('utf-8'), parse_float=Decimal)
     except (UnicodeDecodeError, ValueError, RecursionError, InvalidOperation) as error:
-        raise FxError('A fonte retornou dados de cotação inválidos.') from error
+        raise FxError(t('widgets.fx_rates.the_source_returned_invalid_quote_data')) from error
 
 
 def _crypto_item(data, now):
@@ -62,7 +63,7 @@ def _crypto_item(data, now):
                 now - updated > CRYPTO_MAX_AGE or updated - now > timedelta(minutes=5)):
             raise ValueError('price or timestamp')
     except (KeyError, TypeError, AttributeError, ValueError, InvalidOperation) as error:
-        raise FxError('Cotação cripto ausente, inválida ou desatualizada na fonte.') from error
+        raise FxError(t('widgets.fx_rates.crypto_quote_missing_invalid_or_outdated_at_the_source')) from error
     return {'id': asset, 'symbol': symbol.upper(), 'name': name.strip(),
             'price': price, 'updated_at': updated.astimezone(timezone.utc).isoformat()}
 
@@ -75,7 +76,7 @@ def crypto_currencies(opener=urlopen):
     """
     data = _get_json(f'{CRYPTO_API}/tickers?quotes=USD', opener, max_response=8 * 1024 * 1024)
     if not isinstance(data, list) or len(data) > 20000:
-        raise FxError('Catálogo cripto inválido.')
+        raise FxError(t('widgets.fx_rates.invalid_crypto_catalog'))
     now = datetime.now(timezone.utc)
     result = {}
     for entry in data:
@@ -85,14 +86,14 @@ def crypto_currencies(opener=urlopen):
             continue
         result[item['id']] = {key: item[key] for key in ('id', 'symbol', 'name')}
     if not result:
-        raise FxError('Catálogo cripto indisponível; nenhum ativo com cotação recente.')
+        raise FxError(t('widgets.fx_rates.crypto_catalog_unavailable_no_assets_with_recent_quotes'))
     return {'source': CRYPTO_SOURCE, 'assets': sorted(result.values(), key=lambda item: (item['name'].casefold(), item['id']))}
 
 
 def crypto_quote(asset='btc-bitcoin', reverse=False, opener=urlopen):
     """Return USD -> asset, or its inverse, from the same validated USD tick."""
     if not isinstance(asset, str) or not ASSET_ID.fullmatch(asset):
-        raise ValueError('Identificador cripto inválido.')
+        raise ValueError(t('widgets.fx_rates.invalid_crypto_identifier'))
     item = _crypto_item(_get_json(f'{CRYPTO_API}/tickers/{asset}?quotes=USD', opener), datetime.now(timezone.utc))
     if item['id'] != asset:
         raise FxError('A fonte retornou outro ativo cripto.')
@@ -107,19 +108,19 @@ def currencies(opener=urlopen):
     """Return the provider's current ISO code -> display name catalog."""
     data = _get_json(f'{API}/currencies', opener)
     if not isinstance(data, list) or len(data) > 1000:
-        raise FxError('Catálogo de moedas inválido.')
+        raise FxError(t('widgets.fx_rates.invalid_currency_catalog'))
     result = {}
     for item in data:
         if not isinstance(item, dict):
-            raise FxError('Catálogo de moedas inválido.')
+            raise FxError(t('widgets.fx_rates.invalid_currency_catalog'))
         code, name = item.get('iso_code'), item.get('name')
         if not isinstance(code, str) or not CODE.fullmatch(code):
-            raise FxError('Código de moeda inválido no catálogo.')
+            raise FxError(t('widgets.fx_rates.invalid_currency_code_in_the_catalog'))
         if not isinstance(name, str) or not name.strip() or len(name) > 160:
-            raise FxError('Nome de moeda inválido no catálogo.')
+            raise FxError(t('widgets.fx_rates.invalid_currency_name_in_the_catalog'))
         result[code] = name.strip()
     if not result:
-        raise FxError('Catálogo de moedas vazio.')
+        raise FxError(t('widgets.fx_rates.empty_currency_catalog'))
     return result
 
 
@@ -130,25 +131,25 @@ def quote(base, quote, opener=urlopen):
     precede today on weekends or holidays. No age threshold is imposed.
     """
     if not isinstance(base, str) or not CODE.fullmatch(base):
-        raise ValueError('Moeda base deve ser um código ISO de três letras.')
+        raise ValueError(t('widgets.fx_rates.base_currency_must_be_a_three_letter_iso_code'))
     if not isinstance(quote, str) or not CODE.fullmatch(quote):
-        raise ValueError('Moeda de destino deve ser um código ISO de três letras.')
+        raise ValueError(t('widgets.fx_rates.target_currency_must_be_a_three_letter_iso_code'))
     data = _get_json(f'{API}/rate/{base.lower()}/{quote.lower()}', opener)
     try:
         rate = Decimal(str(data['rate']))
         quoted_on = date.fromisoformat(data['date'])
     except (TypeError, KeyError, ValueError, InvalidOperation) as error:
-        raise FxError('A fonte retornou uma cotação incompleta.') from error
+        raise FxError(t('widgets.fx_rates.the_source_returned_an_incomplete_quote')) from error
     if (not rate.is_finite() or rate <= 0 or not isinstance(data.get('base'), str) or
             not isinstance(data.get('quote'), str) or data['base'].upper() != base or
             data['quote'].upper() != quote):
-        raise FxError('A fonte retornou uma cotação inconsistente.')
+        raise FxError(t('widgets.fx_rates.the_source_returned_an_inconsistent_quote'))
     if not isinstance(data.get('date'), str) or quoted_on.isoformat() != data['date']:
-        raise FxError('A fonte retornou uma data de cotação inválida.')
+        raise FxError(t('widgets.fx_rates.the_source_returned_an_invalid_quote_date'))
     if quoted_on > datetime.now(timezone.utc).date():
-        raise FxError('A fonte retornou uma data de cotação futura.')
+        raise FxError(t('widgets.fx_rates.the_source_returned_a_future_quote_date'))
     return {'base': base, 'quote': quote, 'rate': rate, 'date': quoted_on.isoformat(),
-            'source': 'Frankfurter · taxas de referência diárias'}
+            'source': t('widgets.fx_rates.frankfurter_daily_reference_rates')}
 
 
 def convert(amount, rate):
@@ -157,10 +158,10 @@ def convert(amount, rate):
         amount = Decimal(str(amount))
         rate = Decimal(str(rate))
     except (InvalidOperation, ValueError, TypeError) as error:
-        raise ValueError('Valor ou cotação inválidos.') from error
+        raise ValueError(t('widgets.fx_rates.invalid_amount_or_rate')) from error
     if not amount.is_finite() or amount < 0 or not rate.is_finite() or rate <= 0:
-        raise ValueError('Valor ou cotação inválidos.')
+        raise ValueError(t('widgets.fx_rates.invalid_amount_or_rate'))
     result = amount * rate
     if not result.is_finite():
-        raise ValueError('Resultado de conversão inválido.')
+        raise ValueError(t('widgets.fx_rates.invalid_conversion_result'))
     return result

@@ -1,5 +1,5 @@
 // Updates panel methods; state and lifecycle belong to CommandLabel.
-var create = ({Clutter, Gio, GLib, Pango, St, getData, launchTerminalAction}) => ({
+var create = ({Language, Clutter, Gio, GLib, Pango, St, getData, launchTerminalAction}) => ({
     _renderUpdates(data) {
         if (typeof data.text !== 'string' || data.text.length > 128 || typeof data.reboot !== 'boolean' ||
             typeof data.index_updated !== 'string' || data.index_updated.length > 64 ||
@@ -10,39 +10,39 @@ var create = ({Clutter, Gio, GLib, Pango, St, getData, launchTerminalAction}) =>
                 typeof x.id !== 'string' || !/^[a-z0-9-]{1,40}$/.test(x.id) || typeof x.name !== 'string' || x.name.length > 80 ||
                 typeof x.command !== 'string' || x.command.length > 2048) ||
             data.items.some(item => !item || !['name', 'installed', 'version', 'source'].every(k => typeof item[k] === 'string' && item[k].length <= 512)))
-            throw new Error('Resposta de atualizações inválida.');
-        this._updatesHeading.text = data.text;
+            throw Language.error(Language.msg('panels.error.updates'));
+        Language.set(this._updatesHeading, 'text', data.text);
         this._updatesRows.destroy_all_children();
         const add = (text, color = '#c8c8c8') => {
-            const label = new St.Label({text, style: `padding: 4px; color: ${color};`});
+            const label = Language.widget(St.Label, {text, style: `padding: 4px; color: ${color};`});
             label.clutter_text.set_line_wrap(true);
             this._updatesRows.add_child(label);
         };
-        add(data.reboot ? 'Reinicialização pendente.' : 'Sem indicação de reinicialização pendente.');
-        add('Índice APT mais antigo: ' + data.index_updated);
+        add(data.reboot ? Language.msg('panels.updates.reboot') : Language.msg('panels.updates.no_reboot'));
+        add(Language.msg('panels.updates.index', {date: data.index_updated}));
         for (const notice of data.notices) add(notice);
         if (data.error) add(data.error);
-        if (data.omitted) add(`${data.omitted} pacotes adicionais.`);
+        if (data.omitted) add(Language.msg('panels.updates.omitted', {count: data.omitted}));
         for (const source of ['APT', 'Snap', 'Flatpak']) {
             const items = data.items.filter(item => item.source === source);
             add(source + ' · ' + items.length, 'white');
             for (const item of items)
-                add((item.security ? '[Segurança] ' : '') + item.name + ' · ' + item.installed + ' → ' + item.version, item.security ? '#ffd479' : '#82cfff');
+                add(Language.join(item.security ? Language.msg('panels.updates.security') : '', item.name, ' · ', item.installed, ' → ', item.version), item.security ? '#ffd479' : '#82cfff');
         }
         this._updatesActions.destroy_all_children();
-        this._updatesActions.add_child(new St.Label({text: 'Ações · confirme com Enter no terminal',
+        this._updatesActions.add_child(Language.widget(St.Label, {text: Language.msg('panels.updates.actions'),
             style: 'font-size: 12px; color: #c8c8c8;'}));
         let row;
         for (const [index, action] of data.actions.entries()) {
             if (index % 4 === 0) {
-                row = new St.BoxLayout({style: 'spacing: 8px;', x_expand: true});
+                row = Language.widget(St.BoxLayout, {style: 'spacing: 8px;', x_expand: true});
                 this._updatesActions.add_child(row);
             }
-            const button = new St.Button({reactive: true, can_focus: true,
+            const button = Language.widget(St.Button, {reactive: true, can_focus: true,
                 accessible_name: action.name + ': ' + action.command, x_expand: true,
                 height: 38, y_align: Clutter.ActorAlign.CENTER,
                 style: 'width: 156px; min-height: 22px; padding: 8px; border-radius: 6px; background-color: #315d80; color: white;'});
-            const label = new St.Label({text: action.name, x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER});
+            const label = Language.widget(St.Label, {text: action.name, x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER});
             label.clutter_text.set_line_wrap(true);
             label.clutter_text.set_ellipsize(Pango.EllipsizeMode.NONE);
             button.set_child(label);
@@ -51,8 +51,8 @@ var create = ({Clutter, Gio, GLib, Pango, St, getData, launchTerminalAction}) =>
                 try {
                     const [, argv] = GLib.shell_parse_argv(getData(this.widgetIndex, this.elementIndex, 'Text_Command'));
                     launchTerminalAction([...argv, '--action', action.id], this);
-                    this._networkRefreshStatus.text = 'Comando aberto no terminal; releia a lista após concluir.';
-                } catch (error) { this._networkRefreshStatus.text = 'Não foi possível abrir o terminal.'; }
+                    Language.set(this._networkRefreshStatus, 'text', Language.msg('panels.updates.opened'));
+                } catch (error) { Language.set(this._networkRefreshStatus, 'text', Language.msg('panels.updates.terminal_error')); }
             });
             row.add_child(button);
         }

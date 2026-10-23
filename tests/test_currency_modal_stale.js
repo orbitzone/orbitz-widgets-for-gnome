@@ -7,7 +7,7 @@ function fixture(){
  const GLib={shell_parse_argv:c=>[true,c.split(' ')],PRIORITY_DEFAULT:0,SOURCE_REMOVE:0,
   timeout_add:(priority,ms,fn)=>{timers.set(++next,fn);return next;},source_remove:id=>timers.delete(id),
   markup_escape_text:x=>x,DateTime:{new_now_local:()=>({format:()=> '12:00'})}};
- const methods=ctx.create({GLib,Gio:{Cancellable:class{},SubprocessFlags:{STDOUT_PIPE:1,STDERR_PIPE:2},
+ const methods=ctx.create({Language: {...require('./helpers/ui_language').create(ctx,'pt-BR'), spawn:()=>({get_successful:()=>true})}, GLib,Gio:{Cancellable:class{},SubprocessFlags:{STDOUT_PIPE:1,STDERR_PIPE:2},
   Subprocess:{new:()=>({get_successful:()=>true})}},getData:()=>command,
   readCommandOutput:()=>new Promise((a,b)=>{resolve=a;reject=b;}),stopCommandRun:run=>{run.cancelled=true;}});
  const writes=[];const host={...methods,widgetIndex:0,elementIndex:1,_networkGeneration:1,

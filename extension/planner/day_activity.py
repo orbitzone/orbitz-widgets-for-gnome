@@ -46,3 +46,21 @@ def day_description(day, selected=False, activities=False, holidays=(), details=
     if activities and (details or not holidays):text.append('Atividades neste dia')
     text += ['Feriado: '+t for t in holidays]+list(details)
     return text
+
+
+# UI descriptors share the same read-only projections; raw string APIs remain available.
+def local_detail_messages(data,day):
+    from ui_language import ui
+    tasks,sheets=local_activity(data,day)
+    result=[]
+    if tasks:result.append(ui.msg('workspace.live.local_tasks', count=len(tasks)))
+    result += [ui.msg('workspace.live.local_hours', name=sheet['name'], count=len(entries)) for sheet,entries in sheets]
+    return result
+
+
+def day_messages(day,selected=False,activities=False,holidays=(),details=()):
+    from ui_language import ui
+    text=[ui.date_text(day)]
+    if selected:text.append(ui.msg('workspace.live.selected_date'))
+    if activities and (details or not holidays):text.append(ui.msg('workspace.live.day_activities'))
+    return text+[ui.msg('workspace.live.holiday', title=title) for title in holidays]+list(details)

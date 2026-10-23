@@ -2,6 +2,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const context = vm.createContext({imports: {gi: {Gio: {}, GLib: {}}}});
+context.imports.misc={extensionUtils:{getCurrentExtension:()=>({imports:{uiLanguage:{Language:require('./helpers/ui_language').create(context,'pt-BR')}}})}};
 vm.runInContext(fs.readFileSync('extension/settings/SettingsImport.js', 'utf8'), context);
 const validate = context.validateWidgets;
 const widget = (command, interval) => [[{Widget_Type: 'Widget_Box'}, {

@@ -1,9 +1,10 @@
 """One-calendar invoice periods, with a pure date controller for validation."""
+from ui_language import ui
 import calendar
 from datetime import date, timedelta
 
-MONTHS = ('janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho',
-    'agosto', 'setembro', 'outubro', 'novembro', 'dezembro')
+MONTHS = (ui.msg('workspace.live.month_1'), ui.msg('workspace.live.month_2'), ui.msg('workspace.live.month_3'), ui.msg('workspace.live.month_4'), ui.msg('workspace.live.month_5'), ui.msg('workspace.live.month_6'), ui.msg('workspace.live.month_7'),
+    ui.msg('workspace.live.month_8'), ui.msg('workspace.live.month_9'), ui.msg('workspace.live.month_10'), ui.msg('workspace.live.month_11'), ui.msg('workspace.live.month_12'))
 
 
 class PeriodSelection:
@@ -20,7 +21,7 @@ class PeriodSelection:
 
     def set_mode(self, mode):
         if mode not in ('all', 'month', 'range'):
-            raise ValueError('Escolha um tipo de período válido.')
+            raise ui.exception(ValueError, 'workspace.invoice_period_ui.escolha_um_tipo_de_periodo_valido')
         if mode != self.mode:
             self.start = self.end = None
         self.mode = mode
@@ -33,7 +34,7 @@ class PeriodSelection:
 
     def choose(self, day):
         if not isinstance(day, date):
-            raise ValueError('Escolha uma data no calendário.')
+            raise ui.exception(ValueError, 'workspace.invoice_period_ui.escolha_uma_data_no_calendario')
         if self.mode == 'range':
             if self.start is None or self.end is not None:
                 self.start, self.end = day, None
@@ -63,7 +64,7 @@ class PeriodSelection:
             return date(self.year, self.month, 1).isoformat(), date(self.year, self.month,
                 calendar.monthrange(self.year, self.month)[1]).isoformat()
         if not self.ready:
-            raise ValueError('Escolha o início e o fim do período no calendário.')
+            raise ui.exception(ValueError, 'workspace.invoice_period_ui.escolha_o_inicio_e_o_fim_do_periodo_no_calendario')
         return self.start.isoformat(), self.end.isoformat()
 
     def includes(self, day):
@@ -73,17 +74,19 @@ class PeriodSelection:
             return (day.year, day.month) == (self.year, self.month)
         return self.start is not None and self.start <= day <= (self.end or self.start)
 
-    def summary(self):
+    def summary(self):return str(self.summary_message())
+
+    def summary_message(self):
         if self.mode == 'all':
-            return 'Todo o histórico registrado desta timesheet.'
+            return ui.msg('workspace.dialogs.invoice_period_ui.all')
         if self.mode == 'month':
-            start, end = (date.fromisoformat(value).strftime('%d/%m/%Y') for value in self.bounds())
-            return f'Mês civil: {start} até {end}, inclusive.'
+            start, end = (ui.date_text(value) for value in self.bounds())
+            return ui.msg('workspace.dialogs.invoice_period_ui.month_summary', start=start, end=end)
         if self.start is None:
-            return 'Escolha a data inicial. Depois, escolha a data final no mesmo calendário.'
+            return ui.msg('workspace.dialogs.invoice_period_ui.choose')
         if self.end is None:
-            return f'Primeira data: {self.start:%d/%m/%Y}. Falta escolher a segunda data.'
-        return f'Início: {self.start:%d/%m/%Y} · Fim: {self.end:%d/%m/%Y}, inclusive. Novo clique recomeça.'
+            return ui.msg('workspace.dialogs.invoice_period_ui.first_date', start=ui.date_text(self.start))
+        return ui.msg('workspace.dialogs.invoice_period_ui.range_summary', start=ui.date_text(self.start), end=ui.date_text(self.end))
 
 
 class InvoicePeriodPicker:
@@ -94,58 +97,57 @@ class InvoicePeriodPicker:
         self.Gtk, self.Gdk = Gtk, Gdk
         self.model = PeriodSelection(initial)
         self.changed = changed
-        self.widget = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
-        self.choice = Gtk.ComboBoxText()
-        for mode, title in [('month', 'Período de 1 mês'), ('all', 'Todo o histórico'), ('range', 'Período específico')]:
-            self.choice.append(mode, title)
+        self.widget = ui.widget(Gtk.Box,orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        self.choice = ui.widget(Gtk.ComboBoxText,)
+        for mode, title in [('month', ui.msg('workspace.dialogs.invoice_period_ui.month')), ('all', ui.msg('workspace.dialogs.invoice_period_ui.all_choice')), ('range', ui.msg('workspace.dialogs.invoice_period_ui.range'))]:
+            ui.combo_append(self.choice,mode,title)
         self.choice.set_active_id('all')
-        label = Gtk.Label.new_with_mnemonic('_Período da invoice')
+        label = ui.mnemonic_label(Gtk,ui.msg('workspace.dialogs.invoice_period_ui.caption'))
         label.set_xalign(0)
         label.set_mnemonic_widget(self.choice)
-        self.choice.get_accessible().set_name('Período da invoice')
+        ui.call(self.choice.get_accessible(),'set_name',ui.msg('workspace.invoice_period_ui.periodo_da_invoice'))
         self.widget.pack_start(label, False, False, 0)
         self.widget.pack_start(self.choice, False, False, 0)
-        self.calendar = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        self.calendar = ui.widget(Gtk.Box,orientation=Gtk.Orientation.VERTICAL, spacing=6)
         self.calendar.set_no_show_all(True)
         self.widget.pack_start(self.calendar, False, False, 0)
-        navigation = Gtk.Box(spacing=4)
+        navigation = ui.widget(Gtk.Box,spacing=4)
         self.calendar.pack_start(navigation, False, False, 0)
         self.nav_buttons = []
-        for text, amount, name in [('«', -12, 'Ano anterior'), ('‹', -1, 'Mês anterior')]:
+        for text, amount, name in [('«', -12, ui.msg('workspace.dialogs.invoice_period_ui.previous_year')), ('‹', -1, ui.msg('workspace.dialogs.invoice_period_ui.previous_month'))]:
             self._nav(navigation, text, amount, name)
-        self.title = Gtk.Label(hexpand=True)
+        self.title = ui.widget(Gtk.Label,hexpand=True)
         navigation.pack_start(self.title, True, True, 0)
-        for text, amount, name in [('›', 1, 'Próximo mês'), ('»', 12, 'Próximo ano')]:
+        for text, amount, name in [('›', 1, ui.msg('workspace.dialogs.invoice_period_ui.next_month')), ('»', 12, ui.msg('workspace.dialogs.invoice_period_ui.next_year'))]:
             self._nav(navigation, text, amount, name)
-        grid = Gtk.Grid(column_homogeneous=True, row_spacing=2, column_spacing=2)
+        grid = ui.widget(Gtk.Grid,column_homogeneous=True, row_spacing=2, column_spacing=2)
         self.calendar.pack_start(grid, False, False, 0)
-        for column, text in enumerate(('dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb')):
-            grid.attach(Gtk.Label(label=text), column, 0, 1, 1)
+        for column, text in enumerate((ui.msg('workspace.live.weekday_0'), ui.msg('workspace.live.weekday_1'), ui.msg('workspace.live.weekday_2'), ui.msg('workspace.live.weekday_3'), ui.msg('workspace.live.weekday_4'), ui.msg('workspace.live.weekday_5'), ui.msg('workspace.live.weekday_6'))):
+            grid.attach(ui.widget(Gtk.Label,label=text), column, 0, 1, 1)
         self.buttons = []
         self.days = [None] * 42
-        css = Gtk.CssProvider()
+        css = ui.widget(Gtk.CssProvider,)
         css.load_from_data(b'''
 button.invoice-period-day {padding: 3px; min-width: 22px; min-height: 24px;}
 button.invoice-period-day.in-range {background-image: none; background-color: @theme_selected_bg_color; color: @theme_selected_fg_color;}
 button.invoice-period-day.range-edge {border: 2px solid @theme_selected_bg_color; font-weight: bold;}
 ''')
         for index in range(42):
-            button = Gtk.Button()
+            button = ui.widget(Gtk.Button,)
             button.get_style_context().add_class('invoice-period-day')
             button.get_style_context().add_provider(css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
             button.connect('clicked', lambda _, i=index: self._choose(i))
             button.connect('key-press-event', lambda _, event, i=index: self._key(event, i))
             grid.attach(button, index % 7, index // 7 + 1, 1, 1)
             self.buttons.append(button)
-        self.clear_button = Gtk.Button(label='Limpar / recomeçar seleção')
+        self.clear_button = ui.widget(Gtk.Button,label=ui.msg('workspace.invoice_period_ui.limpar_recomecar_selecao'))
         self.clear_button.connect('clicked', self._clear)
         self.calendar.pack_start(self.clear_button, False, False, 0)
-        self.help = Gtk.Label(label='No período específico, faça dois cliques. Se clicar na data final primeiro, '
-            'as duas datas serão ordenadas. Use as setas do teclado para mover o foco e Enter/Espaço para escolher.',
+        self.help = ui.widget(Gtk.Label,label=ui.msg('workspace.invoice_period_ui.no_periodo_especifico_faca_dois_cliques_se_clicar_na_data_final_primeiro_as_duas'),
             xalign=0, wrap=True)
         self.help.set_max_width_chars(52)
         self.calendar.pack_start(self.help, False, False, 0)
-        self.summary = Gtk.Label(xalign=0, wrap=True, selectable=True)
+        self.summary = ui.widget(Gtk.Label,xalign=0, wrap=True, selectable=True)
         self.summary.set_max_width_chars(52)
         self.widget.pack_start(self.summary, False, False, 0)
         self.choice.connect('changed', self._mode)
@@ -156,8 +158,8 @@ button.invoice-period-day.range-edge {border: 2px solid @theme_selected_bg_color
 
     def _nav(self, container, text, amount, name):
         button = self.Gtk.Button(label=text)
-        button.set_tooltip_text(name)
-        button.get_accessible().set_name(name)
+        ui.call(button,'set_tooltip_text',name)
+        ui.call(button.get_accessible(),'set_name',name)
         button.connect('clicked', lambda *_: self._navigate(amount))
         container.pack_start(button, False, False, 0)
         self.nav_buttons.append((button, amount))
@@ -165,14 +167,14 @@ button.invoice-period-day.range-edge {border: 2px solid @theme_selected_bg_color
     def _refresh(self):
         model = self.model
         self.calendar.set_visible(model.mode != 'all')
-        self.title.set_text(f'{MONTHS[model.month - 1]} de {model.year}')
+        ui.call(self.title,'set_text',ui.msg('workspace.dialogs.invoice_period_ui.month_title', month=MONTHS[model.month - 1], year=model.year))
         offset = (date(model.year, model.month, 1).weekday() + 1) % 7
         last = calendar.monthrange(model.year, model.month)[1]
         for index, button in enumerate(self.buttons):
             number = index - offset + 1
             day = date(model.year, model.month, number) if 1 <= number <= last else None
             self.days[index] = day
-            button.set_label(str(number) if day else '')
+            ui.call(button,'set_label',str(number) if day else '')
             button.set_sensitive(day is not None)
             style = button.get_style_context()
             for name in ('in-range', 'range-edge'):
@@ -181,26 +183,27 @@ button.invoice-period-day.range-edge {border: 2px solid @theme_selected_bg_color
                 style.add_class('in-range')
                 if model.mode == 'range' and day in (model.start, model.end):
                     style.add_class('range-edge')
-            name = day.strftime('%d/%m/%Y') if day else 'Fora do mês'
+            name = ui.date_text(day) if day else ui.msg('workspace.dialogs.invoice_period_ui.outside')
             if day and model.includes(day):
-                name += ' · selecionado'
+                name += ui.msg('workspace.dialogs.invoice_period_ui.selected')
                 if day == model.start:
-                    name += ' · início'
+                    name += ui.msg('workspace.dialogs.invoice_period_ui.start')
                 if day == model.end:
-                    name += ' · fim'
-            button.get_accessible().set_name(name)
-            button.set_tooltip_text(name)
+                    name += ui.msg('workspace.dialogs.invoice_period_ui.end')
+            ui.call(button.get_accessible(),'set_name',name)
+            ui.call(button,'set_tooltip_text',name)
         for button, amount in self.nav_buttons:
             year = (model.year * 12 + model.month - 1 + amount) // 12
             button.set_sensitive(1 <= year <= 9999)
         self.clear_button.set_sensitive(model.mode == 'range')
-        self.summary.set_text(model.summary())
+        ui.call(self.summary,'set_text',model.summary_message())
 
     def _notify(self, before):
         if self.model.selection_key() != before:
             self.changed()
 
     def _mode(self, *_):
+        if getattr(self.choice,'_orbitz_language_updating',False):return
         before = self.model.selection_key()
         self.model.set_mode(self.choice.get_active_id())
         self._refresh()

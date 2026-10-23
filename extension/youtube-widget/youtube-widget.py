@@ -1,6 +1,8 @@
 #!/usr/bin/python3
 """GTK/WebKit YouTube window and local server lifecycle."""
 from http.server import ThreadingHTTPServer
+from ui_language import ui
+import json
 import secrets
 import threading
 from youtube_server import make_handler
@@ -16,7 +18,7 @@ def main():
         token=secrets.token_urlsafe(24)
         server=ThreadingHTTPServer(('127.0.0.1',0),make_handler(token));server.cache={};server.daemon_threads=True
         threading.Thread(target=server.serve_forever,daemon=True).start()
-        window=Gtk.ApplicationWindow(application=app,title='YouTube · Orbitz')
+        window=ui.widget(Gtk.ApplicationWindow,application=app,title=ui.msg('youtube.window_title'))
         display=Gdk.Display.get_default()
         monitor=display.get_monitor_at_point(*display.get_default_seat().get_pointer().get_position()[1:]) or display.get_primary_monitor()
         area=monitor.get_workarea() if monitor else Gdk.Rectangle(x=0,y=0,width=1280,height=900)
@@ -31,6 +33,13 @@ def main():
                 decision.ignore();return True
             return False
         view.connect('decide-policy',policy)
+        def language_changed(*_):
+            payload={'locale':ui.get_locale(),'catalog':ui._load()['pt-BR']|ui._load().get(ui.get_locale(),{})}
+            view.run_javascript('window.orbitzSetLanguage && window.orbitzSetLanguage('+json.dumps(payload,ensure_ascii=True)+');',None,None,None)
+        holder['language_callback']=language_changed
+        unwatch_language=ui.watch(language_changed)
+        view.connect('load-changed',lambda _view,event:language_changed() if event==WebKit2.LoadEvent.FINISHED else None)
+
         def enter_fullscreen(*_):
             window.fullscreen()
             return True
@@ -52,14 +61,14 @@ def main():
         window.connect('key-press-event',key_press)
         def terminated(_view,reason):
             window.unfullscreen()
-            dialog=Gtk.MessageDialog(transient_for=window,modal=True,message_type=Gtk.MessageType.WARNING,
-                buttons=Gtk.ButtonsType.OK_CANCEL,text='O player de vídeo foi interrompido.')
-            dialog.format_secondary_text('Reabrir o player? Sua chave permanece salva. Você pode usar F11 para ampliar a janela.')
+            dialog=ui.widget(Gtk.MessageDialog,transient_for=window,modal=True,message_type=Gtk.MessageType.WARNING,
+                buttons=Gtk.ButtonsType.OK_CANCEL,text=ui.msg('youtube.player_interrupted'))
+            ui.call(dialog,'format_secondary_text',ui.msg('youtube.reopen_player'))
             if dialog.run()==Gtk.ResponseType.OK:view.reload()
             dialog.destroy()
         view.connect('web-process-terminated',terminated)
         window.add(view);view.load_uri(f'http://127.0.0.1:{server.server_port}/{token}/')
-        window.connect('destroy',lambda *_:(server.shutdown(),holder.clear()))
+        window.connect('destroy',lambda *_:(unwatch_language(),server.shutdown(),holder.clear()))
         holder['window']=window;window.show_all()
     app.connect('activate',activate);app.run(None)
 

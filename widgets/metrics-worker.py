@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """One persistent process for sampled CPU, process and traffic widgets."""
+from orbitz_i18n import t
 import contextlib,io,json,sys,time
 from pathlib import Path
 SCRIPTS={'cpu':'cpu-ram-widget.py','processes':'processos-widget.py','network':'rede-widget.py'}
@@ -8,7 +9,7 @@ def main():
     jobs={}
     for argument in sys.argv[1:]:
         mode,interval=argument.split(':',1)
-        if mode not in SCRIPTS or not 2<=float(interval)<=3600:raise ValueError('Amostragem inválida')
+        if mode not in SCRIPTS or not 2<=float(interval)<=3600:raise ValueError(t('widgets.metrics_worker.invalid_sampling_interval'))
         path=Path(__file__).parent/SCRIPTS[mode]
         jobs[mode]={'interval':float(interval),'next':0,'path':str(path),'code':compile(path.read_text(),str(path),'exec')}
     heartbeat=time.monotonic()
@@ -26,9 +27,9 @@ def main():
                     namespace = {'__name__':'__main__','__file__':job['path']}
                     exec(job['code'], namespace)
                 text=output.getvalue().strip()
-                if len(text.encode())>8192:raise ValueError('Saída excedida')
+                if len(text.encode())>8192:raise ValueError(t('widgets.metrics_worker.output_limit_exceeded'))
             except Exception:
-                text='Leitura indisponível'
+                text=t('widgets.metrics_worker.reading_unavailable')
                 namespace={}
             print(json.dumps({'mode':mode,'text':text,'devices':namespace.get('EXTERNAL_DEVICES',[]),'cpu_seconds':round(time.process_time()-cpu_start,6)},ensure_ascii=False),flush=True)
             job['next']=now+job['interval']

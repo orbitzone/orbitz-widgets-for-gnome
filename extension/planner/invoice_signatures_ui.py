@@ -1,14 +1,18 @@
 """Manual gov.br signing assistance; never uploads files or verifies signatures."""
+from ui_language import ui
 from datetime import date
 import importlib
 
 SIGN_URL = 'https://assinador.iti.br/'
 VALIDATE_URL = 'https://validar.iti.gov.br/'
-PENDING_LABEL = 'Importada — validação pendente'
+PENDING_LABEL = ui.tr('workspace.dialogs.invoice_signatures_ui.pending')
 
 
-def version_label(version):
-    return f"{version['created_at']} · versão {version['id'][:8]} · {PENDING_LABEL}"
+def version_message(version):
+    return ui.msg('workspace.dialogs.invoice_signatures_ui.version', created=version['created_at'], id=version['id'][:8], status=ui.msg('workspace.dialogs.invoice_signatures_ui.pending'))
+
+
+def version_label(version):return str(version_message(version))
 
 
 def assist_sign(save_copy, launch):
@@ -26,7 +30,7 @@ def assist_sign(save_copy, launch):
 
 def open_validator(launch):
     if launch(VALIDATE_URL) is False:
-        raise ValueError('Não foi possível abrir o portal VALIDAR.')
+        raise ui.exception(ValueError, 'workspace.invoice_signatures_ui.nao_foi_possivel_abrir_o_portal_validar')
 
 
 class SignatureSession:
@@ -53,14 +57,14 @@ class SignatureSession:
             return self.archive.get_path(self.invoice_id)
         if self.selected in self.versions:
             return self.signatures.resolve_pdf(self.invoice_id, self.selected)
-        raise ValueError('Selecione uma versão do PDF.')
+        raise ui.exception(ValueError, 'workspace.invoice_signatures_ui.selecione_uma_versao_do_pdf')
 
     def export(self, target, overwrite=False):
         if self.selected == 'original':
             return self.archive.export_copy(self.invoice_id, target, overwrite=overwrite)
         if self.selected in self.versions:
             return self.signatures.export_copy(self.invoice_id, self.selected, target, overwrite=overwrite)
-        raise ValueError('Selecione uma versão do PDF.')
+        raise ui.exception(ValueError, 'workspace.invoice_signatures_ui.selecione_uma_versao_do_pdf')
 
     def import_pdf(self, path, confirmed=False):
         if not confirmed:
@@ -68,13 +72,13 @@ class SignatureSession:
         return self.signatures.import_version(self.invoice_id, path)
 
 
-def save_copy(parent, exporter, title='Salvar cópia do PDF'):
+def save_copy(parent, exporter, title=ui.msg('workspace.dialogs.invoice_signatures_ui.save_copy')):
     import gi
     gi.require_version('Gtk', '3.0')
     from gi.repository import Gtk
-    chooser = Gtk.FileChooserDialog(title=title, transient_for=parent, modal=True,
+    chooser = ui.widget(Gtk.FileChooserDialog,title=title, transient_for=parent, modal=True,
         action=Gtk.FileChooserAction.SAVE)
-    chooser.add_buttons('Cancelar', Gtk.ResponseType.CANCEL, 'Salvar cópia', Gtk.ResponseType.ACCEPT)
+    ui.buttons(chooser,ui.msg('workspace.invoice_signatures_ui.cancelar'), Gtk.ResponseType.CANCEL, ui.msg('workspace.invoice_signatures_ui.salvar_copia'), Gtk.ResponseType.ACCEPT)
     chooser.set_current_name('invoice-' + date.today().isoformat() + '.pdf')
     chooser.set_do_overwrite_confirmation(True)
     allowed = [None]
@@ -82,8 +86,8 @@ def save_copy(parent, exporter, title='Salvar cópia do PDF'):
         allowed[0] = file_chooser.get_filename()
         return Gtk.FileChooserConfirmation.CONFIRM
     chooser.connect('confirm-overwrite', confirm)
-    pdf_filter = Gtk.FileFilter()
-    pdf_filter.set_name('Documento PDF')
+    pdf_filter = ui.widget(Gtk.FileFilter,)
+    ui.call(pdf_filter,'set_name',ui.msg('workspace.dialogs.invoice_signatures_ui.pdf_document'))
     pdf_filter.add_pattern('*.pdf')
     chooser.add_filter(pdf_filter)
     try:
@@ -91,7 +95,7 @@ def save_copy(parent, exporter, title='Salvar cópia do PDF'):
             return None
         filename = chooser.get_filename()
         if not filename or not filename.lower().endswith('.pdf'):
-            raise ValueError('Escolha um arquivo local terminado em .pdf.')
+            raise ui.exception(ValueError, 'workspace.invoice_signatures_ui.escolha_um_arquivo_local_terminado_em_pdf')
         return exporter(filename, overwrite=allowed[0] == filename)
     finally:
         chooser.destroy()
@@ -101,11 +105,11 @@ def add_version(parent, record):
     import gi
     gi.require_version('Gtk', '3.0')
     from gi.repository import Gtk
-    chooser = Gtk.FileChooserDialog(title='Adicionar versão assinada — importação manual',
+    chooser = ui.widget(Gtk.FileChooserDialog,title=ui.msg('workspace.invoice_signatures_ui.adicionar_versao_assinada_importacao_manual'),
         transient_for=parent, modal=True, action=Gtk.FileChooserAction.OPEN)
-    chooser.add_buttons('Cancelar', Gtk.ResponseType.CANCEL, 'Escolher PDF', Gtk.ResponseType.ACCEPT)
-    pdf_filter = Gtk.FileFilter()
-    pdf_filter.set_name('Documento PDF')
+    ui.buttons(chooser,ui.msg('workspace.invoice_signatures_ui.cancelar'), Gtk.ResponseType.CANCEL, ui.msg('workspace.invoice_signatures_ui.escolher_pdf'), Gtk.ResponseType.ACCEPT)
+    pdf_filter = ui.widget(Gtk.FileFilter,)
+    ui.call(pdf_filter,'set_name',ui.msg('workspace.dialogs.invoice_signatures_ui.pdf_document'))
     pdf_filter.add_pattern('*.pdf')
     chooser.add_filter(pdf_filter)
     try:
@@ -115,17 +119,13 @@ def add_version(parent, record):
     finally:
         chooser.destroy()
     if not filename or not filename.lower().endswith('.pdf'):
-        raise ValueError('Escolha um arquivo PDF local.')
+        raise ui.exception(ValueError, 'workspace.invoice_signatures_ui.escolha_um_arquivo_pdf_local')
     snapshot = record['snapshot']
     period = snapshot['period']
-    confirm = Gtk.MessageDialog(transient_for=parent, modal=True, message_type=Gtk.MessageType.QUESTION,
-        buttons=Gtk.ButtonsType.OK_CANCEL, text='Vincular este PDF à invoice selecionada?')
+    confirm = ui.widget(Gtk.MessageDialog,transient_for=parent, modal=True, message_type=Gtk.MessageType.QUESTION,
+        buttons=Gtk.ButtonsType.OK_CANCEL, text=ui.msg('workspace.invoice_signatures_ui.vincular_este_pdf_a_invoice_selecionada'))
     confirm.set_default_response(Gtk.ResponseType.CANCEL)
-    confirm.format_secondary_text(f"{snapshot['reference']} · registro {record['id'][:8]}\n"
-        f"Cliente: {snapshot['client']['name']} · serviços: {period['start']} a {period['end']}\n\n"
-        'Não há verificação criptográfica nem correspondência automática com esta invoice. '
-        'O arquivo pode não estar assinado. Ele será guardado como “Importada — validação pendente”. '
-        'O original e as versões anteriores serão preservados.')
+    ui.call(confirm,'format_secondary_text',ui.msg('workspace.dialogs.invoice_signatures_ui.confirm_import', reference=snapshot['reference'], id=record['id'][:8], client=snapshot['client']['name'], start=ui.date_text(period['start']), end=ui.date_text(period['end'])))
     try:
         accepted = confirm.run() == Gtk.ResponseType.OK
     finally:
@@ -138,9 +138,9 @@ def show_versions(parent, record):
     gi.require_version('Gtk', '3.0')
     from gi.repository import Gtk, Gio, Pango
     session = SignatureSession(record['id'])
-    dialog = Gtk.Dialog(title='Versões da invoice · ' + record['snapshot']['reference'],
+    dialog = ui.widget(Gtk.Dialog,title=ui.msg('workspace.dialogs.invoice_signatures_ui.title', reference=record['snapshot']['reference']),
         transient_for=parent, modal=True)
-    dialog.add_button('Fechar', Gtk.ResponseType.CLOSE)
+    ui.button(dialog,ui.msg('workspace.invoice_signatures_ui.fechar'), Gtk.ResponseType.CLOSE)
     width, height = 680, 480
     if parent.get_window():
         monitor = parent.get_display().get_monitor_at_window(parent.get_window())
@@ -149,32 +149,31 @@ def show_versions(parent, record):
             width, height = min(width, max(400, area.width - 48)), min(height, max(280, area.height - 64))
     dialog.set_default_size(width, height)
     dialog.set_size_request(400, 280)
-    box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10, margin=16)
+    box = ui.widget(Gtk.Box,orientation=Gtk.Orientation.VERTICAL, spacing=10, margin=16)
     dialog.get_content_area().pack_start(box, True, True, 0)
-    note = Gtk.Label(label='Importação não comprova assinatura nem correspondência com o original. '
-        'Use o VALIDAR e envie o arquivo manualmente; abrir o portal não altera o status local.', xalign=0, wrap=True)
+    note = ui.widget(Gtk.Label,label=ui.msg('workspace.invoice_signatures_ui.importacao_nao_comprova_assinatura_nem_correspondencia_com_o_original_use_o_vali'), xalign=0, wrap=True)
     note.set_max_width_chars(60)
     box.add(note)
-    model = Gtk.ListStore(str, str)
-    tree = Gtk.TreeView(model=model)
-    tree.get_accessible().set_name('Original e versões importadas da invoice')
-    renderer = Gtk.CellRendererText(wrap_mode=Pango.WrapMode.WORD_CHAR, wrap_width=500)
-    tree.append_column(Gtk.TreeViewColumn('Versão / estado', renderer, text=0))
-    scroll = Gtk.ScrolledWindow()
+    model = ui.widget(Gtk.ListStore,str, str)
+    tree = ui.widget(Gtk.TreeView,model=model)
+    ui.call(tree.get_accessible(),'set_name',ui.msg('workspace.invoice_signatures_ui.original_e_versoes_importadas_da_invoice'))
+    renderer = ui.widget(Gtk.CellRendererText,wrap_mode=Pango.WrapMode.WORD_CHAR, wrap_width=500)
+    tree.append_column(ui.tree_column(Gtk,ui.msg('workspace.dialogs.invoice_signatures_ui.column'), renderer, text=0))
+    scroll = ui.widget(Gtk.ScrolledWindow,)
     scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
     scroll.add(tree)
     box.pack_start(scroll, True, True, 0)
-    actions = Gtk.FlowBox()
+    actions = ui.widget(Gtk.FlowBox,)
     actions.set_selection_mode(Gtk.SelectionMode.NONE)
     actions.set_min_children_per_line(1)
     actions.set_max_children_per_line(3)
     box.add(actions)
-    view = Gtk.Button(label='Consultar PDF', sensitive=False)
-    copy = Gtk.Button(label='Salvar cópia…', sensitive=False)
-    validate = Gtk.Button(label='Verificar no VALIDAR', sensitive=False)
+    view = ui.widget(Gtk.Button,label=ui.msg('workspace.invoice_signatures_ui.consultar_pdf'), sensitive=False)
+    copy = ui.widget(Gtk.Button,label=ui.msg('workspace.dialogs.invoice_signatures_ui.copy'), sensitive=False)
+    validate = ui.widget(Gtk.Button,label=ui.msg('workspace.invoice_signatures_ui.verificar_no_validar'), sensitive=False)
     for button in (view, copy, validate):
         actions.add(button)
-    feedback = Gtk.Label(xalign=0, wrap=True, selectable=True)
+    feedback = ui.widget(Gtk.Label,xalign=0, wrap=True, selectable=True)
     feedback.set_max_width_chars(60)
     box.add(feedback)
     def selected(*_):
@@ -187,23 +186,23 @@ def show_versions(parent, record):
             uri = Gio.File.new_for_path(str(session.path())).get_uri()
             Gio.AppInfo.launch_default_for_uri(uri, None)
         except Exception:
-            feedback.set_text('Não foi possível abrir esta versão. Os arquivos foram preservados.')
+            ui.call(feedback,'set_text',ui.msg('workspace.invoice_signatures_ui.nao_foi_possivel_abrir_esta_versao_os_arquivos_foram_preservados'))
             feedback.grab_focus()
     def download(*_):
         try:
             if save_copy(dialog, session.export) is None:
                 copy.grab_focus()
                 return
-            feedback.set_text('Cópia salva sem alterar os bytes da versão guardada.')
+            ui.call(feedback,'set_text',ui.msg('workspace.invoice_signatures_ui.copia_salva_sem_alterar_os_bytes_da_versao_guardada'))
         except Exception:
-            feedback.set_text('Não foi possível concluir a cópia; confira o destino. A versão guardada foi preservada.')
+            ui.call(feedback,'set_text',ui.msg('workspace.invoice_signatures_ui.nao_foi_possivel_concluir_a_copia_confira_o_destino_a_versao_guardada_foi_preser'))
         feedback.grab_focus()
     def validator(*_):
         try:
             open_validator(lambda url: Gio.AppInfo.launch_default_for_uri(url, None))
-            feedback.set_text('Envie o PDF manualmente no VALIDAR. O status local permanece sem validação.')
+            ui.call(feedback,'set_text',ui.msg('workspace.invoice_signatures_ui.envie_o_pdf_manualmente_no_validar_o_status_local_permanece_sem_validacao'))
         except Exception:
-            feedback.set_text('Não foi possível abrir o VALIDAR. Nenhum arquivo foi enviado.')
+            ui.call(feedback,'set_text',ui.msg('workspace.invoice_signatures_ui.nao_foi_possivel_abrir_o_validar_nenhum_arquivo_foi_enviado'))
         feedback.grab_focus()
     def resized(_tree, allocation):
         width = max(180, allocation.width - 24)
@@ -217,11 +216,11 @@ def show_versions(parent, record):
     validate.connect('clicked', validator)
     try:
         result = session.reload()
-        model.append(['Original · PDF gerado da invoice', 'original'])
+        ui.model_append(model,[ui.msg('workspace.dialogs.invoice_signatures_ui.original'), 'original'],owner=tree)
         for version in result['versions']:
-            model.append([version_label(version), version['id']])
+            ui.model_append(model,[version_message(version), version['id']],owner=tree)
         if result['errors']:
-            feedback.set_text(f"{len(result['errors'])} versão(ões) não puderam ser lidas; arquivos preservados.")
+            ui.call(feedback,'set_text',ui.msg('workspace.dialogs.invoice_signatures_ui.unreadable', count=len(result['errors'])))
         dialog.show_all()
         dialog.run()
     finally:
@@ -232,21 +231,16 @@ def sign_invoice(parent, exporter):
     import gi
     gi.require_version('Gtk', '3.0')
     from gi.repository import Gtk, Gio
-    instructions = Gtk.MessageDialog(transient_for=parent, modal=True,
+    instructions = ui.widget(Gtk.MessageDialog,transient_for=parent, modal=True,
         message_type=Gtk.MessageType.INFO, buttons=Gtk.ButtonsType.OK_CANCEL,
-        text='Salvar uma cópia e continuar no assinador gov.br?')
+        text=ui.msg('workspace.invoice_signatures_ui.salvar_uma_copia_e_continuar_no_assinador_gov_br'))
     instructions.set_default_response(Gtk.ResponseType.CANCEL)
-    instructions.format_secondary_text('1. Salve uma cópia do PDF.\n'
-        '2. No portal oficial, entre com sua conta gov.br prata ou ouro.\n'
-        '3. Envie o PDF manualmente, assine e baixe o resultado.\n'
-        '4. Volte ao Orbitz e escolha “Adicionar versão assinada…”.\n\n'
-        'O Orbitz não envia arquivos, não acessa sua conta e não guarda credenciais. '
-        'O login é feito somente no portal externo.')
+    ui.call(instructions,'format_secondary_text',ui.msg('workspace.invoice_signatures_ui.1_salve_uma_copia_do_pdf_2_no_portal_oficial_entre_com_sua_conta_gov_br_prata_ou'))
     try:
         accepted = instructions.run() == Gtk.ResponseType.OK
     finally:
         instructions.destroy()
     if not accepted:
         return None, False
-    return assist_sign(lambda: save_copy(parent, exporter, 'Salvar cópia para assinar no gov.br'),
+    return assist_sign(lambda: save_copy(parent, exporter, ui.msg('workspace.dialogs.invoice_signatures_ui.sign_copy')),
         lambda url: Gio.AppInfo.launch_default_for_uri(url, None))

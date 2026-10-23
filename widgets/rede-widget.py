@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from orbitz_i18n import t
 import time
 import sys
 import json
@@ -28,7 +29,7 @@ def counters(name):
         if device.strip() == name:
             fields = values.split()
             return int(fields[0]), int(fields[8])
-    raise ValueError('Interface indisponível')
+    raise ValueError(t('widgets.rede_widget.interface_unavailable'))
 
 def rate(value):
     value = max(0, value)
@@ -46,7 +47,7 @@ def main():
     try:
         name = interface()
         if not name:
-            print('Rede desconectada')
+            print(t('widgets.rede_widget.network_disconnected'))
         else:
             first = counters(name)
             start = time.monotonic()
@@ -55,7 +56,7 @@ def main():
             elapsed = time.monotonic() - start
             print(f'↓ {rate((second[0]-first[0])/elapsed)}   ↑ {rate((second[1]-first[1])/elapsed)}')
     except (OSError, ValueError, IndexError):
-        print('Rede indisponível')
+        print(t('widgets.rede_widget.network_unavailable'))
 
 
 if __name__ == '__main__':

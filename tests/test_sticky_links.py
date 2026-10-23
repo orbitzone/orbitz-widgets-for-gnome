@@ -9,6 +9,7 @@ from unittest.mock import Mock,patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'sticky-notes'))
 import link_targets
 from link_targets import target_at,link_at
+from ui_language import ui
 
 class StickyLinkTests(unittest.TestCase):
     def test_web_email_and_exact_clicked_destination(self):
@@ -87,7 +88,7 @@ class StickyLinkTests(unittest.TestCase):
         tree=ast.parse((Path(__file__).resolve().parents[1]/'sticky-notes/card.py').read_text())
         cls=next(n for n in tree.body if isinstance(n,ast.ClassDef))
         fn=next(n for n in cls.body if isinstance(n,ast.FunctionDef) and n.name=='text_press')
-        launch=Mock();namespace=dict(Gdk=SimpleNamespace(ModifierType=SimpleNamespace(CONTROL_MASK=4)),
+        launch=Mock();namespace=dict(ui=ui,Gdk=SimpleNamespace(ModifierType=SimpleNamespace(CONTROL_MASK=4)),
             Gio=SimpleNamespace(AppInfo=SimpleNamespace(launch_default_for_uri=launch)),target_at=target_at)
         exec(compile(ast.Module(body=[fn],type_ignores=[]),'card.py','exec'),namespace)
         view=Mock();view.window_to_buffer_coords.return_value=(50,100)

@@ -1,4 +1,5 @@
 """Provider lifecycle: private vault credentials, public metadata, cache-independent I/O."""
+from ui_language import ui as _i18n
 from contextlib import contextmanager
 import fcntl
 import hashlib
@@ -23,37 +24,37 @@ def _identity(provider,resource):return provider+'-'+hashlib.sha256(resource.enc
 
 
 def _validate(provider,identity):
-    if provider not in ('google','calendly') or not isinstance(identity,str) or not re.fullmatch(provider+r'-[0-9a-f]{64}',identity):raise CalendarError('Conexão de calendário inválida.')
+    if provider not in ('google','calendly') or not isinstance(identity,str) or not re.fullmatch(provider+r'-[0-9a-f]{64}',identity):raise _i18n.exception(CalendarError, 'domain.calendar_accounts.invalid_calendar_connection')
 
 
 @contextmanager
 def _lock(provider,identity,cancel_event=None):
     _validate(provider,identity)
-    if LOCK_ROOT.absolute().resolve()!=LOCK_ROOT.absolute():raise CalendarError('Diretório de autorização vinculado recusado.')
+    if LOCK_ROOT.absolute().resolve()!=LOCK_ROOT.absolute():raise _i18n.exception(CalendarError, 'domain.calendar_accounts.symlinked_authorization_directory_refused')
     LOCK_ROOT.mkdir(parents=True,exist_ok=True,mode=0o700);LOCK_ROOT.chmod(0o700)
     fd=os.open(LOCK_ROOT/(identity+'.lock'),os.O_CREAT|os.O_RDWR|os.O_NOFOLLOW|os.O_NONBLOCK,0o600)
     with os.fdopen(fd,'r+') as stream:
-        if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):raise CalendarError('Lock de autorização inválido.')
+        if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):raise _i18n.exception(CalendarError, 'domain.calendar_accounts.invalid_authorization_lock')
         os.fchmod(stream.fileno(),0o600)
         deadline=time.monotonic()+20
         while True:
             http.cancelled(cancel_event)
             try:fcntl.flock(stream,fcntl.LOCK_EX|fcntl.LOCK_NB);break
             except BlockingIOError:
-                if time.monotonic()>=deadline:raise CalendarError('Outra autorização está em andamento; tente novamente.') from None
+                if time.monotonic()>=deadline:raise _i18n.exception(CalendarError, 'domain.calendar_accounts.another_authorization_is_in_progress_try_again') from None
                 time.sleep(.05)
         yield
 
 
 def _label(value):
-    if not isinstance(value,str) or not 0<len(value.strip())<=100 or any(ord(c)<32 for c in value):raise CalendarError('Informe um nome de conexão com até 100 caracteres.')
+    if not isinstance(value,str) or not 0<len(value.strip())<=100 or any(ord(c)<32 for c in value):raise _i18n.exception(CalendarError, 'domain.calendar_accounts.enter_a_connection_name_of_up_to_100_characters')
     return value.strip()
 
 
 def _connected(provider,identity):
     _validate(provider,identity)
     account=next((account for account in remote.read()['accounts'] if account.get('id')==identity and account.get('provider')==provider),None)
-    if account is None:raise CalendarError('Conexão removida; atualize a lista de calendários.')
+    if account is None:raise _i18n.exception(CalendarError, 'domain.calendar_accounts.connection_removed_refresh_the_calendar_list')
     return account
 
 
@@ -61,7 +62,7 @@ def _commit(account,payload,cancel_event,access=None):
     provider,identity=account['provider'],account['id']
     with _lock(provider,identity,cancel_event):
         http.cancelled(cancel_event)
-        if any(value.get('id')==identity for value in remote.read()['accounts']):raise CalendarError('Esta conta já está conectada; desconecte antes de conectar novamente.')
+        if any(value.get('id')==identity for value in remote.read()['accounts']):raise _i18n.exception(CalendarError, 'domain.calendar_accounts.this_account_is_already_connected_disconnect_before_reconnecting')
         vault=ProviderVault();written=False;added=False
         try:
             vault.put(provider,identity,payload);written=True
@@ -79,7 +80,7 @@ def _commit(account,payload,cancel_event,access=None):
             if written:
                 try:vault.delete(provider,identity)
                 except Exception:pending=True
-            if pending:raise CalendarError('Conexão não confirmada; verifique a remoção da conexão e da autorização no cofre.') from None
+            if pending:raise _i18n.exception(CalendarError, 'domain.calendar_accounts.connection_not_confirmed_check_removal_of_the_connection_and_vaul') from None
             raise
 
 
@@ -127,10 +128,10 @@ def _access(provider,identity,cancel_event):
 
 def events(account,calendar,month,*,cancel_event=None):
     try:provider,identity=account['provider'],account['id']
-    except (KeyError,TypeError):raise CalendarError('Conexão de calendário inválida.') from None
+    except (KeyError,TypeError):raise _i18n.exception(CalendarError, 'domain.calendar_accounts.invalid_calendar_connection') from None
     connected=_connected(provider,identity)
     current=next((value for value in connected['calendars'] if value.get('id')==calendar.get('id')),None)
-    if current!=calendar:raise CalendarError('Calendário mudou; atualize a lista antes de consultar.')
+    if current!=calendar:raise _i18n.exception(CalendarError, 'domain.calendar_accounts.calendar_changed_refresh_the_list_before_querying')
     token=_access(provider,identity,cancel_event)
     client=(GoogleClient if provider=='google' else CalendlyClient)(token,cancel_event=cancel_event)
     try:return client.events(calendar,identity,month)
@@ -141,7 +142,7 @@ def events(account,calendar,month,*,cancel_event=None):
 
 def disconnect(account):
     try:provider,identity=account['provider'],account['id']
-    except (KeyError,TypeError):raise CalendarError('Conexão de calendário inválida.') from None
+    except (KeyError,TypeError):raise _i18n.exception(CalendarError, 'domain.calendar_accounts.invalid_calendar_connection') from None
     with _lock(provider,identity):
         _ACCESS.pop(identity,None)
         ProviderVault().delete(provider,identity)

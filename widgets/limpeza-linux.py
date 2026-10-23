@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 """Conservative cache cleanup; no deletion without an interactive confirmation."""
+from orbitz_i18n import t
 import argparse
 import fcntl
 import json
@@ -120,40 +121,43 @@ def interactive():
     try:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError:
-        print('Já existe uma limpeza aberta.')
+        print(t('widgets.limpeza_linux.a_cleanup_is_already_open'))
         return
-    print('Limpeza da partição do Linux (/)\n')
-    print('Rotina sugerida: analisar uma vez por mês ou quando o uso passar de 90%.')
-    print('Caches do usuário: somente miniaturas e downloads do pip sem acesso/alteração há mais de 30 dias, na mesma partição de /.')
-    print('APT: remove os instaladores baixados; os programas instalados continuam disponíveis.')
-    print('Documentos, Downloads, lixeira, navegadores, logs e /tmp ficam preservados.\n')
-    reports = [(name, path, scan_cache(path)) for name, path in cache_paths()]
+    print(t('widgets.limpeza_linux.linux_partition_cleanup'))
+    print(t('widgets.limpeza_linux.suggested_routine_analyze_monthly_or_when_usage_exceeds_90'))
+    print(t('widgets.limpeza_linux.user_caches_only_thumbnails_and_pip_downloads_not_accessed_change'))
+    print(t('widgets.limpeza_linux.apt_removes_downloaded_installers_installed_programs_remain_avail'))
+    print(t('widgets.limpeza_linux.documents_downloads_trash_browsers_logs_and_tmp_are_preserved'))
+    # cache_paths names are legacy JSON keys; localize their terminal labels only.
+    labels = {'Miniaturas antigas': t('widgets.limpeza_linux.old_thumbnails'),
+              'Downloads antigos do pip': t('widgets.limpeza_linux.old_pip_downloads')}
+    reports = [(labels[name], path, scan_cache(path)) for name, path in cache_paths()]
     for name, path, report in reports:
-        print(f'{name}: {size(report["bytes"])} · {report["files"]} arquivos' + (' · análise parcial' if report['partial'] else ''))
+        print(t('widgets.limpeza_linux.value0_value1_value2_files', value0=name, value1=size(report['bytes']), value2=report['files']) + (t('widgets.limpeza_linux.partial_analysis') if report['partial'] else ''))
     apt = apt_size()
-    print(f'Pacotes APT: aproximadamente {size(apt)}')
-    print('\n1 — Limpar caches antigos do usuário\n2 — Limpar pacotes baixados do APT (pede senha)\n3 — Executar as duas opções\nEnter — Cancelar')
-    choice = input('\nOpção: ').strip()
+    print(t('widgets.limpeza_linux.apt_packages_approximately_value0', value0=size(apt)))
+    print(t('widgets.limpeza_linux.1_clean_old_user_caches_2_clean_downloaded_apt_packages_asks_for'))
+    choice = input(t('widgets.limpeza_linux.option')).strip()
     if choice not in ('1', '2', '3'):
         return
-    if input('Digite LIMPAR para confirmar: ').strip() != 'LIMPAR':
-        print('Cancelado.')
+    if input(t('widgets.limpeza_linux.type_limpar_to_confirm')).strip() != 'LIMPAR':
+        print(t('widgets.limpeza_linux.cancelled'))
         return
     before = os.statvfs('/')
     if choice in ('1', '3'):
         for name, path, _ in reports:
             report = scan_cache(path, delete=True)
-            print(f'{name}: {report["files"]} arquivos removidos · {size(report["bytes"])} · {report["skipped"]} ignorados' + (' · execução parcial; analise novamente' if report['partial'] else ''))
+            print(t('widgets.limpeza_linux.value0_value1_files_removed_value2_value3_skipped', value0=name, value1=report['files'], value2=size(report['bytes']), value3=report['skipped']) + (t('widgets.limpeza_linux.partial_execution_analyze_again') if report['partial'] else ''))
     if choice in ('2', '3'):
         if apt:
             status = subprocess.run(['/usr/bin/sudo', '/usr/bin/apt-get', 'clean']).returncode
-            print('APT: concluído.' if status == 0 else f'APT: falhou ou foi cancelado (código {status}).')
+            print(t('widgets.limpeza_linux.apt_completed') if status == 0 else t('widgets.limpeza_linux.apt_failed_or_cancelled_code_value0', value0=status))
         else:
-            print('APT: nenhum pacote elegível nesta partição.')
+            print(t('widgets.limpeza_linux.apt_no_eligible_packages_on_this_partition'))
     after = os.statvfs('/')
-    print(f'\nVariação do espaço disponível em /: {size((after.f_bavail - before.f_bavail) * after.f_frsize)}')
-    print('Outros programas podem alterar o espaço durante a limpeza. Clique em Atualizar no painel do SSD.')
-    input('\nEnter para fechar: ')
+    print(t('widgets.limpeza_linux.change_in_available_space_on_value0', value0=size((after.f_bavail - before.f_bavail) * after.f_frsize)))
+    print(t('widgets.limpeza_linux.other_programs_may_change_disk_space_during_cleanup_click_refresh'))
+    input(t('widgets.limpeza_linux.enter_to_close'))
 
 
 def main():
@@ -165,11 +169,11 @@ def main():
         launch_terminal_command(['/usr/bin/python3', str(Path(__file__).resolve()), '--interactive'])
     elif args.interactive:
         if not sys.stdin.isatty():
-            raise SystemExit('A limpeza exige confirmação em um terminal.')
+            raise SystemExit(t('widgets.limpeza_linux.cleanup_requires_confirmation_in_a_terminal'))
         try:
             interactive()
         except (EOFError, KeyboardInterrupt):
-            print('\nCancelado.')
+            print(t('widgets.limpeza_linux.cancelled_92aa83'))
     else:
         print(json.dumps({'caches': {name: scan_cache(path) for name, path in cache_paths()}, 'apt_bytes': apt_size()}, ensure_ascii=False))
 

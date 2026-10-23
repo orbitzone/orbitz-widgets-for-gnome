@@ -26,11 +26,11 @@ Object.assign(Gtk,{INVALID_LIST_POSITION:4294967295,StringList,Align:{CENTER:0,F
 const Adw={};for(const key of ['PreferencesPage','PreferencesGroup','ActionRow','ExpanderRow','HeaderBar','Leaflet','ApplicationWindow','ComboRow'])Adw[key]=Widget;
 // Intentionally no Adw.SwitchRow: actual GNOME42/libadwaita1.1 does not provide it.
 const settingsModules={DialogWindow:{DialogWindow:Widget},timeZoneCatalog:{TimeZoneCatalog:{}},TimeZoneDialog:{},AboutPage:{AboutPage:Widget}};
-const Me={metadata:{},imports:{settings:settingsModules,utils:{},worldClock:{WorldClock:{}}}};
+const Me={path:path.resolve(__dirname,'../extension'),metadata:{},imports:{uiLanguage:{Language:{}},settings:settingsModules,utils:{},worldClock:{WorldClock:{}}}};
 const catalogRequests=[];let deferredCatalogs=false;const pendingCatalogs=[];
 const gi={Gtk,Adw,Gdk:{DragAction:{MOVE:1},RGBA:class{parse(){} }},
  GObject:{registerClass:(...args)=>args.at(-1),ParamSpec:{int(){},string(){}},ParamFlags:{READWRITE:1}},
- GLib:{MAXINT32:2147483647,Variant:class{constructor(type,value){this.value=value;}},
+ GLib:{getenv:()=>null,FileTest:{IS_REGULAR:1},file_test:p=>fs.existsSync(p),file_get_contents:p=>[true,fs.readFileSync(p)],idle_add:(priority,fn)=>{fn();return 1;},PRIORITY_DEFAULT_IDLE:0,SOURCE_REMOVE:0,MAXINT32:2147483647,Variant:class{constructor(type,value){this.value=value;}},
   get_user_data_dir:()=>'/user-data',build_filenamev:p=>p.join('/'),shell_quote:x=>`'${x}'`,
   shell_parse_argv:x=>[true,x.match(/'[^']*'|\S+/g).map(t=>t.replace(/^'|'$/g,''))],markup_escape_text:x=>x},
  Gio:{icon_new_for_string:x=>x,SubprocessFlags:{STDOUT_PIPE:1,STDERR_SILENCE:2},Subprocess:{new(argv){
@@ -38,15 +38,18 @@ const gi={Gtk,Adw,Gdk:{DragAction:{MOVE:1},RGBA:class{parse(){} }},
    const output=crypto?{source:'Powered by CoinPaprika',assets:[{id:'btc-bitcoin',symbol:'BTC',name:'Bitcoin'},{id:'eth-ethereum',symbol:'ETH',name:'Ethereum'}]}:{USD:'US Dollar',EUR:'Euro'};
    const proc={communicate_utf8_async:(a,b,cb)=>{if(deferredCatalogs)pendingCatalogs.push(()=>cb(proc,{}));else cb(proc,{});},communicate_utf8_finish:()=>[true,JSON.stringify(output)],get_successful:()=>true};return proc;
  }}}};
+gi.Gio.SubprocessLauncher=class{setenv(){}spawnv(args){return gi.Gio.Subprocess.new(args);}};
 const imports={gi,misc:{extensionUtils:{getCurrentExtension:()=>Me}},gettext:{domain:()=>({gettext:x=>x})}};
-function load(file,name){const context=vm.createContext({imports,console});vm.runInContext("String.prototype.format=function(...args){let i=0;return this.replace(/%s/g,()=>args[i++]);};",context);vm.runInContext(fs.readFileSync(path.join(__dirname,'../extension',file),'utf8'),context);return context[name];}
+function load(file,name){const context=vm.createContext({imports,console,TextDecoder,WeakRef,logError:error=>{throw error;}});vm.runInContext("String.prototype.format=function(...args){let i=0;return this.replace(/%s/g,()=>args[i++]);};",context);vm.runInContext(fs.readFileSync(path.join(__dirname,'../extension',file),'utf8'),context);return context[name];}
 const UtilsContext=vm.createContext({imports});vm.runInContext(fs.readFileSync(path.join(__dirname,'../extension/utils.js'),'utf8'),UtilsContext);
 let data=[JSON.parse(JSON.stringify(UtilsContext.CurrencyWidgetSettings))];
 data[0][1].Text_Command="/usr/bin/python3 '/user-data/orbitz-widgets/collectors/currency-widget.py' --quote USD";
 let changed={};
-const settings={get_value:key=>({deep_unpack:()=>JSON.parse(JSON.stringify(key==='changed-data'?changed:data))}),set_value(key,value){if(key==='widget-data')data=JSON.parse(JSON.stringify(value.value));else if(key==='changed-data')changed=value.value;}};
+const settings={get_string:()=> 'en-US',connect:()=>1,disconnect(){},get_value:key=>({deep_unpack:()=>JSON.parse(JSON.stringify(key==='changed-data'?changed:data))}),set_value(key,value){if(key==='widget-data')data=JSON.parse(JSON.stringify(value.value));else if(key==='changed-data')changed=value.value;}};
 Me.imports.utils={getData:(all,w,e,key,parse)=>parse==='int'?Number(all[w][e][key]):parse==='bool'?all[w][e][key]==='true':all[w][e][key],unpackData:()=>settings.get_value('widget-data').deep_unpack(),setData:(all,w,e,key,value)=>{all[w][e][key]=String(value);settings.set_value('widget-data',new gi.GLib.Variant('aaa{ss}',all));}};
 settingsModules.WidgetsData={WidgetsData:{data}};
+Me.imports.uiLanguage={Language:load('uiLanguage.js','Language')};
+Me.imports.uiLanguage.Language.configure(settings);
 for(const name of ['SubPage','WidgetSubPage','TextLabelSubPage','CommandLabelSubPage'])settingsModules[name]={[name]:load('settings/'+name+'.js',name)};
 for(const name of ['DigitalClockSubPage','AnalogClockSubPage'])settingsModules[name]={[name]:Widget};
 settingsModules.WidgetSettingsPage={WidgetSettingsPage:load('settings/WidgetSettingsPage.js','WidgetSettingsPage')};

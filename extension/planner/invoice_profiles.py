@@ -1,4 +1,5 @@
 """Private invoice preferences, independent of task/timesheet/calendar data."""
+from ui_language import ui as _i18n
 import fcntl
 import json
 import os
@@ -38,7 +39,7 @@ def read(path=None):
             validate_profile(dict(sheet,issuer=data['issuer'],language=data['language']))
         return data
     except (ValueError, KeyError, TypeError):
-        raise ValueError('Arquivo de perfis de fatura inválido; original preservado.') from None
+        raise _i18n.exception(ValueError, 'domain.invoice_profiles.invalid_invoice_profile_file_original_preserved') from None
 
 
 def load(sheet_id, path=None, *, context=None):
@@ -59,13 +60,13 @@ def save(sheet_id, profile, path=None):
     fd = os.open(str(path)+'.lock', os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600)
     with os.fdopen(fd,'r+') as lock:
         if not stat.S_ISREG(os.fstat(lock.fileno()).st_mode):
-            raise ValueError('Lock de perfis inválido.')
+            raise _i18n.exception(ValueError, 'domain.invoice_profiles.invalid_profile_lock')
         os.fchmod(lock.fileno(),0o600)
         fcntl.flock(lock,fcntl.LOCK_EX)
         data = read(path)
         data['issuer'],data['language'] = profile['issuer'],profile['language']
         data['sheets'][sheet_id] = {key:profile[key] for key in ('client','rate','currency')}
         if len(json.dumps(data,ensure_ascii=False).encode('utf-8')) > MAX_BYTES:
-            raise ValueError('Limite do arquivo de perfis atingido; original preservado.')
+            raise _i18n.exception(ValueError, 'domain.invoice_profiles.profile_file_size_limit_reached_original_preserved')
         atomic_json.write(path,data,prefix='.invoice-profiles-',encoding='utf-8')
     return load(sheet_id,path)

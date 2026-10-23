@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 """Text/JSON adapter for the existing Orbitz fiat and crypto converter."""
+from orbitz_i18n import t
 
 import argparse
 import json
@@ -46,13 +47,13 @@ def main(argv=None, *, quote_provider=quote, catalog_provider=currencies,
             item = crypto_quote_provider(args.asset, args.reverse)
         else:
             if len(args.quote) != 3 or not args.quote.isalpha() or not args.quote.isascii():
-                raise ValueError('Código de moeda inválido.')
+                raise ValueError(t('widgets.currency_widget.invalid_currency_code'))
             source, target = (args.quote.upper(), 'BRL') if args.reverse else ('BRL', args.quote.upper())
             item = quote_provider(source, target)
         output(json.dumps({**item, 'rate': str(item['rate'])}, ensure_ascii=False) if args.quote_json else render_quote(item))
         return 0
     except (FxError, ValueError) as error:
-        output(json.dumps({'error': str(error)}, ensure_ascii=False) if args.quote_json or args.catalog_json else f'Cotação indisponível · {error}')
+        output(json.dumps({'error': str(error)}, ensure_ascii=False) if args.quote_json or args.catalog_json else t('widgets.currency_widget.quote_unavailable_value0', value0=error))
         return 0
 
 

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Bounded package queries and explicit terminal actions for Ubuntu."""
+from orbitz_i18n import t
 import json,math,os,re,sys,subprocess,shutil,time
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
@@ -7,10 +8,10 @@ from widget_runtime import run as bounded_run,load,save,read_json,launch_termina
 
 def run(args, **kwargs):
     return bounded_run(['/usr/bin/env', 'LC_ALL=C', *args], **kwargs)
-ACTIONS=[('buscar','Buscar atualizações','sudo apt update && snap refresh --list && flatpak update --appstream'),('apt','Atualizar APT','sudo apt upgrade'),('completa','Atualização completa','sudo apt full-upgrade'),('cache','Limpar cache','sudo apt autoclean'),('dependencias','Remover sobras','sudo apt autoremove'),('snap','Atualizar Snap','sudo snap refresh'),('flatpak','Atualizar Flatpak','flatpak update'),('sequencia','Atualizar e limpar','sudo apt update && sudo apt upgrade && sudo apt autoclean')]
+ACTIONS=[('buscar','widgets.atualizacoes_widget.check_for_updates','sudo apt update && snap refresh --list && flatpak update --appstream'),('apt','widgets.atualizacoes_widget.update_apt','sudo apt upgrade'),('completa','widgets.atualizacoes_widget.full_upgrade','sudo apt full-upgrade'),('cache','widgets.atualizacoes_widget.clean_cache','sudo apt autoclean'),('dependencias','widgets.atualizacoes_widget.remove_unused_packages','sudo apt autoremove'),('snap','widgets.atualizacoes_widget.update_snap','sudo snap refresh'),('flatpak','widgets.atualizacoes_widget.update_flatpak','flatpak update'),('sequencia','widgets.atualizacoes_widget.update_and_clean','sudo apt update && sudo apt upgrade && sudo apt autoclean')]
 
 def actions():
-    result=[{'id':i,'name':n,'command':c} for i,n,c in ACTIONS]
+    result=[{'id':i,'name':t(n),'command':c} for i,n,c in ACTIONS]
     config=read_json(Path(os.environ.get('XDG_CONFIG_HOME',Path.home()/'.config'))/'orbitz-widgets'/'update-actions.json')
     if isinstance(config,list):
         for i,item in enumerate(config[:10]):
@@ -59,8 +60,12 @@ def collect():
     for g in groups:
         if g['state']=='OK':save('updates-'+g['source']+'.json',g)
         partial|=g['state'].startswith(('Falha','Consulta'))
+        # Keep collection/cache state markers stable; translate only notices.
+        display_state = {'Não instalado': t('widgets.atualizacoes_widget.not_installed'),
+                         'Falha na consulta; dados anteriores': t('widgets.atualizacoes_widget.previous_data'),
+                         'Consulta indisponível': t('widgets.atualizacoes_widget.query_unavailable')}.get(g['state'], g['state'])
         stamp=time.strftime('%d/%m %H:%M',time.localtime(g['checked'])) if g.get('checked') else '—'
-        notices.append(f"{g['source']}: {g['state']} · consulta {stamp}")
+        notices.append(t('widgets.atualizacoes_widget.value0_value1_checked_value2', value0=g['source'], value1=display_state, value2=stamp))
         for item in g['items']:items.append({**item,'source':g['source']})
     timestamps=[]
     for path in Path('/var/lib/apt/lists').glob('*InRelease'):
@@ -68,24 +73,24 @@ def collect():
             if path.is_file():timestamps.append(path.stat().st_mtime)
         except OSError:continue
     oldest=min(timestamps) if timestamps else 0
-    index=time.strftime('%d/%m %H:%M',time.localtime(oldest)) if oldest else 'indisponível'
-    if not oldest or time.time()-oldest>86400:notices.append('Índice APT antigo ou ausente; use Buscar atualizações.')
-    notices.append('Flatpak usa metadados locais; Snap consulta o serviço. Segurança identificada pela origem APT.')
+    index=time.strftime('%d/%m %H:%M',time.localtime(oldest)) if oldest else t('widgets.atualizacoes_widget.unavailable')
+    if not oldest or time.time()-oldest>86400:notices.append(t('widgets.atualizacoes_widget.apt_index_old_or_missing_use_check_for_updates'))
+    notices.append(t('widgets.atualizacoes_widget.flatpak_uses_local_metadata_snap_queries_the_service_security_upd'))
     reboot=Path('/var/run/reboot-required').exists()
     if reboot:
-        try:notices.append('Pacotes que pediram reinício: '+Path('/var/run/reboot-required.pkgs').read_text()[:1024].strip().replace('\n',', '))
+        try:notices.append(t('widgets.atualizacoes_widget.packages_requesting_a_restart')+Path('/var/run/reboot-required.pkgs').read_text()[:1024].strip().replace('\n',', '))
         except OSError:pass
-    text=f'Atualizações: {len(items)}'+(' · parcial' if partial else '')+(' · Reiniciar' if reboot else '')
+    text=t('widgets.atualizacoes_widget.updates_value0', value0=len(items))+(t('widgets.atualizacoes_widget.partial') if partial else '')+(t('widgets.atualizacoes_widget.restart_required') if reboot else '')
     return {'text':text,'items':items[:100],'omitted':max(0,len(items)-100),'reboot':reboot,'index_updated':index,'error':'','notices':notices,'actions':actions()}
 
 def launch(identifier):
     action=next((a for a in actions() if a['id']==identifier),None)
-    if not action:raise ValueError('Ação indisponível.')
+    if not action:raise ValueError(t('widgets.atualizacoes_widget.action_unavailable'))
     launch_terminal(action['name'],action['command'])
 
 if __name__=='__main__':
     if '--action' in sys.argv:launch(sys.argv[sys.argv.index('--action')+1])
     else:
         try:payload=collect()
-        except (OSError,ValueError,subprocess.SubprocessError):payload={'text':'Atualizações: indisponíveis','items':[],'omitted':0,'reboot':False,'index_updated':'indisponível','error':'Falha na consulta.','notices':[],'actions':actions()}
+        except (OSError,ValueError,subprocess.SubprocessError):payload={'text':t('widgets.atualizacoes_widget.updates_unavailable'),'items':[],'omitted':0,'reboot':False,'index_updated':t('widgets.atualizacoes_widget.unavailable'),'error':t('widgets.atualizacoes_widget.query_failed'),'notices':[],'actions':actions()}
         print('AZCLOCK_UPDATES:'+json.dumps(payload,ensure_ascii=False))

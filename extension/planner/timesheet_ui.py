@@ -1,4 +1,5 @@
 """Three-field timesheet editor embedded in the calendar."""
+from ui_language import ui
 from datetime import date,datetime
 from pathlib import Path
 import gi
@@ -6,7 +7,7 @@ gi.require_version('Gtk','3.0')
 from gi.repository import Gtk,GLib,Pango,Gdk
 import store
 import ui_state
-from workspace_ui import context_text
+from workspace_ui import context_message
 import timesheet as model
 
 class Timesheet(Gtk.Box):
@@ -19,14 +20,14 @@ class Timesheet(Gtk.Box):
         self.context_label.set_line_wrap_mode(Pango.WrapMode.WORD_CHAR)
         self.context_label.set_max_width_chars(70);self.pack_start(self.context_label,False,False,0)
         self.period=Gtk.ComboBoxText()
-        for key,title in [('day','Dia selecionado'),('week','Semana (segunda a domingo)'),('month','Mês selecionado')]:self.period.append(key,title)
+        for key,title in [('day',ui.msg('workspace.live.period_day')),('week',ui.msg('workspace.live.period_week')),('month',ui.msg('workspace.live.period_month'))]:ui.combo_append(self.period,key,title)
         self.period.set_active_id(ui_state.get('period:'+sheet_id,'day'));self.period.connect('changed',self.period_changed)
         toolbar=Gtk.Box(spacing=8);self.pack_start(toolbar,False,False,0);toolbar.pack_start(self.period,True,True,0)
-        export=Gtk.Button(label='Exportar CSV');export.connect('clicked',self.export);toolbar.pack_end(export,False,False,0)
-        archive=Gtk.Button.new_from_icon_name('folder-symbolic',Gtk.IconSize.BUTTON);archive.set_tooltip_text('Arquivar esta timesheet')
+        export=ui.widget(Gtk.Button,label=ui.msg('workspace.timesheet_ui.exportar_csv'));export.connect('clicked',self.export);toolbar.pack_end(export,False,False,0)
+        archive=Gtk.Button.new_from_icon_name('folder-symbolic',Gtk.IconSize.BUTTON);ui.call(archive,'set_tooltip_text',ui.msg('workspace.timesheet_ui.arquivar_esta_timesheet'))
         archive.connect('clicked',lambda *_:self.window.archive_sheet(self));toolbar.pack_end(archive,False,False,0)
-        rename=Gtk.Button.new_from_icon_name('document-edit-symbolic',Gtk.IconSize.BUTTON);rename.set_tooltip_text('Editar contexto da timesheet');rename.connect('clicked',lambda *_:self.window.rename_sheet(self));toolbar.pack_end(rename,False,False,0)
-        self.timer_button=Gtk.Button(label='Iniciar atividade agora');self.timer_button.connect('clicked',self.timer_click);self.pack_start(self.timer_button,False,False,0)
+        rename=Gtk.Button.new_from_icon_name('document-edit-symbolic',Gtk.IconSize.BUTTON);ui.call(rename,'set_tooltip_text',ui.msg('workspace.timesheet_ui.editar_contexto_da_timesheet'));rename.connect('clicked',lambda *_:self.window.rename_sheet(self));toolbar.pack_end(rename,False,False,0)
+        self.timer_button=ui.widget(Gtk.Button,label=ui.msg('workspace.timesheet_ui.iniciar_atividade_agora'));self.timer_button.connect('clicked',self.timer_click);self.pack_start(self.timer_button,False,False,0)
         self.active_label=Gtk.Label(xalign=0,wrap=True);self.pack_start(self.active_label,False,False,0)
         self.summary=Gtk.Label(xalign=0,wrap=True)
         scroll=Gtk.ScrolledWindow();scroll.set_policy(Gtk.PolicyType.AUTOMATIC,Gtk.PolicyType.AUTOMATIC);self.pack_start(scroll,True,True,0)
@@ -34,18 +35,18 @@ class Timesheet(Gtk.Box):
         self.pack_start(self.summary,False,False,0)
         self.editor_label=Gtk.Label(xalign=0);self.pack_start(self.editor_label,False,False,0)
         editor=Gtk.Grid(column_spacing=8,row_spacing=6);self.pack_start(editor,False,False,0);self.fields={}
-        for col,(key,title) in enumerate([('description','Descrição'),('start','Início · HH:MM'),('end','Fim · HH:MM')]):
-            editor.attach(Gtk.Label(label=title,xalign=0),col,0,1,1)
+        for col,(key,title) in enumerate([('description',ui.msg('workspace.live.description')),('start',ui.msg('workspace.live.start_hint')),('end',ui.msg('workspace.live.end_hint'))]):
+            editor.attach(ui.widget(Gtk.Label,label=title,xalign=0),col,0,1,1)
             field=Gtk.Entry();field.set_max_length(1000 if col==0 else 5);field.set_width_chars(24 if col==0 else 7)
             field.set_hexpand(col==0);field.connect('changed',self.changed);field.connect('activate',lambda *_:self.save())
             self.fields[key]=field;editor.attach(field,col,1,1,1)
         editor.set_focus_chain(list(self.fields.values()))
         actions=Gtk.Box(spacing=8);self.pack_start(actions,False,False,0)
-        save=Gtk.Button(label='Salvar e nova linha ↵');save.connect('clicked',lambda *_:self.save());actions.pack_start(save,False,False,0)
-        cancel=Gtk.Button(label='Limpar / cancelar edição');cancel.connect('clicked',lambda *_:self.reset());actions.pack_start(cancel,False,False,0)
-        self.undo=Gtk.Button(label='Desfazer exclusão');self.undo.connect('clicked',lambda *_:self.commit({'action':'timesheet_undo'}));actions.pack_end(self.undo,False,False,0)
+        save=ui.widget(Gtk.Button,label=ui.msg('workspace.timesheet_ui.salvar_e_nova_linha'));save.connect('clicked',lambda *_:self.save());actions.pack_start(save,False,False,0)
+        cancel=ui.widget(Gtk.Button,label=ui.msg('workspace.timesheet_ui.limpar_cancelar_edicao'));cancel.connect('clicked',lambda *_:self.reset());actions.pack_start(cancel,False,False,0)
+        self.undo=ui.widget(Gtk.Button,label=ui.msg('workspace.timesheet_ui.desfazer_exclusao'));self.undo.connect('clicked',lambda *_:self.commit({'action':'timesheet_undo'}));actions.pack_end(self.undo,False,False,0)
         self.message=Gtk.Label(xalign=0,wrap=True);self.pack_start(self.message,False,False,0)
-        self.pack_start(Gtk.Label(label='Tab: próximo campo · Enter: salvar e continuar · Horários em minutos',xalign=0,wrap=True),False,False,0)
+        self.pack_start(ui.widget(Gtk.Label,label=ui.msg('workspace.timesheet_ui.tab_proximo_campo_enter_salvar_e_continuar_horarios_em_minutos'),xalign=0,wrap=True),False,False,0)
         if readonly:
             for actor in [archive,rename,self.timer_button,self.editor_label,editor,actions]:
                 actor.set_no_show_all(True);actor.hide()
@@ -53,13 +54,14 @@ class Timesheet(Gtk.Box):
             saved=ui_state.get('draft:'+sheet_id,{}) if not readonly else {}
             self.drafts=saved.get('days',{});self.inline_drafts=saved.get('rows',{})
         except Exception as error:
-            self.drafts={};self.inline_drafts={};self.message.set_text(str(error))
+            self.drafts={};self.inline_drafts={};ui.call(self.message,'set_text',ui.error_message(error))
         self.tick=0;self.connect('destroy',self.cleanup)
 
     def period_changed(self,*_):
+        if getattr(self.period,'_orbitz_language_updating',False):return
         try:
             if not self.readonly:ui_state.set('period:'+self.sheet_id,self.period.get_active_id())
-        except Exception as error:self.message.set_text(str(error))
+        except Exception as error:ui.call(self.message,'set_text',ui.error_message(error))
         self.render()
 
     def schedule_persist(self):
@@ -78,9 +80,9 @@ class Timesheet(Gtk.Box):
                 else:self.drafts.pop(self.day,None)
             days={k:v for k,v in self.drafts.items() if v[2]}
             ui_state.set('draft:'+self.sheet_id,{'days':days,'rows':self.inline_drafts} if days or self.inline_drafts else None)
-            if self.has_draft():self.message.set_text('Rascunho salvo · ainda não incluído nos totais')
+            if self.has_draft():ui.call(self.message,'set_text',ui.msg('workspace.timesheet_ui.rascunho_salvo_ainda_nao_incluido_nos_totais'))
             return True
-        except Exception as error:self.message.set_text('Não foi possível salvar o rascunho: '+str(error));return False
+        except Exception as error:ui.call(self.message,'set_text',ui.msg('workspace.live.draft_error', error=ui.error_message(error)));return False
 
     def inline_changed(self,entry,fields):
         values={k:f.get_text() for k,f in fields.items()}
@@ -89,11 +91,11 @@ class Timesheet(Gtk.Box):
         else:
             expected=self.inline_drafts.get(entry['id'],{}).get('expected',dict(entry))
             self.inline_drafts[entry['id']]={'values':values,'expected':expected}
-        self.message.set_text('Rascunho da linha · Enter salva · Esc cancela');self.schedule_persist()
+        ui.call(self.message,'set_text',ui.msg('workspace.timesheet_ui.rascunho_da_linha_enter_salva_esc_cancela'));self.schedule_persist()
 
     def recover_row(self,identity):
         draft=self.inline_drafts[identity]
-        if self.dirty and not self.ask('Substituir o preenchimento atual?','O rascunho da linha será recuperado como uma nova atividade.'):return
+        if self.dirty and not self.ask(ui.msg('workspace.live.replace_current'),ui.msg('workspace.live.recover_note')):return
         self.window.select(draft['expected']['date']);self.editing=None;self.fill(draft['values']);self.dirty=True
         self.inline_drafts.pop(identity,None);self.persist();self.render()
 
@@ -114,7 +116,7 @@ class Timesheet(Gtk.Box):
     def has_draft(self):return self.dirty or any(snapshot[2] for snapshot in self.drafts.values()) or bool(self.inline_drafts)
 
     def changed(self,*_):
-        if not self.loading:self.dirty=True;self.message.set_text('Rascunho em edição');self.schedule_persist()
+        if not self.loading:self.dirty=True;ui.call(self.message,'set_text',ui.msg('workspace.timesheet_ui.rascunho_em_edicao'));self.schedule_persist()
 
     def snapshot(self):return ({k:v.get_text() for k,v in self.fields.items()},self.editing,self.dirty)
 
@@ -125,11 +127,11 @@ class Timesheet(Gtk.Box):
         if day in self.drafts:
             values,self.editing,self.dirty=self.drafts[day];self.fill(values)
         else:self.reset()
-        if self.dirty:self.message.set_text('Rascunho recuperado · Enter para registrar')
+        if self.dirty:ui.call(self.message,'set_text',ui.msg('workspace.timesheet_ui.rascunho_recuperado_enter_para_registrar'))
 
     def fill(self,values):
         self.loading=True
-        for key,field in self.fields.items():field.set_text(values.get(key,''))
+        for key,field in self.fields.items():ui.call(field,'set_text',values.get(key,''))
         self.loading=False
 
     def reset(self,start=None):
@@ -137,23 +139,23 @@ class Timesheet(Gtk.Box):
         entries=[e for e in self.sheet_data().get('timesheet',[]) if e['date']==self.day]
         last=max((e['end'] for e in entries),default='') if start is None else start
         self.fill({'start':'' if last=='24:00' else last})
-        self.message.set_text('');self.drafts.pop(self.day,None)
-        self.editor_label.set_text('Nova atividade · '+(self.day or ''))
+        ui.call(self.message,'set_text','');self.drafts.pop(self.day,None)
+        ui.call(self.editor_label,'set_text',ui.msg('workspace.live.new_activity_date', date=ui.date_text(self.day) if self.day else ''))
         self.schedule_persist()
 
     def render(self):
-        self.context_label.set_text(context_text(self.sheet_data()))
+        ui.call(self.context_label,'set_text',context_message(self.sheet_data()))
         self.switch_day(self.window.day)
-        self.editor_label.set_text(('Editar atividade' if self.editing else 'Nova atividade')+' · '+date.fromisoformat(self.day).strftime('%d/%m/%Y'))
+        ui.call(self.editor_label,'set_text',ui.msg('workspace.live.editor_heading', action=ui.msg('workspace.live.edit_activity') if self.editing else ui.msg('workspace.live.new_activity'), date=ui.date_text(self.day)))
         entries=self.sheet_data().get('timesheet',[])
         self.inline_widgets={}
         for child in self.rows.get_children():child.destroy()
         start,end=model.bounds(self.day,self.period.get_active_id() or 'day')
         selected=model.entries_for(entries,start,end)
-        columns=['Data','Descrição','Início','Fim','Horas','']
-        for col,title in enumerate(columns):self.rows.attach(Gtk.Label(label=title,xalign=0),col,0,1,1)
+        columns=[ui.msg('workspace.live.date'),ui.msg('workspace.live.description'),ui.msg('workspace.live.start'),ui.msg('workspace.live.end'),ui.msg('workspace.live.hours'),'']
+        for col,title in enumerate(columns):self.rows.attach(ui.widget(Gtk.Label,label=title,xalign=0),col,0,1,1)
         for row,e in enumerate(selected,1):
-            values=[date.fromisoformat(e['date']).strftime('%d/%m'),e['description'],e['start'],e['end'],model.duration(model.activity_minutes(e))]
+            values=[ui.date_text(e['date'],'short'),e['description'],e['start'],e['end'],model.duration(model.activity_minutes(e))]
             row_fields={}
             draft=self.inline_drafts.get(e['id'])
             for col,value in enumerate(values):
@@ -165,30 +167,30 @@ class Timesheet(Gtk.Box):
                     cell.connect('changed',lambda _,entry=e,fields=row_fields:self.inline_changed(entry,fields))
                     cell.connect('activate',lambda _,entry=e,fields=row_fields:self.inline_save(entry,fields))
                     cell.connect('key-press-event',lambda _,event,entry=e:self.inline_key(event,entry))
-                    cell.set_tooltip_text('Editar aqui · Enter salva · Esc cancela')
-                else:cell=Gtk.Label(label=value,xalign=0)
+                    ui.call(cell,'set_tooltip_text',ui.msg('workspace.timesheet_ui.editar_aqui_enter_salva_esc_cancela'))
+                else:cell=ui.widget(Gtk.Label,label=value,xalign=0)
                 self.rows.attach(cell,col,row,1,1)
             self.inline_widgets[e['id']]=row_fields
             action_box=Gtk.Box(spacing=4)
             if e.get('source_task_id'):
-                link=Gtk.Button.new_from_icon_name('go-jump-symbolic',Gtk.IconSize.BUTTON);link.set_tooltip_text('Abrir tarefa original')
+                link=Gtk.Button.new_from_icon_name('go-jump-symbolic',Gtk.IconSize.BUTTON);ui.call(link,'set_tooltip_text',ui.msg('workspace.timesheet_ui.abrir_tarefa_original'))
                 link.connect('clicked',lambda _,identity=e['source_task_id']:self.window.open_source_task(identity));action_box.add(link)
             if not self.readonly:
-                remove=Gtk.Button.new_from_icon_name('edit-delete-symbolic',Gtk.IconSize.BUTTON);remove.set_tooltip_text('Excluir atividade')
+                remove=Gtk.Button.new_from_icon_name('edit-delete-symbolic',Gtk.IconSize.BUTTON);ui.call(remove,'set_tooltip_text',ui.msg('workspace.timesheet_ui.excluir_atividade'))
                 remove.connect('clicked',lambda _,entry=e:self.delete(entry));action_box.add(remove)
             self.rows.attach(action_box,5,row,1,1)
         orphan_ids=[identity for identity in self.inline_drafts if not any(e['id']==identity for e in entries)] if not self.readonly else []
         for position,identity in enumerate(orphan_ids,len(selected)+1):
-            recover=Gtk.Button(label='Recuperar rascunho de linha removida: '+self.inline_drafts[identity]['values'].get('description',''))
+            recover=ui.widget(Gtk.Button,label=ui.msg('workspace.live.recover_row', description=self.inline_drafts[identity]['values'].get('description','')))
             recover.connect('clicked',lambda _,i=identity:self.recover_row(i));self.rows.attach(recover,0,position,6,1)
-        if not selected and not orphan_ids:self.rows.attach(Gtk.Label(label='Nenhuma atividade neste período.',xalign=0),0,1,6,1)
+        if not selected and not orphan_ids:self.rows.attach(ui.widget(Gtk.Label,label=ui.msg('workspace.timesheet_ui.nenhuma_atividade_neste_periodo'),xalign=0),0,1,6,1)
         self.rows.show_all()
         parts=[]
-        for period,title in [('day','Dia'),('week','Semana'),('month','Mês')]:
+        for period,title in [('day',ui.msg('workspace.live.day')),('week',ui.msg('workspace.live.week')),('month',ui.msg('workspace.live.month'))]:
             a,b=model.bounds(self.day,period);parts.append(title+': '+model.duration(model.total(model.entries_for(entries,a,b))))
-        text=' · '.join(parts)+'\nTotal do período: '+model.duration(model.total(selected))
-        if model.has_overlaps(selected):text+='\n⚠ Há sobreposições; o total soma os intervalos registrados.'
-        self.summary.set_text(text);self.undo.set_sensitive(bool(self.sheet_data().get('timesheet_trash')))
+        text=ui.join(' · ',parts)+'\n'+ui.msg('workspace.live.period_total', duration=model.duration(model.total(selected)))
+        if model.has_overlaps(selected):text+='\n'+ui.msg('workspace.live.overlap_warning')
+        ui.call(self.summary,'set_text',text);self.undo.set_sensitive(bool(self.sheet_data().get('timesheet_trash')))
         completion=Gtk.EntryCompletion();choices=Gtk.ListStore(str)
         for description in sorted({e['description'] for e in entries},key=str.casefold):choices.append([description])
         completion.set_model(choices);completion.set_text_column(0);completion.set_minimum_key_length(1);completion.set_inline_completion(True)
@@ -196,8 +198,8 @@ class Timesheet(Gtk.Box):
         self.update_timer()
 
     def ask(self,title,text):
-        dialog=Gtk.MessageDialog(transient_for=self.window,modal=True,message_type=Gtk.MessageType.QUESTION,buttons=Gtk.ButtonsType.YES_NO,text=title)
-        dialog.format_secondary_text(text);result=dialog.run();dialog.destroy();return result==Gtk.ResponseType.YES
+        dialog=ui.widget(Gtk.MessageDialog,transient_for=self.window,modal=True,message_type=Gtk.MessageType.QUESTION,buttons=Gtk.ButtonsType.YES_NO,text=title)
+        ui.call(dialog,'format_secondary_text',text);result=dialog.run();dialog.destroy();return result==Gtk.ResponseType.YES
 
     def commit(self,payload):
         if self.readonly:return False
@@ -205,72 +207,72 @@ class Timesheet(Gtk.Box):
         try:
             try:latest=store.modify(payload)
             except model.OverlapError as error:
-                if not self.ask('Horários sobrepostos',str(error)):return False
+                if not self.ask(ui.msg('workspace.live.overlapping'),ui.error_message(error)):return False
                 latest=store.modify(dict(payload,allow_overlap=True))
-            self.window.data=latest;self.window.render();self.window.status.set_text('Salvo · backup automático atualizado')
-            self.message.set_text('Salvo neste computador');return True
-        except Exception as error:self.message.set_text('Não foi salvo: '+str(error));return False
+            self.window.data=latest;self.window.render();ui.call(self.window.status,'set_text',ui.msg('workspace.timesheet_ui.salvo_backup_automatico_atualizado'))
+            ui.call(self.message,'set_text',ui.msg('workspace.timesheet_ui.salvo_neste_computador'));return True
+        except Exception as error:ui.call(self.message,'set_text',ui.msg('workspace.live.save_error', error=ui.error_message(error)));return False
 
     def save(self):
         payload=dict(action='timesheet',date=self.day,**{k:v.get_text().strip() for k,v in self.fields.items()})
         if self.editing:payload.update(id=self.editing['id'],expected=self.editing)
         if self.commit(payload):
-            self.reset(payload['end']);self.message.set_text('Salvo · próxima linha pronta');self.fields['description'].grab_focus()
+            self.reset(payload['end']);ui.call(self.message,'set_text',ui.msg('workspace.timesheet_ui.salvo_proxima_linha_pronta'));self.fields['description'].grab_focus()
 
     def edit(self,entry):
-        if self.dirty and not self.ask('Descartar o preenchimento atual?','O registro salvo permanece no histórico.'):return
+        if self.dirty and not self.ask(ui.msg('workspace.live.discard_current'),ui.msg('workspace.live.saved_remains')):return
         self.window.select(entry['date']);self.editing=dict(entry);self.fill(entry);self.dirty=False
-        self.editor_label.set_text('Editar atividade · '+entry['date']);self.fields['description'].grab_focus()
+        ui.call(self.editor_label,'set_text',ui.msg('workspace.live.editor_heading',action=ui.msg('workspace.live.edit_activity'),date=ui.date_text(entry['date'])));self.fields['description'].grab_focus()
 
     def delete(self,entry):
-        if self.ask('Excluir atividade?',entry['description']+'\nVocê poderá desfazer esta exclusão.'):
+        if self.ask(ui.msg('workspace.live.delete_activity'),ui.msg('workspace.live.delete_note', description=entry['description'])):
             if self.commit({'action':'timesheet_delete','id':entry['id']}) and self.editing and self.editing['id']==entry['id']:self.reset()
 
     def update_timer(self):
-        active=self.sheet_data().get('timesheet_active');self.timer_button.set_label('Encerrar atividade' if active else 'Iniciar atividade agora')
+        active=self.sheet_data().get('timesheet_active');ui.call(self.timer_button,'set_label',ui.msg('workspace.live.stop_activity') if active else ui.msg('workspace.live.start_activity'))
         if active:
             started=datetime.fromisoformat(active['started']);minutes=max(0,int((datetime.now()-started).total_seconds()//60))
-            self.active_label.set_text(active['description']+' · desde '+started.strftime('%d/%m %H:%M')+' · '+model.duration(minutes)+'\nEm andamento · início salvo; continua mesmo com a janela fechada.')
-        else:self.active_label.set_text('')
+            ui.call(self.active_label,'set_text',ui.msg('workspace.live.active_timer', description=active['description'], started=ui.date_text(started,'short_datetime'), duration=model.duration(minutes)))
+        else:ui.call(self.active_label,'set_text','')
         return True
 
     def timer_click(self,*_):
         if self.sheet_data().get('timesheet_active'):
             self.commit({'action':'timesheet_stop'});return
-        dialog=Gtk.Dialog(title='Iniciar atividade agora',transient_for=self.window,modal=True)
-        dialog.add_buttons('Cancelar',Gtk.ResponseType.CANCEL,'Iniciar',Gtk.ResponseType.OK)
+        dialog=ui.widget(Gtk.Dialog,title=ui.msg('workspace.timesheet_ui.iniciar_atividade_agora'),transient_for=self.window,modal=True)
+        ui.buttons(dialog,ui.msg('workspace.timesheet_ui.cancelar'),Gtk.ResponseType.CANCEL,ui.msg('workspace.timesheet_ui.iniciar'),Gtk.ResponseType.OK)
         box=dialog.get_content_area();box.set_margin_start(16);box.set_margin_end(16);box.set_spacing(8)
-        box.add(Gtk.Label(label='Descrição',xalign=0));field=Gtk.Entry(text=self.fields['description'].get_text());field.set_max_length(1000)
+        box.add(ui.widget(Gtk.Label,label=ui.msg('workspace.timesheet_ui.descricao'),xalign=0));field=Gtk.Entry(text=self.fields['description'].get_text());field.set_max_length(1000)
         completion=Gtk.EntryCompletion();completion.set_model(self.fields['description'].get_completion().get_model());completion.set_text_column(0);completion.set_minimum_key_length(1)
         field.set_completion(completion);box.add(field)
         info=Gtk.Label(xalign=0,wrap=True);box.add(info);dialog.show_all()
         while dialog.run()==Gtk.ResponseType.OK:
             if self.commit({'action':'timesheet_start','description':field.get_text()}):break
-            info.set_text(self.message.get_text())
+            ui.call(info,'set_text',self.message.get_text())
         dialog.destroy()
 
     def export(self,*_):
-        dialog=Gtk.Dialog(title='Exportar timesheet',transient_for=self.window,modal=True)
-        dialog.add_buttons('Cancelar',Gtk.ResponseType.CANCEL,'Escolher arquivo',Gtk.ResponseType.OK)
+        dialog=ui.widget(Gtk.Dialog,title=ui.msg('workspace.timesheet_ui.exportar_timesheet'),transient_for=self.window,modal=True)
+        ui.buttons(dialog,ui.msg('workspace.timesheet_ui.cancelar'),Gtk.ResponseType.CANCEL,ui.msg('workspace.timesheet_ui.escolher_arquivo'),Gtk.ResponseType.OK)
         box=dialog.get_content_area();box.set_spacing(8);box.set_margin_start(16);box.set_margin_end(16)
         a,b=model.bounds(self.day,self.period.get_active_id() or 'day');fields=[]
-        for title,value in [('De · AAAA-MM-DD',a),('Até · AAAA-MM-DD',b)]:
-            box.add(Gtk.Label(label=title,xalign=0));field=Gtk.Entry(text=value);box.add(field);fields.append(field)
+        for title,value in [(ui.msg('workspace.live.export_from'),a),(ui.msg('workspace.live.export_to'),b)]:
+            box.add(ui.widget(Gtk.Label,label=title,xalign=0));field=Gtk.Entry(text=value);box.add(field);fields.append(field)
         error=Gtk.Label(xalign=0);box.add(error);dialog.show_all()
         while dialog.run()==Gtk.ResponseType.OK:
             try:
                 start,end=[date.fromisoformat(f.get_text().strip()).isoformat() for f in fields]
-                if end<start:raise ValueError('O fim do período deve ser igual ou posterior ao início.')
+                if end<start:raise ui.exception(ValueError, 'workspace.timesheet_ui.o_fim_do_periodo_deve_ser_igual_ou_posterior_ao_inicio')
                 content=model.csv_text(model.get_sheet(store.modify({'action':'get'}),self.sheet_id)['timesheet'],start,end)
-                chooser=Gtk.FileChooserDialog(title='Salvar CSV',transient_for=self.window,action=Gtk.FileChooserAction.SAVE)
-                chooser.add_buttons('Cancelar',Gtk.ResponseType.CANCEL,'Salvar',Gtk.ResponseType.OK);chooser.set_do_overwrite_confirmation(True)
+                chooser=ui.widget(Gtk.FileChooserDialog,title=ui.msg('workspace.timesheet_ui.salvar_csv'),transient_for=self.window,action=Gtk.FileChooserAction.SAVE)
+                ui.buttons(chooser,ui.msg('workspace.timesheet_ui.cancelar'),Gtk.ResponseType.CANCEL,ui.msg('workspace.timesheet_ui.salvar'),Gtk.ResponseType.OK);chooser.set_do_overwrite_confirmation(True)
                 safe_name=''.join(c if c.isalnum() or c in '-_' else '_' for c in self.sheet_data()['name'])
                 chooser.set_current_name(f'timesheet-{safe_name}-{start}-{end}.csv')
                 try:
                     if chooser.run()==Gtk.ResponseType.OK:
-                        Path(chooser.get_filename()).write_text(content,encoding='utf-8-sig');self.message.set_text('CSV exportado');break
+                        Path(chooser.get_filename()).write_text(content,encoding='utf-8-sig');ui.call(self.message,'set_text',ui.msg('workspace.timesheet_ui.csv_exportado'));break
                 finally:chooser.destroy()
-            except Exception as failure:error.set_text(str(failure))
+            except Exception as failure:ui.call(error,'set_text',ui.error_message(failure))
         dialog.destroy()
 
     def can_close(self,*_):

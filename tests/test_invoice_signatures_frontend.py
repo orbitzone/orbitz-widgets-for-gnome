@@ -10,7 +10,8 @@ from unittest.mock import Mock, patch
 PLANNER = Path(__file__).resolve().parents[1] / 'extension/planner'
 sys.path.insert(0, str(PLANNER))
 from invoice_signatures_ui import (SignatureSession, assist_sign, open_validator, version_label,
-    SIGN_URL, VALIDATE_URL, PENDING_LABEL)
+    SIGN_URL, VALIDATE_URL)
+from ui_language import ui as language
 
 
 class SignatureFlowTests(unittest.TestCase):
@@ -44,9 +45,17 @@ class SignatureFlowTests(unittest.TestCase):
         open_validator(launch)
         launch.assert_called_once_with('https://validar.iti.gov.br/')
         self.assertEqual(VALIDATE_URL, 'https://validar.iti.gov.br/')
-        self.assertIn(PENDING_LABEL, version_label(version))
-        self.assertNotIn('untrusted label', version_label(version))
-        self.assertEqual(version, original)
+        previous_locale=language.get_locale()
+        self.addCleanup(language.refresh,previous_locale)
+        for locale,pending in (('pt-BR','Importada — validação pendente'),
+                ('en-US','Imported — validation pending')):
+            with self.subTest(locale=locale):
+                language.refresh(locale)
+                label=version_label(version)
+                self.assertIn(pending,label)
+                self.assertNotIn('untrusted label',label)
+                self.assertIn('bbbbbbbb',label)
+                self.assertEqual(version,original)
 
     def test_import_confirmation_and_selection_route_only_exact_invoice_version(self):
         archive = SimpleNamespace(get_path=Mock(return_value=Path('/synthetic/original.pdf')), export_copy=Mock())

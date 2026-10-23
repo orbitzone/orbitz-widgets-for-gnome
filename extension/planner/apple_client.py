@@ -1,4 +1,5 @@
 """Read-only Apple CalDAV transport; shared event helpers remain re-exported."""
+from ui_language import ui as _i18n
 import base64,hashlib,re
 from datetime import date,datetime,timedelta,timezone
 from urllib.request import Request,build_opener,HTTPRedirectHandler
@@ -19,13 +20,13 @@ class NoRedirect(HTTPRedirectHandler):
 def apple_url(url,base='https://caldav.icloud.com/'):
     result=urljoin(base,url);parsed=urlsplit(result)
     if parsed.scheme!='https' or not parsed.hostname or not (parsed.hostname=='icloud.com' or parsed.hostname.endswith('.icloud.com')) or parsed.username or parsed.password or parsed.port not in (None,443):
-        raise CalendarError('O iCloud retornou um endereço de calendário inválido.')
+        raise _i18n.exception(CalendarError, 'domain.apple_client.icloud_returned_an_invalid_calendar_address')
     return result
 
 class AppleClient:
     def __init__(self,email,password):self.email=email;self.password=password
     def request(self,method,url,body,depth='0'):
-        if method not in ('PROPFIND','REPORT'):raise CalendarError('Operação não permitida.')
+        if method not in ('PROPFIND','REPORT'):raise _i18n.exception(CalendarError, 'domain.apple_client.operation_not_allowed')
         url=apple_url(url);opener=build_opener(NoRedirect())
         token=base64.b64encode((self.email+':'+self.password).encode()).decode()
         for _ in range(5):
@@ -33,19 +34,19 @@ class AppleClient:
             try:
                 with opener.open(request,timeout=20) as response:
                     raw=response.read(16*1024*1024+1)
-                    if len(raw)>16*1024*1024:raise CalendarError('O calendário excedeu o limite de leitura deste período.')
+                    if len(raw)>16*1024*1024:raise _i18n.exception(CalendarError, 'domain.apple_client.the_calendar_exceeded_the_read_limit_for_this_period')
                     try:return XML.fromstring(raw),url
-                    except Exception:raise CalendarError('O iCloud retornou dados de calendário inválidos.') from None
+                    except Exception:raise _i18n.exception(CalendarError, 'domain.apple_client.icloud_returned_invalid_calendar_data') from None
             except HTTPError as error:
                 if error.code in (301,302,303,307,308):
                     location=error.headers.get('Location')
-                    if not location:raise CalendarError('Redirecionamento do iCloud sem destino.') from None
+                    if not location:raise _i18n.exception(CalendarError, 'domain.apple_client.icloud_redirect_without_a_destination') from None
                     url=apple_url(location,url);continue
-                if error.code in (401,403):raise CalendarError('Acesso recusado pelo iCloud. Confira o e-mail e a senha específica de aplicativo; não use a senha principal da Apple.') from None
-                if error.code==429:raise CalendarError('O iCloud limitou as consultas. Aguarde e tente novamente.') from None
-                raise CalendarError('Não foi possível consultar o iCloud (HTTP '+str(error.code)+').') from None
-            except (URLError,TimeoutError,OSError):raise CalendarError('Não foi possível acessar o iCloud. Verifique a conexão e tente novamente.') from None
-        raise CalendarError('O iCloud redirecionou a conexão vezes demais.')
+                if error.code in (401,403):raise _i18n.exception(CalendarError, 'domain.apple_client.access_denied_by_icloud_check_the_email_and_app_specific_password') from None
+                if error.code==429:raise _i18n.exception(CalendarError, 'domain.apple_client.icloud_rate_limited_queries_wait_and_try_again') from None
+                raise _i18n.exception(CalendarError, 'domain.apple_client.http_failure', status=str(error.code)) from None
+            except (URLError,TimeoutError,OSError):raise _i18n.exception(CalendarError, 'domain.apple_client.could_not_access_icloud_check_your_connection_and_try_again') from None
+        raise _i18n.exception(CalendarError, 'domain.apple_client.icloud_redirected_the_connection_too_many_times')
 
     def propfind(self,url,properties,depth='0'):
         body=f'<d:propfind xmlns:d="DAV:" xmlns:c="{NS["c"]}" xmlns:a="{NS["a"]}"><d:prop>{properties}</d:prop></d:propfind>'
@@ -54,10 +55,10 @@ class AppleClient:
     def discover(self):
         root,url=self.propfind('https://caldav.icloud.com/','<d:current-user-principal/>')
         principal=first_property(root,'d:current-user-principal/d:href')
-        if not principal:raise CalendarError('O iCloud não informou a conta de calendário. Verifique se o Calendário do iCloud está ativado.')
+        if not principal:raise _i18n.exception(CalendarError, 'domain.apple_client.icloud_did_not_report_a_calendar_account_check_whether_icloud_cal')
         root,url=self.propfind(apple_url(principal,url),'<c:calendar-home-set/>')
         home=first_property(root,'c:calendar-home-set/d:href')
-        if not home:raise CalendarError('Não foi possível localizar os calendários desta conta.')
+        if not home:raise _i18n.exception(CalendarError, 'domain.apple_client.could_not_locate_calendars_for_this_account')
         root,url=self.propfind(apple_url(home,url),'<d:displayname/><d:resourcetype/><a:calendar-color/><c:supported-calendar-component-set/>','1')
         result=[]
         for response in root.findall('d:response',NS):
@@ -72,7 +73,7 @@ class AppleClient:
             color=prop.findtext('a:calendar-color','#82cfff',NS)[:7]
             if not re.fullmatch(r'#[0-9A-Fa-f]{6}',color):color='#82cfff'
             result.append(dict(id=hashlib.sha256(location.encode()).hexdigest(),url=location,name=name[:200],color=color))
-        if not result:raise CalendarError('Nenhum calendário de eventos foi encontrado nesta conta iCloud.')
+        if not result:raise _i18n.exception(CalendarError, 'domain.apple_client.no_event_calendars_were_found_in_this_icloud_account')
         return result
 
     def events(self,calendar,account_id,month):

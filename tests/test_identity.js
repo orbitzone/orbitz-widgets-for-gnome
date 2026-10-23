@@ -37,6 +37,7 @@ const context = vm.createContext({imports: {
         GLib: {build_filenamev: parts => parts.join('/'), get_os_info: () => 'Synthetic OS', getenv: () => 'x11'}, GObject: {registerClass: (...args) => args.at(-1)}},
     gettext: {domain: () => ({gettext: value => value})},
 }});
+Me.imports.uiLanguage={Language:require('./helpers/ui_language').create(context,'pt-BR')};
 vm.runInContext(read('extension/settings/AboutPage.js'), context);
 const page = new context.AboutPage();
 page._init();
@@ -74,5 +75,5 @@ delete metadata['version-name'];
 const fallback = new context.AboutPage(); fallback._init();
 assert.equal(flatten(fallback).find(actor => actor.title === 'Versão do Orbitz').children[0].label, '1.0');
 Object.assign(metadata, cached);
-assert.deepEqual(actors.filter(actor => ['Save', 'Load'].includes(actor.label)).map(actor => actor.label).sort(), ['Load', 'Save']);
+assert.deepEqual(actors.filter(actor => ['Salvar', 'Carregar'].includes(actor.label)).map(actor => actor.label).sort(), ['Carregar', 'Salvar']);
 console.log('OK: Orbitz metadata/schema identity, unchanged legacy keys/defaults, About author/project/upstream/license links and settings controls.');

@@ -1,7 +1,7 @@
 // Temperatures panel methods; state and lifecycle belong to CommandLabel.
-var create = ({Clutter, Main, Pango, St, global}) => ({
+var create = ({Language, Clutter, Main, Pango, St, global}) => ({
     _buildTemperaturesDialog() {
-        this._networkBackdrop = new St.Widget({reactive: true, visible: false});
+        this._networkBackdrop = Language.widget(St.Widget, {reactive: true, visible: false});
         this._networkBackdrop.add_constraint(new Clutter.BindConstraint({source: global.stage, coordinate: Clutter.BindCoordinate.ALL}));
         this._networkBackdrop.connect('button-press-event', (_actor, event) => {
             if (this._networkDialog?.contains(event.get_source()))
@@ -10,19 +10,19 @@ var create = ({Clutter, Main, Pango, St, global}) => ({
             return Clutter.EVENT_STOP;
         });
         Main.uiGroup.add_child(this._networkBackdrop);
-        this._networkDialog = new St.BoxLayout({vertical: true, reactive: true,
+        this._networkDialog = Language.widget(St.BoxLayout, {vertical: true, reactive: true,
             style: 'background-color: #202020; color: white; border: 1px solid #606060; border-radius: 10px; padding: 16px; spacing: 12px;'});
-        this._temperatureHeading = new St.Label({text: 'Temperaturas · sensores', style: 'font-size: 18px; font-weight: bold;'});
+        this._temperatureHeading = Language.widget(St.Label, {text: Language.msg('panels.temperatures.title'), style: 'font-size: 18px; font-weight: bold;'});
         this._networkDialog.add_child(this._temperatureHeading);
-        this._networkDialog.add_child(new St.Label({text: 'Acima de 80 °C em vermelho · identificação fornecida pelo sistema', style: 'font-size: 12px; color: #b9c5cf;'}));
-        this._temperatureRows = new St.BoxLayout({style: 'spacing: 12px;'});
+        this._networkDialog.add_child(Language.widget(St.Label, {text: Language.msg('panels.temperatures.note'), style: 'font-size: 12px; color: #b9c5cf;'}));
+        this._temperatureRows = Language.widget(St.BoxLayout, {style: 'spacing: 12px;'});
         this._networkDialog.add_child(this._temperatureRows);
-        const footer = new St.BoxLayout({style: 'spacing: 12px;'});
-        this._networkRefreshButton = new St.Button({label: 'Atualizar', reactive: true, can_focus: true,
-            accessible_name: 'Atualizar temperaturas', style: 'padding: 8px 12px; border-radius: 6px; background-color: #315d80; color: white;'});
+        const footer = Language.widget(St.BoxLayout, {style: 'spacing: 12px;'});
+        this._networkRefreshButton = Language.widget(St.Button, {label: Language.msg('panels.refresh'), reactive: true, can_focus: true,
+            accessible_name: Language.msg('panels.temperatures.refresh'), style: 'padding: 8px 12px; border-radius: 6px; background-color: #315d80; color: white;'});
         this._networkRefreshButton.connect('clicked', () => this._refreshNetworkDialog());
         footer.add_child(this._networkRefreshButton);
-        this._networkRefreshStatus = new St.Label({text: '', style: 'font-size: 12px; color: #b9c5cf;', y_align: Clutter.ActorAlign.CENTER});
+        this._networkRefreshStatus = Language.widget(St.Label, {text: '', style: 'font-size: 12px; color: #b9c5cf;', y_align: Clutter.ActorAlign.CENTER});
         footer.add_child(this._networkRefreshStatus);
         this._networkDialog.add_child(footer);
         this._networkBackdrop.add_child(this._networkDialog);
@@ -69,53 +69,52 @@ var create = ({Clutter, Main, Pango, St, global}) => ({
 
     _renderTemperatures(data) {
         if (!data || !Array.isArray(data.items) || data.items.length > 256 || !Number.isInteger(data.omitted) || data.omitted < 0)
-            throw new Error('Resposta dos sensores inválida.');
+            throw Language.error(Language.msg('panels.error.sensors'));
         // Unavailable records never enter component state or acquire actors/signals.
         const available = data.items.filter(x => x && typeof x === 'object' &&
             Number.isFinite(x.value) && x.value >= -20 && x.value <= 250);
         if (available.some(x => typeof x.group !== 'string' || x.group.length > 128 || typeof x.name !== 'string' || x.name.length > 100 ||
             (x.description !== undefined && (typeof x.description !== 'string' || x.description.length > 512))))
-            throw new Error('Resposta dos sensores inválida.');
+            throw Language.error(Language.msg('panels.error.sensors'));
         data = {items: available.map(x => ({group: x.group, name: x.name, value: x.value, description: x.description})), omitted: data.omitted};
         this._temperatureData = data;
         const monitor = Main.layoutManager.findMonitorForActor(this) || Main.layoutManager.primaryMonitor;
         const columns = this._temperatureColumns(data.items);
-        this._temperatureHeading.text = `Temperaturas · ${data.items.length} sensores`;
+        Language.set(this._temperatureHeading, 'text', Language.msg('panels.temperatures.heading', {count: data.items.length, extra: data.omitted ? Language.msg('panels.temperatures.omitted', {count: data.omitted}) : ''}));
         this._temperatureRows.destroy_all_children();
         for (const [index, segments] of columns.entries()) {
-            const column = new St.BoxLayout({vertical: true, style: 'spacing: 0px; width: 220px;'});
-            column.add_child(new St.Label({text: index < 2 ? 'Hardware crítico' : 'Sensores auxiliares',
+            const column = Language.widget(St.BoxLayout, {vertical: true, style: 'spacing: 0px; width: 220px;'});
+            column.add_child(Language.widget(St.Label, {text: index < 2 ? Language.msg('panels.temperatures.critical') : Language.msg('panels.temperatures.auxiliary'),
                 style: `font-size: 11px; color: ${index < 2 ? '#8bd5ca' : '#b9c5cf'}; padding: 0px 4px 8px;`}));
             for (const segment of segments) {
-                column.add_child(new St.Label({text: segment.title,
+                column.add_child(Language.widget(St.Label, {text: ({"CPU": Language.msg('panels.temperatures.category_cpu'), "GPU": Language.msg('panels.temperatures.category_gpu'), "Armazenamento": Language.msg('panels.temperatures.category_storage'), "Outros sensores": Language.msg('panels.temperatures.category_other'), "Memória RAM": Language.msg('panels.temperatures.category_ram'), "Placa e conectividade": Language.msg('panels.temperatures.category_board'), "Dissipação": Language.msg('panels.temperatures.category_cooling'), "Gabinete": Language.msg('panels.temperatures.category_chassis'), "Ambiente": Language.msg('panels.temperatures.category_ambient')})[segment.title],
                     style: 'font-size: 12px; font-weight: bold; color: #b9d5e8; padding: 8px 4px 6px;'}));
                 for (const item of segment.items) {
                 const hot = item.value > 80;
-                const card = new St.BoxLayout({vertical: true,
+                const card = Language.widget(St.BoxLayout, {vertical: true,
                     style: 'height: 24px; padding: 3px 8px; margin-bottom: 4px; border-radius: 5px; background-color: #293039;'});
-                const line = new St.BoxLayout({style: 'spacing: 8px;'});
-                const name = new St.Label({text: item.name, x_expand: true, style: 'font-size: 13px; color: #e6edf3;'});
+                const line = Language.widget(St.BoxLayout, {style: 'spacing: 8px;'});
+                const name = Language.widget(St.Label, {text: item.name, x_expand: true, style: 'font-size: 13px; color: #e6edf3;'});
                 name.clutter_text.set_ellipsize(Pango.EllipsizeMode.END);
                 line.add_child(name);
-                const help = new St.Button({label: '?', reactive: true, can_focus: true,
-                    accessible_name: 'Descrição de ' + item.name,
+                const help = Language.widget(St.Button, {label: '?', reactive: true, can_focus: true,
+                    accessible_name: Language.msg('panels.temperatures.description', {name: item.name}),
                     style: 'font-size: 12px; padding: 0px 4px; border-radius: 8px; background-color: #405268; color: #dcecff;'});
-                const showHelp = this._attachActionTooltip(help, (item.description || 'Sensor ' + item.name + ': descrição específica indisponível.') + '\nFonte: ' + item.group);
+                const showHelp = this._attachActionTooltip(help, Language.msg('panels.temperatures.help', {description: item.description || Language.msg('panels.temperatures.fallback', {name: item.name}), group: item.group}));
                 help.connect('clicked', showHelp);
                 line.add_child(help);
-                line.add_child(new St.Label({text: `${item.value.toFixed(1)} °C`,
+                line.add_child(Language.widget(St.Label, {text: `${item.value.toFixed(1)} °C`,
                     style: `font-size: 14px; font-weight: bold; color: ${hot ? '#ff5c5c' : '#8bd5ca'};`}));
                 card.add_child(line);
-                card.accessible_name = `${item.group}: ${item.name}, ${item.value} graus Celsius`;
+                Language.set(card, 'accessible_name', Language.msg('panels.temperatures.accessible', {group: item.group, name: item.name, value: item.value}));
                 column.add_child(card);
                 }
-                column.add_child(new St.Widget({style: 'height: 6px;'}));
+                column.add_child(Language.widget(St.Widget, {style: 'height: 6px;'}));
             }
             this._temperatureRows.add_child(column);
         }
         if (!data.items.length)
-            this._temperatureRows.add_child(new St.Label({text: 'Nenhum sensor de temperatura disponível.', style: 'padding: 16px; color: #b9c5cf;'}));
-        if (data.omitted) this._temperatureHeading.text += ` · ${data.omitted} adicionais`;
+            this._temperatureRows.add_child(Language.widget(St.Label, {text: Language.msg('panels.temperatures.empty'), style: 'padding: 16px; color: #b9c5cf;'}));
         const [, width] = this._networkDialog.get_preferred_width(-1);
         const [, height] = this._networkDialog.get_preferred_height(width);
         this._networkDialog.set_position(monitor.x + Math.max(8, (monitor.width - width) / 2), monitor.y + Math.max(8, (monitor.height - height) / 2));

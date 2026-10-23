@@ -1,4 +1,5 @@
 """Read, download and explicitly delete private invoice history copies."""
+from ui_language import ui
 from collections import OrderedDict
 import importlib
 import invoice_signatures_ui as signatures_ui
@@ -39,7 +40,7 @@ class HistorySession:
 
     def _selected(self):
         if self.selected_id is None:
-            raise ValueError('Selecione uma invoice, não um cabeçalho do histórico.')
+            raise ui.exception(ValueError, 'workspace.invoice_history_ui.selecione_uma_invoice_nao_um_cabecalho_do_historico')
         return self.selected_id
 
     def path(self):
@@ -66,30 +67,21 @@ class HistorySession:
         return True
 
 
-def describe(record):
-    snapshot = record['snapshot']
-    period = snapshot['period']
-    interval = f"{period['start']} a {period['end']}"
-    if period['all_history']:
-        interval = 'Todo o histórico · ' + interval
-    return (f"Referência: {snapshot['reference']}\n"
-        f"Empresa / timesheet: {snapshot['sheet_name']}\n"
-        f"Cliente: {snapshot['client']['name']} · CPF/CNPJ {snapshot['client']['tax_id']}\n"
-        f"Emissão: {snapshot['issued_on']} · agrupamento por mês de emissão\n"
-        f"Período dos serviços: {interval}\n"
-        f"Horas: {snapshot['hours']} · Total: {snapshot['currency']} {snapshot['total']}\n"
-        f"Idioma: {'Português' if snapshot['language'] == 'pt' else 'English'}\n"
-        f"Guardada no histórico: {record['created_at']}")
+def describe_message(record,localized=True):
+    snapshot=record['snapshot'];period=snapshot['period']
+    return ui.msg('workspace.dialogs.invoice_history_ui.description', reference=snapshot['reference'], sheet=snapshot['sheet_name'], client=snapshot['client']['name'], tax=snapshot['client']['tax_id'], issued=ui.date_text(snapshot['issued_on']) if localized else snapshot['issued_on'], all_history=ui.msg('workspace.dialogs.invoice_history_ui.all_prefix') if period['all_history'] else '', start=ui.date_text(period['start']) if localized else period['start'], end=ui.date_text(period['end']) if localized else period['end'], hours=snapshot['hours'], currency=snapshot['currency'], total=snapshot['total'], language='Português' if snapshot['language']=='pt' else 'English', stored=ui.date_text(record['created_at'],'datetime') if localized else record['created_at'])
 
 
-def list_feedback(records, errors):
+def describe(record):return str(describe_message(record,localized=False))
+
+
+def feedback_message(records,errors):
     if not records:
-        if errors:
-            return f'Nenhuma invoice pôde ser exibida. {len(errors)} item(ns) do histórico não puderam ser lidos; arquivos preservados.'
-        return 'Nenhuma invoice guardada no histórico.'
-    if errors:
-        return f'{len(errors)} item(ns) do histórico não puderam ser lidos; arquivos preservados. As invoices válidas continuam disponíveis.'
-    return f'{len(records)} invoice(s) disponíveis no histórico.'
+        return ui.msg('workspace.dialogs.invoice_history_ui.none_readable', count=len(errors)) if errors else ui.msg('workspace.dialogs.invoice_history_ui.empty')
+    return ui.msg('workspace.dialogs.invoice_history_ui.some_unreadable', count=len(errors)) if errors else ui.msg('workspace.dialogs.invoice_history_ui.available', count=len(records))
+
+
+def list_feedback(records,errors):return str(feedback_message(records,errors))
 
 
 def create_history_content(window, parent=None):
@@ -99,34 +91,33 @@ def create_history_content(window, parent=None):
 
     session = HistorySession()
     dialog = parent or window
-    box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10, margin=16)
-    note = Gtk.Label(label='Empresa → cliente → ano/mês de emissão → invoice.\n'
-        'Somente PDFs gerados e guardados desde esta atualização aparecem aqui; arquivos antigos não são importados.',
+    box = ui.widget(Gtk.Box,orientation=Gtk.Orientation.VERTICAL, spacing=10, margin=16)
+    note = ui.widget(Gtk.Label,label=ui.msg('workspace.invoice_history_ui.empresa_cliente_ano_mes_de_emissao_invoice_somente_pdfs_gerados_e_guardados_desd'),
         xalign=0, wrap=True)
     note.set_max_width_chars(68)
     box.pack_start(note, False, False, 0)
-    tree_model = Gtk.TreeStore(str, str)
-    tree = Gtk.TreeView(model=tree_model, headers_visible=True)
-    tree.get_accessible().set_name('Invoices por empresa, cliente e mês de emissão')
-    renderer = Gtk.CellRendererText(wrap_mode=Pango.WrapMode.WORD_CHAR, wrap_width=420)
-    column = Gtk.TreeViewColumn('Empresa / cliente / emissão / invoice', renderer, text=0)
+    tree_model = ui.widget(Gtk.TreeStore,str, str)
+    tree = ui.widget(Gtk.TreeView,model=tree_model, headers_visible=True)
+    ui.call(tree.get_accessible(),'set_name',ui.msg('workspace.invoice_history_ui.invoices_por_empresa_cliente_e_mes_de_emissao'))
+    renderer = ui.widget(Gtk.CellRendererText,wrap_mode=Pango.WrapMode.WORD_CHAR, wrap_width=420)
+    column = ui.tree_column(Gtk,ui.msg('workspace.dialogs.invoice_history_ui.column'), renderer, text=0)
     column.set_expand(True)
     tree.append_column(column)
-    scroll = Gtk.ScrolledWindow()
+    scroll = ui.widget(Gtk.ScrolledWindow,)
     scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
     scroll.add(tree)
     box.pack_start(scroll, True, True, 0)
-    details = Gtk.Label(label='Selecione uma invoice para consultar os detalhes e as ações.', xalign=0,
+    details = ui.widget(Gtk.Label,label=ui.msg('workspace.invoice_history_ui.selecione_uma_invoice_para_consultar_os_detalhes_e_as_acoes'), xalign=0,
         wrap=True, selectable=True)
     details.set_line_wrap_mode(Pango.WrapMode.WORD_CHAR)
     details.set_max_width_chars(68)
-    detail_scroll = Gtk.ScrolledWindow()
+    detail_scroll = ui.widget(Gtk.ScrolledWindow,)
     detail_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
     detail_scroll.set_min_content_height(100)
     detail_scroll.set_max_content_height(190)
     detail_scroll.add(details)
     box.pack_start(detail_scroll, False, True, 0)
-    actions = Gtk.FlowBox()
+    actions = ui.widget(Gtk.FlowBox,)
     actions.set_selection_mode(Gtk.SelectionMode.NONE)
     actions.set_min_children_per_line(1)
     actions.set_max_children_per_line(4)
@@ -134,16 +125,16 @@ def create_history_content(window, parent=None):
     actions.set_column_spacing(8)
     box.pack_start(actions, False, False, 0)
     buttons = {}
-    for key, label in [('view', 'Consultar original'), ('copy', 'Salvar cópia do original…'),
-            ('sign', 'Assinar com gov.br…'), ('import', 'Adicionar versão assinada…'),
-            ('versions', 'Original e versões…'), ('payment', 'Informar pagamento…'), ('delete', 'Excluir do histórico…')]:
-        button = Gtk.Button(label=label, sensitive=False)
-        button.get_accessible().set_name(label.replace('…', ''))
+    for key, label in [('view', ui.msg('workspace.dialogs.invoice_history_ui.view')), ('copy', ui.msg('workspace.dialogs.invoice_history_ui.copy')),
+            ('sign', ui.msg('workspace.dialogs.invoice_history_ui.sign')), ('import', ui.msg('workspace.dialogs.invoice_history_ui.import')),
+            ('versions', ui.msg('workspace.dialogs.invoice_history_ui.versions')), ('payment', ui.msg('workspace.dialogs.invoice_history_ui.payment')), ('delete', ui.msg('workspace.dialogs.invoice_history_ui.delete'))]:
+        button = ui.widget(Gtk.Button,label=label, sensitive=False)
+        ui.call(button.get_accessible(),'set_name',ui.transform(label,'replace','…',''))
         actions.add(button)
         buttons[key] = button
-    refresh = Gtk.Button(label='Atualizar')
+    refresh = ui.widget(Gtk.Button,label=ui.msg('workspace.invoice_history_ui.atualizar'))
     actions.add(refresh)
-    feedback = Gtk.Label(xalign=0, wrap=True, selectable=True)
+    feedback = ui.widget(Gtk.Label,xalign=0, wrap=True, selectable=True)
     feedback.set_max_width_chars(68)
     box.pack_start(feedback, False, False, 0)
 
@@ -155,38 +146,38 @@ def create_history_content(window, parent=None):
         model, row = tree.get_selection().get_selected()
         record = session.select(model[row][1] if row is not None else None)
         set_enabled(record is not None)
-        text = describe(record) if record else 'Selecione uma invoice; cabeçalhos não possuem ações de arquivo.'
+        text = describe_message(record) if record else ui.msg('workspace.dialogs.invoice_history_ui.select')
         if record:
             try:
                 payment = session.payment()
-                text += '\nPagamento (informação manual): ' + ('informado como pago' if payment['status'] == 'reported_paid' else 'não informado')
-            except Exception:text += '\nInformação de pagamento indisponível.'
-        details.set_text(text)
+                text += ui.msg('workspace.dialogs.invoice_history_ui.payment_prefix') + (ui.msg('workspace.dialogs.invoice_history_ui.manual_paid') if payment['status'] == 'reported_paid' else ui.msg('workspace.dialogs.invoice_history_ui.not_reported'))
+            except Exception:text += ui.msg('workspace.dialogs.invoice_history_ui.payment_na')
+        ui.call(details,'set_text',text)
 
     def reload(*_):
         set_enabled(False)
-        tree_model.clear()
-        details.set_text('Selecione uma invoice para consultar os detalhes e as ações.')
+        ui.model_clear(tree_model,tree)
+        ui.call(details,'set_text',ui.msg('workspace.invoice_history_ui.selecione_uma_invoice_para_consultar_os_detalhes_e_as_acoes'))
         try:
             result = session.reload()
             for company in group_records(result['records']).values():
-                company_row = tree_model.append(None, [company['label'], ''])
+                company_row = ui.model_append(tree_model,[company['label'], ''],tree=True,owner=tree)
                 for client in company['clients'].values():
-                    client_row = tree_model.append(company_row, [client['label'], ''])
+                    client_row = ui.model_append(tree_model,[client['label'], ''],parent=company_row,tree=True,owner=tree)
                     for (year, month), records in sorted(client['months'].items(), reverse=True):
-                        month_row = tree_model.append(client_row, [f'Emissão: {year:04d}/{month:02d}', ''])
+                        month_row = ui.model_append(tree_model,[ui.msg('workspace.dialogs.invoice_history_ui.issue_month', year=f'{year:04d}', month=f'{month:02d}'), ''],parent=client_row,tree=True,owner=tree)
                         for record in records:
                             snapshot = record['snapshot']
-                            label = f"Invoice · {snapshot['reference']} · {snapshot['currency']} {snapshot['total']} · registro {record['id'][:8]}"
-                            tree_model.append(month_row, [label, record['id']])
-            feedback.set_text(list_feedback(result['records'], result['errors']))
+                            label = ui.msg('workspace.dialogs.invoice_history_ui.record_label', reference=snapshot['reference'], currency=snapshot['currency'], total=snapshot['total'], id=record['id'][:8])
+                            ui.model_append(tree_model,[label, record['id']],parent=month_row,tree=True,owner=tree)
+            ui.call(feedback,'set_text',feedback_message(result['records'], result['errors']))
         except Exception:
             session.records = {}
             session.selected_id = None
-            feedback.set_text('Não foi possível carregar o histórico. Os arquivos foram preservados.')
+            ui.call(feedback,'set_text',ui.msg('workspace.invoice_history_ui.nao_foi_possivel_carregar_o_historico_os_arquivos_foram_preservados'))
 
     def show_error(message):
-        feedback.set_text(message)
+        ui.call(feedback,'set_text',message)
         feedback.grab_focus()
 
     def view(*_):
@@ -194,7 +185,7 @@ def create_history_content(window, parent=None):
             uri = Gio.File.new_for_path(str(session.path())).get_uri()
             Gio.AppInfo.launch_default_for_uri(uri, None)
         except Exception:
-            show_error('Não foi possível abrir o PDF selecionado. O registro foi preservado.')
+            show_error(ui.msg('workspace.dialogs.invoice_history_ui.open_error'))
 
     def copy(*_):
         if session.selected_id is None:
@@ -203,9 +194,9 @@ def create_history_content(window, parent=None):
             if signatures_ui.save_copy(dialog, session.export) is None:
                 buttons['copy'].grab_focus()
                 return
-            feedback.set_text('Cópia do PDF salva; o histórico permanece intacto.')
+            ui.call(feedback,'set_text',ui.msg('workspace.invoice_history_ui.copia_do_pdf_salva_o_historico_permanece_intacto'))
         except Exception:
-            show_error('Não foi possível concluir a cópia. O histórico permanece disponível; confira o arquivo de destino.')
+            show_error(ui.msg('workspace.dialogs.invoice_history_ui.copy_error'))
         feedback.grab_focus()
 
     def sign(*_):
@@ -214,13 +205,13 @@ def create_history_content(window, parent=None):
         try:
             saved, opened = signatures_ui.sign_invoice(dialog, session.export)
             if saved is None:
-                feedback.set_text('Ação cancelada. Nenhum portal foi aberto.')
+                ui.call(feedback,'set_text',ui.msg('workspace.invoice_history_ui.acao_cancelada_nenhum_portal_foi_aberto'))
             elif opened:
-                feedback.set_text('Cópia salva e portal gov.br aberto. Envie e assine manualmente; depois importe a versão baixada.')
+                ui.call(feedback,'set_text',ui.msg('workspace.invoice_history_ui.copia_salva_e_portal_gov_br_aberto_envie_e_assine_manualmente_depois_importe_a_v'))
             else:
-                feedback.set_text('Cópia salva, mas não foi possível abrir o portal gov.br. Nenhum PDF foi enviado.')
+                ui.call(feedback,'set_text',ui.msg('workspace.invoice_history_ui.copia_salva_mas_nao_foi_possivel_abrir_o_portal_gov_br_nenhum_pdf_foi_enviado'))
         except Exception:
-            show_error('Não foi possível salvar a cópia para assinatura. O portal não foi aberto.')
+            show_error(ui.msg('workspace.dialogs.invoice_history_ui.sign_error'))
         feedback.grab_focus()
 
     def import_version(*_):
@@ -229,9 +220,9 @@ def create_history_content(window, parent=None):
             return
         try:
             if signatures_ui.add_version(dialog, record) is not None:
-                feedback.set_text('Versão importada — validação pendente. O original e as versões anteriores foram preservados.')
+                ui.call(feedback,'set_text',ui.msg('workspace.invoice_history_ui.versao_importada_validacao_pendente_o_original_e_as_versoes_anteriores_foram_pre'))
         except Exception:
-            show_error('Não foi possível importar a versão. Atualize o histórico antes de tentar novamente.')
+            show_error(ui.msg('workspace.dialogs.invoice_history_ui.import_error'))
         feedback.grab_focus()
 
     def versions(*_):
@@ -241,38 +232,34 @@ def create_history_content(window, parent=None):
         try:
             signatures_ui.show_versions(dialog, record)
         except Exception:
-            show_error('Não foi possível listar as versões desta invoice. Os arquivos foram preservados.')
+            show_error(ui.msg('workspace.dialogs.invoice_history_ui.versions_error'))
 
     def payment(*_):
         record = session.records.get(session.selected_id)
         if not record:return
         snapshot = record['snapshot']
-        confirm = Gtk.MessageDialog(transient_for=dialog, modal=True, message_type=Gtk.MessageType.QUESTION,
-            buttons=Gtk.ButtonsType.NONE, text='Informação manual de pagamento')
-        confirm.add_buttons('Cancelar', Gtk.ResponseType.CANCEL, 'Informar como pago', 1, 'Remover informação', 2)
+        confirm = ui.widget(Gtk.MessageDialog,transient_for=dialog, modal=True, message_type=Gtk.MessageType.QUESTION,
+            buttons=Gtk.ButtonsType.NONE, text=ui.msg('workspace.invoice_history_ui.informacao_manual_de_pagamento'))
+        ui.buttons(confirm,ui.msg('workspace.invoice_history_ui.cancelar'), Gtk.ResponseType.CANCEL, ui.msg('workspace.invoice_history_ui.informar_como_pago'), 1, ui.msg('workspace.invoice_history_ui.remover_informacao'), 2)
         confirm.set_default_response(Gtk.ResponseType.CANCEL)
-        confirm.format_secondary_text(snapshot['reference'] + ' · registro ' + record['id'][:8] + ' · ' + snapshot['client']['name'] + '\n' +
-            snapshot['issued_on'] + ' · ' + snapshot['currency'] + ' ' + snapshot['total'] + '\n' +
-            'Esta informação não é conciliação bancária, não altera o PDF e não valida assinatura.')
+        ui.call(confirm,'format_secondary_text',ui.msg('workspace.dialogs.invoice_history_ui.payment_confirm', reference=snapshot['reference'], id=record['id'][:8], client=snapshot['client']['name'], issued=ui.date_text(snapshot['issued_on']) if localized else snapshot['issued_on'], currency=snapshot['currency'], total=snapshot['total']))
         answer = confirm.run();confirm.destroy()
         if answer not in (1,2):return
         try:
             session.report_paid(answer == 1, confirmed=True)
             selected()
-            feedback.set_text('Pagamento informado manualmente; PDF e estado de assinatura preservados.')
-        except Exception:show_error('Não foi possível salvar a informação de pagamento.')
+            ui.call(feedback,'set_text',ui.msg('workspace.invoice_history_ui.pagamento_informado_manualmente_pdf_e_estado_de_assinatura_preservados'))
+        except Exception:show_error(ui.msg('workspace.dialogs.invoice_history_ui.payment_error'))
 
     def delete(*_):
         record = session.records.get(session.selected_id)
         if record is None:
             return
         snapshot = record['snapshot']
-        confirm = Gtk.MessageDialog(transient_for=dialog, modal=True, message_type=Gtk.MessageType.WARNING,
-            buttons=Gtk.ButtonsType.OK_CANCEL, text='Excluir esta invoice do histórico?')
+        confirm = ui.widget(Gtk.MessageDialog,transient_for=dialog, modal=True, message_type=Gtk.MessageType.WARNING,
+            buttons=Gtk.ButtonsType.OK_CANCEL, text=ui.msg('workspace.invoice_history_ui.excluir_esta_invoice_do_historico'))
         confirm.set_default_response(Gtk.ResponseType.CANCEL)
-        confirm.format_secondary_text(f"{snapshot['reference']} · {snapshot['client']['name']} · emissão {snapshot['issued_on']}\n"
-            f"Registro {record['id'][:8]} · guardado {record['created_at']}\n"
-            'O original, todas as versões importadas e o registro desta invoice no histórico serão excluídos. O PDF salvo fora do histórico e os registros de horas não serão alterados.')
+        ui.call(confirm,'format_secondary_text',ui.msg('workspace.dialogs.invoice_history_ui.delete_confirm', reference=snapshot['reference'], client=snapshot['client']['name'], issued=ui.date_text(snapshot['issued_on']) if localized else snapshot['issued_on'], id=record['id'][:8], stored=ui.date_text(record['created_at'],'datetime') if localized else record['created_at']))
         answer = confirm.run()
         confirm.destroy()
         if answer != Gtk.ResponseType.OK:
@@ -281,11 +268,11 @@ def create_history_content(window, parent=None):
             session.delete(confirmed=True)
             reload()
             previous = feedback.get_text()
-            feedback.set_text('Invoice excluída do histórico. PDF externo e registros de horas preservados.' +
+            ui.call(feedback,'set_text',ui.msg('workspace.dialogs.invoice_history_ui.deleted') +
                 ('\n' + previous if previous else ''))
         except Exception as failure:
             reload()
-            show_error('Não foi possível concluir a exclusão. ' + str(failure)[:300])
+            show_error(ui.msg('workspace.dialogs.invoice_history_ui.delete_error', error=ui.error_message(failure,limit=300)))
 
     def resized(_tree, allocation):
         width = max(180, allocation.width - 80)
@@ -314,8 +301,8 @@ def create_history_content(window, parent=None):
 
 def open_history(window):
     from gi.repository import Gtk
-    dialog = Gtk.Dialog(title='Histórico de invoices', transient_for=window, modal=True)
-    dialog.add_button('Fechar', Gtk.ResponseType.CLOSE)
+    dialog = ui.widget(Gtk.Dialog,title=ui.msg('workspace.invoice_history_ui.historico_de_invoices'), transient_for=window, modal=True)
+    ui.button(dialog,ui.msg('workspace.invoice_history_ui.fechar'), Gtk.ResponseType.CLOSE)
     dialog.set_default_size(820, 620)
     dialog.set_size_request(420, 300)
     try:
@@ -324,6 +311,6 @@ def open_history(window):
         dialog.show_all()
         dialog.run()
     except Exception:
-        window.status.set_text('Não foi possível abrir o histórico de invoices. Os arquivos foram preservados.')
+        ui.call(window.status,'set_text',ui.msg('workspace.invoice_history_ui.nao_foi_possivel_abrir_o_historico_de_invoices_os_arquivos_foram_preservados'))
     finally:
         dialog.destroy()

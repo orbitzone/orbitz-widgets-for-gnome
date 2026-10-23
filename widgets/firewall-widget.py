@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Incremental, bounded UFW pattern analysis. No firewall rule changes."""
+from orbitz_i18n import t
 import fcntl
 import ipaddress
 import json
@@ -28,11 +29,11 @@ def load():
     try:
         fd=os.open(CACHE, os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK)
         with os.fdopen(fd,'rb') as f:
-            if not stat.S_ISREG(os.fstat(f.fileno()).st_mode): raise ValueError('Cache inválido')
+            if not stat.S_ISREG(os.fstat(f.fileno()).st_mode): raise ValueError(t('widgets.firewall_widget.invalid_cache'))
             raw=f.read(MAX_CACHE+1)
         if len(raw)>MAX_CACHE: raise ValueError('Cache grande')
         data=json.loads(raw)
-        if not valid_state(data): raise ValueError('Cache inválido')
+        if not valid_state(data): raise ValueError(t('widgets.firewall_widget.invalid_cache'))
         return data
     except (OSError, ValueError, TypeError, AttributeError): return empty()
 
@@ -86,7 +87,7 @@ def journal_batch(cursor):
                 if pending:records.append(bytes(pending))
                 error=stderr.decode(errors='replace')
                 if proc.returncode or 'not seeing messages' in error.lower() or 'permission denied' in error.lower():
-                    raise RuntimeError(error[:200] or 'Sem acesso ao journal do kernel.')
+                    raise RuntimeError(error[:200] or t('widgets.firewall_widget.kernel_journal_unavailable'))
         finally:
             sel.close()
             if proc.poll() is None:proc.kill();proc.wait()
@@ -97,10 +98,10 @@ def collect():
     CACHE.parent.mkdir(parents=True,exist_ok=True)
     fd=os.open(CACHE.parent/'firewall-patterns.lock',os.O_CREAT|os.O_RDWR|os.O_NOFOLLOW|os.O_NONBLOCK,0o600)
     with os.fdopen(fd,'r+') as lock:
-        if not stat.S_ISREG(os.fstat(lock.fileno()).st_mode):raise ValueError('Lock inválido')
+        if not stat.S_ISREG(os.fstat(lock.fileno()).st_mode):raise ValueError(t('widgets.firewall_widget.invalid_lock'))
         try:fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
         except BlockingIOError:
-            p=payload(load());p['scope']+='\nOutra consulta está em andamento.';return p
+            p=payload(load());p['scope']+=t('widgets.firewall_widget.another_query_is_in_progress');return p
         data=load()
         try:lines,partial=journal_batch(data['cursor'])
         except RuntimeError as e:
@@ -112,23 +113,23 @@ def collect():
 
 def inspect_target(kind,target):
     if kind=='ip':target=str(ipaddress.ip_address(target))
-    elif not target.isdecimal() or not 1<=int(target)<=65535:raise ValueError('Porta inválida')
+    elif not target.isdecimal() or not 1<=int(target)<=65535:raise ValueError(t('widgets.firewall_widget.invalid_port'))
     data=load();prune(data,time.time());groups=[];samples=[]
     for source,g in data['sources'].items():
         matched=source==target or any(target in b['destinations' if kind=='ip' else 'ports'] for b in g['buckets'].values())
         if kind=='port':matched=any(target in b['ports'] for b in g['buckets'].values())
         if not matched:continue
         summary=summarize(source,g,time.time())
-        if summary:groups.append(source+'\n'+summary['reason']+'\nPrimeiro: '+summary['first']+' · Último: '+summary['last'])
+        if summary:groups.append(source+'\n'+summary['reason']+t('widgets.firewall_widget.first')+summary['first']+t('widgets.firewall_widget.last')+summary['last'])
         for sample in g['samples']:
             f=dict(re.findall(r'\b([A-Z]+)=([^\s]*)',sample['message']))
             if (kind=='ip' and target in (f.get('SRC'),f.get('DST'))) or (kind=='port' and target==f.get('DPT')):samples.append(sample)
-    text=[('IP: ' if kind=='ip' else 'Porta: ')+target,'Evidências da janela de 24 h coletada; amostras não são a lista completa.','\n\n'.join(groups[:20]) or 'Nenhum padrão destacado para esta seleção.']
+    text=[('IP: ' if kind=='ip' else t('widgets.firewall_widget.port'))+target,t('widgets.firewall_widget.evidence_from_the_collected_24_hour_window_samples_are_not_the_co'),'\n\n'.join(groups[:20]) or t('widgets.firewall_widget.no_highlighted_pattern_for_this_selection')]
     if kind=='port':
         r=bounded_run(['ss','-H','-ltnup'],timeout=3)
         listeners=[l[:512] for l in r.stdout.splitlines() if len(l.split())>=5 and l.split()[4].rsplit(':',1)[-1]==target]
-        text+=['Escuta local atual:', '\n'.join(listeners[:10]) or ('Consulta indisponível.' if r.returncode else 'Nenhuma escuta visível.')]
-    text+=['Amostras de bloqueios:', '\n'.join(date(x['time'])+' '+x['message'] for x in sorted(samples,key=lambda x:x['time'])[-20:]) or 'Nenhuma amostra recente disponível.']
+        text+=[t('widgets.firewall_widget.current_local_listeners'), '\n'.join(listeners[:10]) or (t('widgets.firewall_widget.query_unavailable') if r.returncode else t('widgets.firewall_widget.no_visible_listeners'))]
+    text+=[t('widgets.firewall_widget.block_samples'), '\n'.join(date(x['time'])+' '+x['message'] for x in sorted(samples,key=lambda x:x['time'])[-20:]) or t('widgets.firewall_widget.no_recent_samples_available')]
     return dict(inspect='\n\n'.join(text),remote=kind=='ip' and ipaddress.ip_address(target).is_global)
 
 def main():
@@ -138,11 +139,11 @@ def main():
     elif '--dns' in sys.argv:
         target=str(ipaddress.ip_address(sys.argv[sys.argv.index('--dns')+1]))
         r=bounded_run(['getent','hosts',target],timeout=5)
-        result={'inspect':'DNS reverso: '+target+'\n'+(r.stdout[:4096].strip() or 'Sem nome retornado.')+'\nUm nome DNS não comprova a identidade da origem.'}
+        result={'inspect':t('widgets.firewall_widget.reverse_dns')+target+'\n'+(r.stdout[:4096].strip() or t('widgets.firewall_widget.no_name_returned'))+t('widgets.firewall_widget.a_dns_name_does_not_prove_the_source_identity')}
     else:
         try:result=collect()
         except (OSError,RuntimeError,ValueError,subprocess.SubprocessError) as e:
-            result=payload(load());result['text']='Firewall: consulta indisponível';result['scope']+='\nFalha na atualização; dados anteriores: '+str(e)[:200]
+            result=payload(load());result['text']=t('widgets.firewall_widget.firewall_query_unavailable');result['scope']+=t('widgets.firewall_widget.update_failed_previous_data')+str(e)[:200]
         if '--details' not in sys.argv:result={k:result[k] for k in ('text','updated')}
     print(PREFIX+json.dumps(result,ensure_ascii=False))
 

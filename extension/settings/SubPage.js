@@ -1,5 +1,6 @@
 const ExtensionUtils = imports.misc.extensionUtils;
 const Me = ExtensionUtils.getCurrentExtension();
+const Language = Me.imports.uiLanguage.Language;
 
 const {Adw, Gdk, GLib, GObject, Gtk} = imports.gi;
 
@@ -8,7 +9,7 @@ const {TimeZoneCatalog} = Me.imports.settings.timeZoneCatalog;
 const Gettext = imports.gettext.domain(Me.metadata['gettext-domain']);
 const Utils = Me.imports.utils;
 const {WidgetsData} = Me.imports.settings.WidgetsData;
-const _ = Gettext.gettext;
+const _ = Language.tr;
 
 var SubPage = GObject.registerClass({
     GTypeName: 'OrbitzWidgetsSubPage',
@@ -24,9 +25,9 @@ var SubPage = GObject.registerClass({
     },
 }, class AzClockSubPage extends Adw.PreferencesPage {
     _init(settings, params) {
-        super._init({
+        super._init(Language.properties(this, {
             ...params,
-        });
+        }));
 
         this.children = [];
         this._settings = settings;
@@ -36,17 +37,17 @@ var SubPage = GObject.registerClass({
 
         const isWidget = this.element_index === 0;
 
-        const nameEntry = new Gtk.Entry({
+        const nameEntry = Language.widget(Gtk.Entry, {
             valign: Gtk.Align.CENTER,
             width_chars: 20,
             text: this.getClockElementData('Name'),
         });
         nameEntry.connect('changed', () => {
             this.setClockElementData('Name', nameEntry.get_text());
-            this.title = nameEntry.get_text();
+            Language.set(this, 'title', nameEntry.get_text());
         });
-        const nameRow = new Adw.ActionRow({
-            title: isWidget ? _('Widget Name') : _('Element Name'),
+        const nameRow = Language.widget(Adw.ActionRow, {
+            title: isWidget ? Language.msg('settings.widget_name') : Language.msg('settings.element_name'),
             activatable_widget: nameEntry,
         });
         nameRow.add_suffix(nameEntry);
@@ -58,31 +59,31 @@ var SubPage = GObject.registerClass({
             const navGroup = new Adw.PreferencesGroup();
             this.add(navGroup);
 
-            const navRow = new Adw.ActionRow({
-                title: _('Move Element'),
+            const navRow = Language.widget(Adw.ActionRow, {
+                title: Language.msg('settings.move_element'),
             });
             navGroup.add(navRow);
 
-            const navBox = new Gtk.Box({
+            const navBox = Language.widget(Gtk.Box, {
                 css_classes: ['linked'],
                 spacing: 0,
             });
             navRow.add_suffix(navBox);
 
-            const downButton = new Gtk.Button({
+            const downButton = Language.widget(Gtk.Button, {
                 icon_name: 'go-down-symbolic',
                 valign: Gtk.Align.CENTER,
                 sensitive: this.element_index !== lastElementIndex,
-                tooltip_text: _('Move element down in order'),
+                tooltip_text: Language.msg('settings.move_element_down_in_order'),
             });
             navBox.append(downButton);
             downButton.connect('clicked', () => this.element_index++);
 
-            const upButton = new Gtk.Button({
+            const upButton = Language.widget(Gtk.Button, {
                 icon_name: 'go-up-symbolic',
                 valign: Gtk.Align.CENTER,
                 sensitive: this.element_index !== firstElementIndex,
-                tooltip_text: _('Move element up in order'),
+                tooltip_text: Language.msg('settings.move_element_up_in_order'),
             });
             navBox.append(upButton);
             upButton.connect('clicked', () => this.element_index--);
@@ -91,11 +92,6 @@ var SubPage = GObject.registerClass({
 
     createComboRow(title, setting) {
         const value = this.getClockElementData(setting);
-        const stringList = new Gtk.StringList();
-        stringList.append(_('Start'));
-        stringList.append(_('Center'));
-        stringList.append(_('End'));
-
         let selectedValue = 0;
 
         if (value === 'Start')
@@ -105,21 +101,22 @@ var SubPage = GObject.registerClass({
         else if (value === 'End')
             selectedValue = 2;
 
-        const comboRow = new Adw.ComboRow({
-            title: _(title),
-            model: stringList,
+        const comboRow = Language.widget(Adw.ComboRow, {
+            title,
             selected: selectedValue,
         });
+        Language.items(comboRow, Gtk.StringList, ['settings.start', 'settings.center', 'settings.end'].map(key => Language.msg(key)));
         comboRow.connect('notify::selected', widget => {
-            this.setClockElementData(setting, widget.selected_item.string);
+            if (widget.orbitzLanguageUpdating) return;
+            this.setClockElementData(setting, ['Start', 'Center', 'End'][widget.selected]);
         });
         return comboRow;
     }
 
     createShadowExpanderRow(title, elementType) {
         const shadowEnabled = this.getClockElementData(`${elementType}Enabled`, 'bool');
-        const shadowExpanderRow = new Adw.ExpanderRow({
-            title: _(title),
+        const shadowExpanderRow = Language.widget(Adw.ExpanderRow, {
+            title,
             show_enable_switch: true,
             expanded: false,
             enable_expansion: shadowEnabled,
@@ -128,23 +125,23 @@ var SubPage = GObject.registerClass({
             this.setClockElementData(`${elementType}Enabled`, widget.enable_expansion);
         });
 
-        const shadowColorRow = this.createColorRow(_('Shadow Color'), `${elementType}Color`);
+        const shadowColorRow = this.createColorRow(Language.msg('settings.shadow_color'), `${elementType}Color`);
         shadowExpanderRow.add_row(shadowColorRow);
-        const xOffsetRow = this.createSpinRow(_('Shadow X Offset'), `${elementType}X`, -15, 15);
+        const xOffsetRow = this.createSpinRow(Language.msg('settings.shadow_x_offset'), `${elementType}X`, -15, 15);
         shadowExpanderRow.add_row(xOffsetRow);
-        const yOffsetRow = this.createSpinRow(_('Shadow Y Offset'), `${elementType}Y`, -15, 15);
+        const yOffsetRow = this.createSpinRow(Language.msg('settings.shadow_y_offset'), `${elementType}Y`, -15, 15);
         shadowExpanderRow.add_row(yOffsetRow);
-        const spreadRow = this.createSpinRow(_('Shadow Spread'), `${elementType}Spread`, 0, 15);
+        const spreadRow = this.createSpinRow(Language.msg('settings.shadow_spread'), `${elementType}Spread`, 0, 15);
         shadowExpanderRow.add_row(spreadRow);
-        const blurRow = this.createSpinRow(_('Shadow Blur'), `${elementType}Blur`, 0, 15);
+        const blurRow = this.createSpinRow(Language.msg('settings.shadow_blur'), `${elementType}Blur`, 0, 15);
         shadowExpanderRow.add_row(blurRow);
         return shadowExpanderRow;
     }
 
     createSpinRow(title, setting, lower, upper, digits = 0) {
         const value = this.getClockElementData(setting, 'int') || 0;
-        const spinButton = new Gtk.SpinButton({
-            adjustment: new Gtk.Adjustment({
+        const spinButton = Language.widget(Gtk.SpinButton, {
+            adjustment: Language.widget(Gtk.Adjustment, {
                 lower, upper, step_increment: 1, page_increment: 1, page_size: 0,
             }),
             climb_rate: 1,
@@ -156,8 +153,8 @@ var SubPage = GObject.registerClass({
         spinButton.connect('value-changed', widget => {
             this.setClockElementData(setting, widget.get_value());
         });
-        const spinRow = new Adw.ActionRow({
-            title: _(title),
+        const spinRow = Language.widget(Adw.ActionRow, {
+            title,
             activatable_widget: spinButton,
         });
 
@@ -173,7 +170,7 @@ var SubPage = GObject.registerClass({
         const value = this.getClockElementData(setting);
         let rgba = new Gdk.RGBA();
         rgba.parse(value ?? '');
-        const colorButton = new Gtk.ColorButton({
+        const colorButton = Language.widget(Gtk.ColorButton, {
             rgba,
             use_alpha: true,
             valign: Gtk.Align.CENTER,
@@ -181,8 +178,8 @@ var SubPage = GObject.registerClass({
         colorButton.connect('color-set', widget => {
             this.setClockElementData(setting, widget.get_rgba().to_string());
         });
-        const colorRow = new Adw.ActionRow({
-            title: _(title),
+        const colorRow = Language.widget(Adw.ActionRow, {
+            title,
             activatable_widget: colorButton,
         });
         colorRow.add_suffix(colorButton);
@@ -196,10 +193,10 @@ var SubPage = GObject.registerClass({
     }
 
     createTimeZoneRow() {
-        const timeZoneRow = new Adw.ActionRow({title: _('Time Zone'), activatable: true});
+        const timeZoneRow = Language.widget(Adw.ActionRow, {title: Language.msg('settings.time_zone'), activatable: true});
 
-        const timeZoneExpanderRow = new Adw.ExpanderRow({
-            title: _('Override Time Zone'),
+        const timeZoneExpanderRow = Language.widget(Adw.ExpanderRow, {
+            title: Language.msg('settings.override_time_zone'),
             show_enable_switch: true,
             expanded: this.getClockElementData('TimeZoneOverrideEnabled', 'bool'),
             enable_expansion: this.getClockElementData('TimeZoneOverrideEnabled', 'bool'),

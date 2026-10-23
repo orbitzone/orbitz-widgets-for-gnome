@@ -11,7 +11,7 @@ const context = {St:{BoxLayout:Actor, Label:Actor, Button:Actor}, Pango:{Ellipsi
 vm.createContext(context);
 context.render = require('./helpers/command_panels').load(context)._renderServices;
 const tips=[];
-const host={_updatesRows:new Actor(),_attachActionTooltip(actor,text){tips.push(text);}};
+const host={_updatesRows:new Actor(),_attachActionTooltip(actor,text){tips.push(context.Language.text(text));}};
 const item={name:'test.service',description:'Test service',result:'exit-code',status:'1',changed:'Today'};
 const data={text:'Serviços: 1 com falha',groups:[{scope:'system',items:[item],count:1,error:''},{scope:'user',items:[],count:0,error:'Sem acesso'}]};
 context.render.call(host,data);

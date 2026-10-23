@@ -21,7 +21,7 @@ def definitions(name):
     # Isolate reusable definitions without executing a widget's sampling loop.
     nodes = []
     for node in tree.body:
-        if isinstance(node, (ast.Import, ast.ImportFrom, ast.FunctionDef)):
+        if isinstance(node, (ast.Import, ast.ImportFrom, ast.FunctionDef, ast.ClassDef)):
             nodes.append(node)
         elif isinstance(node, ast.Assign) and all(isinstance(t, ast.Name) and t.id.isupper() for t in node.targets):
             nodes.append(node)

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Read-only failed system/session services; bounded calls, no journal scraping."""
+from orbitz_i18n import t
 import json
 import re
 import subprocess
@@ -20,7 +21,7 @@ def collect(details=False):
             for line in output.splitlines():
                 fields = line.split(None, 4)
                 if len(fields) < 4 or len(fields[0]) > 256 or fields[0].startswith('-') or not UNIT.fullmatch(fields[0]) or fields[2] != 'failed':
-                    raise ValueError('Lista de serviços inválida')
+                    raise ValueError(t('widgets.servicos_widget.invalid_service_list'))
                 count += 1
                 if details and len(units) < 6:
                     units.append(dict(name=fields[0], description=fields[4][:256] if len(fields)>4 else fields[0], result='', status='', changed=''))
@@ -36,17 +37,17 @@ def collect(details=False):
                     for item in group['items']:
                         values = records.get(item['name'], {})
                         if any(key not in values for key in ('Result', 'ExecMainStatus', 'StateChangeTimestamp')):
-                            group['error'] = 'Lista disponível; detalhes indisponíveis.'
+                            group['error'] = t('widgets.servicos_widget.list_available_details_unavailable')
                         item.update(result=values.get('Result','')[:128], status=values.get('ExecMainStatus','')[:32], changed=values.get('StateChangeTimestamp','')[:128])
                 except (OSError, ValueError, subprocess.SubprocessError):
-                    group['error'] = 'Lista disponível; detalhes indisponíveis.'
+                    group['error'] = t('widgets.servicos_widget.list_available_details_unavailable')
         except (OSError, ValueError, subprocess.SubprocessError):
-            group['error'] = 'Consulta indisponível. Verifique systemd e a permissão da sessão.'
+            group['error'] = t('widgets.servicos_widget.query_unavailable_check_systemd_and_session_permissions')
         groups.append(group)
     count = sum(g['count'] for g in groups)
     error = any(g['error'] for g in groups)
-    text = f'Serviços: {count} com falha' if count else 'Serviços: consulta incompleta' if error else 'Serviços: OK'
-    if count and error: text += ' · parcial'
+    text = t('widgets.servicos_widget.services_value0_failed', value0=count) if count else t('widgets.servicos_widget.services_incomplete_query') if error else t('widgets.servicos_widget.services_ok')
+    if count and error: text += t('widgets.servicos_widget.partial')
     return dict(text=text, groups=groups)
 
 if __name__ == '__main__':

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from orbitz_i18n import t
 from pathlib import Path
 from widget_runtime import load, save, run as bounded_run
 import json
@@ -45,7 +46,7 @@ def walk(devices, external=False):
         yield from walk(device.get('children') or [], external_here)
 
 def device_identity(name):
-    if not re.fullmatch(r'[A-Za-z0-9_.-]{1,128}', name): raise ValueError('Dispositivo inválido')
+    if not re.fullmatch(r'[A-Za-z0-9_.-]{1,128}', name): raise ValueError(t('widgets.external_storage.invalid_device'))
     try:
         root = Path('/sys/class/block') / name
         return f"{os.stat(root).st_ino}:{(root/'dev').read_text().strip()}"
@@ -61,7 +62,7 @@ def external_devices(refresh=False):
         result = bounded_run(['lsblk', '--json', '--output', 'NAME,TYPE,LABEL,TRAN,RM,HOTPLUG,MOUNTPOINTS'],
                              check=True, timeout=4)
         devices = json.loads(result.stdout)['blockdevices']
-        if not valid_devices(devices): raise ValueError('Inventário inválido')
+        if not valid_devices(devices): raise ValueError(t('widgets.external_storage.invalid_inventory'))
         save('external-devices-inventory.json', {'mounts': signature, 'devices': devices})
     groups, seen = {}, set()
     def visit(nodes, parent='', external=False):
@@ -104,37 +105,37 @@ def external_usage():
 def eject_device(name, identity):
     """Unmount all filesystems, verify, then ask UDisks to power off. Never force."""
     try:
-        if not identity or device_identity(name) != identity: raise ValueError('Dispositivo removido ou alterado. Atualize os widgets.')
+        if not identity or device_identity(name) != identity: raise ValueError(t('widgets.external_storage.device_removed_or_changed_refresh_the_widgets'))
         if not any(d['name']==name and d['identity']==identity for d in external_devices(refresh=True)):
-            raise ValueError('Dispositivo externo não encontrado.')
+            raise ValueError(t('widgets.external_storage.external_device_not_found'))
         deadline=time.monotonic()+18
         def query(args,limit=32768):
             remaining=deadline-time.monotonic()
-            if remaining<=0: raise ValueError('Tempo de ejeção excedido. Não desconecte ainda.')
-            if device_identity(name)!=identity: raise ValueError('O dispositivo mudou durante a operação.')
+            if remaining<=0: raise ValueError(t('widgets.external_storage.ejection_timed_out_do_not_disconnect_yet'))
+            if device_identity(name)!=identity: raise ValueError(t('widgets.external_storage.the_device_changed_during_the_operation'))
             return bounded_run(args,timeout=min(5,remaining),check=True,limit=limit)
         def mounted():
             data=json.loads(query(['lsblk','-J','-p','-o','NAME,MOUNTPOINTS','/dev/'+name]).stdout)
             result=[]
             def visit(nodes,depth=0):
-                if depth>12 or not isinstance(nodes,list): raise ValueError('Inventário inválido')
+                if depth>12 or not isinstance(nodes,list): raise ValueError(t('widgets.external_storage.invalid_inventory'))
                 for node in nodes:
                     visit(node.get('children') or [],depth+1)
-                    if '[SWAP]' in (node.get('mountpoints') or []): raise ValueError('O dispositivo contém swap ativo. Ejeção recusada.')
+                    if '[SWAP]' in (node.get('mountpoints') or []): raise ValueError(t('widgets.external_storage.the_device_contains_active_swap_ejection_refused'))
                     points=[p for p in node.get('mountpoints') or [] if p and p.startswith('/')]
                     if any(p=='/' or p.startswith(('/boot','/usr','/var','/home')) for p in points):
-                        raise ValueError('O dispositivo contém uma montagem do sistema. Ejeção recusada.')
+                        raise ValueError(t('widgets.external_storage.the_device_contains_a_system_mount_ejection_refused'))
                     if points:
                         path=node.get('name','')
-                        if not re.fullmatch(r'/dev/[A-Za-z0-9_./-]+',path): raise ValueError('Dispositivo inválido')
+                        if not re.fullmatch(r'/dev/[A-Za-z0-9_./-]+',path): raise ValueError(t('widgets.external_storage.invalid_device'))
                         result.append(path)
             visit(data['blockdevices'])
-            if len(result)>16: raise ValueError('Dispositivo com montagens demais para ejeção automática.')
+            if len(result)>16: raise ValueError(t('widgets.external_storage.device_has_too_many_mounts_for_automatic_ejection'))
             return result
         for path in mounted(): query(['udisksctl','unmount','--block-device',path,'--no-user-interaction'])
-        if mounted(): raise ValueError('Há volumes ainda montados. Não desconecte o dispositivo.')
+        if mounted(): raise ValueError(t('widgets.external_storage.some_volumes_are_still_mounted_do_not_disconnect_the_device'))
         query(['udisksctl','power-off','--block-device','/dev/'+name,'--no-user-interaction'])
-        return dict(ok=True,message='Dispositivo ejetado. Seguro para desconectar do USB.')
+        return dict(ok=True,message=t('widgets.external_storage.device_ejected_safe_to_disconnect_from_usb'))
     except (OSError,ValueError,KeyError,TypeError,subprocess.SubprocessError) as error:
-        message=str(error) if isinstance(error,ValueError) else 'Não foi possível ejetar: dispositivo ocupado, sem permissão ou sem suporte. Não desconecte ainda.'
+        message=str(error) if isinstance(error,ValueError) else t('widgets.external_storage.could_not_eject_device_busy_permission_denied_or_unsupported_do_n')
         return dict(ok=False,message=message[:256])

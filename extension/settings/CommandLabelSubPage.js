@@ -1,9 +1,10 @@
 const ExtensionUtils = imports.misc.extensionUtils;
 const Me = ExtensionUtils.getCurrentExtension();
+const Language = Me.imports.uiLanguage.Language;
 
 const {Adw, Gio, GLib, GObject, Gtk} = imports.gi;
 const Gettext = imports.gettext.domain(Me.metadata['gettext-domain']);
-const _ = Gettext.gettext;
+const _ = Language.tr;
 
 const Settings = Me.imports.settings;
 const {TextLabelSubPage} = Settings.TextLabelSubPage;
@@ -15,13 +16,13 @@ class AzClockCommandLabelSubPage extends TextLabelSubPage {
 
         this.removeTextRow();
 
-        const commandExpanderRow = new Adw.ExpanderRow({
-            title: _('Command'),
+        const commandExpanderRow = Language.widget(Adw.ExpanderRow, {
+            title: Language.msg('settings.command'),
             expanded: true,
             enable_expansion: true,
         });
 
-        const commandEntry = new Gtk.Entry({
+        const commandEntry = Language.widget(Gtk.Entry, {
             valign: Gtk.Align.FILL,
             vexpand: true,
             halign: Gtk.Align.FILL,
@@ -31,7 +32,7 @@ class AzClockCommandLabelSubPage extends TextLabelSubPage {
         commandEntry.connect('changed', () => {
             this.setClockElementData('Text_Command', commandEntry.get_text());
         });
-        const commandRow = new Adw.ActionRow({
+        const commandRow = Language.widget(Adw.ActionRow, {
             activatable: false,
             selectable: false,
         });
@@ -42,24 +43,24 @@ class AzClockCommandLabelSubPage extends TextLabelSubPage {
 
         const command = this.getClockElementData('Text_Command') || '';
         const isCurrency = command.includes('currency-widget.py');
-        const pollingIntervalRow = this.createSpinRow(_('Polling Interval (ms)'), 'Text_PollingInterval', 250,
+        const pollingIntervalRow = this.createSpinRow(Language.msg('settings.polling_interval_ms'), 'Text_PollingInterval', 250,
             isCurrency ? 14400000 : 3600000);
         this.textGroupAdd(pollingIntervalRow);
         if (isCurrency) {
             commandEntry.sensitive = false;
-            commandEntry.tooltip_text = _('Use the controls below to configure this converter.');
+            Language.set(commandEntry, 'tooltip_text', Language.msg('settings.use_the_controls_below_to_configure_this_converter'));
             this._addCurrencyControls(command);
             pollingIntervalRow.sensitive = false;
-            pollingIntervalRow.subtitle = _('Updates automatically every four hours; use the widget to refresh manually.');
+            Language.set(pollingIntervalRow, 'subtitle', Language.msg('settings.updates_automatically_every_four_hours_use_the_widget_to_refresh_manually'));
             if (this.getClockElementData('Text_PollingInterval') !== '14400000')
                 this.setClockElementData('Text_PollingInterval', '14400000');
         }
         if (command.startsWith('playerctl -p spotify,chromium metadata')) {
             pollingIntervalRow.sensitive = false;
-            pollingIntervalRow.subtitle = 'Atualização por eventos de mídia';
+            Language.set(pollingIntervalRow, 'subtitle', Language.msg('settings.media_event_updates'));
         } else if (command.includes('/firewall-widget.py')) {
             pollingIntervalRow.sensitive = false;
-            pollingIntervalRow.subtitle = 'Atualização manual na modal';
+            Language.set(pollingIntervalRow, 'subtitle', Language.msg('settings.manual_modal_updates'));
         }
     }
 
@@ -73,7 +74,7 @@ class AzClockCommandLabelSubPage extends TextLabelSubPage {
     }
 
     _addCurrencyControls(command) {
-        const group = new Adw.PreferencesGroup({title: _('Currency converter')});
+        const group = Language.widget(Adw.PreferencesGroup, {title: Language.msg('settings.currency_converter')});
         this.textGroupAdd(group);
         let argv = [];
         try { const parsed = GLib.shell_parse_argv(command); if (parsed[0]) argv = parsed[1]; } catch (error) { /* Keep defaults for a damaged command. */ }
@@ -81,15 +82,16 @@ class AzClockCommandLabelSubPage extends TextLabelSubPage {
         const crypto = argv.includes('--mode') && value('--mode') === 'crypto';
         const remembered = {fiat: argv.includes('--quote') && /^[A-Z]{3}$/.test(value('--quote')) ? value('--quote') : 'USD',
             crypto: argv.includes('--asset') && /^[a-z0-9-]+$/.test(value('--asset')) ? value('--asset') : 'btc-bitcoin'};
-        const category = new Gtk.DropDown({model: Gtk.StringList.new(['Fiat', 'Crypto']), selected: crypto ? 1 : 0});
-        const categoryRow = new Adw.ActionRow({title: _('Category')});
+        const category = Language.widget(Gtk.DropDown, {selected: crypto ? 1 : 0});
+        Language.items(category, Gtk.StringList, ['settings.fiat_category', 'settings.crypto_category'].map(key => Language.msg(key)));
+        const categoryRow = Language.widget(Adw.ActionRow, {title: Language.msg('settings.category')});
         categoryRow.add_suffix(category);group.add(categoryRow);
-        const picker = new Gtk.DropDown({enable_search: true, sensitive: false});
-        const pickerRow = new Adw.ActionRow({title: _('Asset'), subtitle: _('Loading supported currencies…')});
+        const picker = Language.widget(Gtk.DropDown, {enable_search: true, sensitive: false});
+        const pickerRow = Language.widget(Adw.ActionRow, {title: Language.msg('settings.asset'), subtitle: Language.msg('settings.loading_supported_currencies')});
         pickerRow.add_suffix(picker);group.add(pickerRow);
         // Adw.SwitchRow requires libadwaita 1.4; GNOME 42 ships 1.1.
-        const direction = new Gtk.Switch({active: argv.includes('--reverse'), valign: Gtk.Align.CENTER, sensitive: false});
-        const directionRow = new Adw.ActionRow({title: _('Reverse conversion'), activatable_widget: direction});
+        const direction = Language.widget(Gtk.Switch, {active: argv.includes('--reverse'), valign: Gtk.Align.CENTER, sensitive: false});
+        const directionRow = Language.widget(Adw.ActionRow, {title: Language.msg('settings.reverse_conversion'), activatable_widget: direction});
         directionRow.add_suffix(direction);group.add(directionRow);
         const script = GLib.build_filenamev([GLib.get_user_data_dir(), 'orbitz-widgets', 'collectors', 'currency-widget.py']);
         let choices = [], loaded = false, generation = 0, alive = true;
@@ -113,27 +115,27 @@ class AzClockCommandLabelSubPage extends TextLabelSubPage {
                 targetState = snapshot();
             }
             const base = mode() === 'crypto' ? 'USD' : 'BRL';
-            pickerRow.title = direction.active ? `${selected.symbol} → ${base}` : `${base} → ${selected.symbol}`;
-            pickerRow.subtitle = selected.name;
-            directionRow.subtitle = mode() === 'crypto' ? _('Reverse between USD and the selected crypto asset.') : _('Convert the selected currency back to BRL.');
+            Language.set(pickerRow, 'title', direction.active ? `${selected.symbol} → ${base}` : `${base} → ${selected.symbol}`);
+            Language.set(pickerRow, 'subtitle', selected.name);
+            Language.set(directionRow, 'subtitle', mode() === 'crypto' ? Language.msg('settings.reverse_between_usd_and_the_selected_crypto_asset') : Language.msg('settings.convert_the_selected_currency_back_to_brl'));
         };
         const loadCatalog = (persist = false) => {
             if (!current()) return;
             const request = ++generation, requestedMode = mode();
             loaded = false;picker.sensitive = false;direction.sensitive = false;
-            pickerRow.subtitle = _('Loading supported currencies…');
-            categoryRow.subtitle = requestedMode === 'crypto' ? 'Powered by CoinPaprika' : _('Fiat reference rates');
+            Language.set(pickerRow, 'subtitle', Language.msg('settings.loading_supported_currencies'));
+            Language.set(categoryRow, 'subtitle', requestedMode === 'crypto' ? 'Powered by CoinPaprika' : Language.msg('settings.fiat_reference_rates'));
             const args = ['/usr/bin/python3', script];
             if (requestedMode === 'crypto') args.push('--mode', 'crypto');
             args.push('--catalog-json');
             try {
-                const proc = Gio.Subprocess.new(args, Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_SILENCE);
+                const proc = Language.spawn(args, Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_SILENCE);
                 proc.communicate_utf8_async(null, null, (source, result) => {
                     try {
                         const [success, output] = source.communicate_utf8_finish(result);
                         if (request !== generation || !alive) return;
                         if (!current()) {
-                            pickerRow.subtitle = _('Settings changed. Reopen this configuration to select an asset.');
+                            Language.set(pickerRow, 'subtitle', Language.msg('settings.settings_changed_reopen_this_configuration_to_select_an_asset'));
                             return;
                         }
                         if (!success || !source.get_successful()) throw new Error('Catalog process failed');
@@ -156,20 +158,20 @@ class AzClockCommandLabelSubPage extends TextLabelSubPage {
                         picker.sensitive = true;loaded = true;
                         if (index < 0) {
                             direction.sensitive = false;
-                            pickerRow.title = `${_('Unavailable asset')}: ${remembered[requestedMode]}`;
-                            pickerRow.subtitle = _('The configured asset is unavailable. Select another asset to change it.');
+                            Language.set(pickerRow, 'title', Language.msg('settings.unavailable_asset_named', {asset: remembered[requestedMode]}));
+                            Language.set(pickerRow, 'subtitle', Language.msg('settings.the_configured_asset_is_unavailable_select_another_asset_to_change_it'));
                             return;
                         }
                         direction.sensitive = true;updateCommand(persist);
                     } catch (error) {
-                        if (request === generation) pickerRow.subtitle = _('Could not load the asset list. Check the connection and reopen Settings.');
+                        if (request === generation) Language.set(pickerRow, 'subtitle', Language.msg('settings.could_not_load_the_asset_list_check_the_connection_and_reopen_settings'));
                     }
                 });
-            } catch (error) { pickerRow.subtitle = _('Currency converter is not installed yet. Update Orbitz and reopen Settings.'); }
+            } catch (error) { Language.set(pickerRow, 'subtitle', Language.msg('settings.currency_converter_is_not_installed_yet_update_orbitz_and_reopen_settings')); }
         };
         picker.connect('notify::selected', () => updateCommand());
         direction.connect('notify::active', () => updateCommand());
-        category.connect('notify::selected', () => loadCatalog(true));
+        category.connect('notify::selected', () => { if (!category.orbitzLanguageUpdating) loadCatalog(true); });
         loadCatalog();
     }
 });

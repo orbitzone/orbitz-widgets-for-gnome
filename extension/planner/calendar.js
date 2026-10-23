@@ -2,6 +2,7 @@
 const {Clutter,Gio,GLib,St,Pango}=imports.gi;
 const Main=imports.ui.main;
 const Me=imports.misc.extensionUtils.getCurrentExtension();
+const Language=Me.imports.uiLanguage.Language;
 const Reminders=Me.imports.planner.reminders;
 let root=null,monitor=null,timer=0,refreshTimer=0,generation=0,anchorProvider=null;
 let data={tasks:[]},external={accounts:[],cache:{}},ledger={},alerts=null,signature='';
@@ -34,7 +35,7 @@ function button(text,action){
 }
 async function request(payload){
     const epoch=generation;
-    const proc=Gio.Subprocess.new(['/usr/bin/python3',GLib.build_filenamev([root,'planner','store.py'])],Gio.SubprocessFlags.STDIN_PIPE|Gio.SubprocessFlags.STDOUT_PIPE|Gio.SubprocessFlags.STDERR_PIPE);
+    const proc=Language.spawn(['/usr/bin/python3',GLib.build_filenamev([root,'planner','store.py'])],Gio.SubprocessFlags.STDIN_PIPE|Gio.SubprocessFlags.STDOUT_PIPE|Gio.SubprocessFlags.STDERR_PIPE);
     const [stdout]=await proc.communicate_utf8_async(JSON.stringify(payload),null);
     const result=JSON.parse(stdout);
     if(!proc.get_successful()||!result.ok)throw Error(result.error||'Não foi possível salvar.');
@@ -47,14 +48,14 @@ var openCalendar=function(initialDay=null){
     try{
         const argv=['/usr/bin/env','GDK_BACKEND=x11','/usr/bin/python3',GLib.build_filenamev([root,'planner','calendar-app.py'])];
         if(typeof initialDay==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(initialDay))argv.push(initialDay);
-        const proc=Gio.Subprocess.new(argv,Gio.SubprocessFlags.NONE);
+        const proc=Language.spawn(argv,Gio.SubprocessFlags.NONE);
         proc.wait_async(null,(process,result)=>{try{process.wait_finish(result);if(!process.get_successful())problem(Error('Não foi possível abrir o Orbitz Workspace.'));}catch(error){logError(error,'Orbitz Workspace');}});
     }catch(error){problem(error);}
 };
 function sound(){
     try{
         const executable=GLib.find_program_in_path('canberra-gtk-play');
-        if(executable)Gio.Subprocess.new([executable,'--id','alarm-clock-elapsed','--description','Lembrete da agenda'],Gio.SubprocessFlags.STDOUT_SILENCE|Gio.SubprocessFlags.STDERR_SILENCE);
+        if(executable)Language.spawn([executable,'--id','alarm-clock-elapsed','--description','Lembrete da agenda'],Gio.SubprocessFlags.STDOUT_SILENCE|Gio.SubprocessFlags.STDERR_SILENCE);
     }catch(error){logError(error,'Som do lembrete');}
 }
 function clearCards(){alerts?.destroy();alerts=null;cards.clear();signature='';}

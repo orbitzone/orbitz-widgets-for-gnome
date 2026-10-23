@@ -5,7 +5,8 @@ const Me = ExtensionUtils.getCurrentExtension();
 const {Adw, Gdk, Gio, GLib, GObject, Gtk} = imports.gi;
 const Gettext = imports.gettext.domain(Me.metadata['gettext-domain']);
 const Utils = Me.imports.utils;
-const _ = Gettext.gettext;
+const Language = Me.imports.uiLanguage.Language;
+const _ = Language.tr;
 
 const {AboutPage} = Me.imports.settings.AboutPage;
 const {DialogWindow} = Me.imports.settings.DialogWindow;
@@ -30,6 +31,7 @@ function fillPreferencesWindow(window) {
         iconTheme.add_search_path(`${Me.path}/media`);
 
     const settings = ExtensionUtils.getSettings();
+    Language.configure(settings);
 
     const widgetsData = new WidgetsData(settings.get_value('widget-data').deep_unpack());
 
@@ -47,21 +49,23 @@ function fillPreferencesWindow(window) {
 var HomePage = GObject.registerClass({GTypeName: 'OrbitzWidgetsHomePage'},
 class azClockHomePage extends Adw.PreferencesPage {
     _init(settings) {
-        super._init({
-            title: _('Settings'),
+        super._init(Language.properties(this, {
+            title: Language.tr('settings.title'),
             icon_name: 'preferences-system-symbolic',
             name: 'HomePage',
-        });
+        }));
 
+        Language.configure(settings);
         this._settings = settings;
+        Language.set(this, 'title', Language.msg('settings.title'));
         this._widgetRows = [];
 
-        const addClockButton = new Gtk.Button({
+        const addClockButton = Language.widget(Gtk.Button, {
             halign: Gtk.Align.START,
             icon_name: 'list-add-symbolic',
             valign: Gtk.Align.CENTER,
             css_classes: ['suggested-action'],
-            label: _('Add Widget...'),
+            label: Language.msg('settings.add_widget'),
         });
         addClockButton.connect('clicked', () => {
             const dialog = new AddWidgetsDialog(this._settings, this);
@@ -75,7 +79,15 @@ class azClockHomePage extends Adw.PreferencesPage {
         });
         this.clocksGroup = new Adw.PreferencesGroup();
         this.add(this.clocksGroup);
-        this.clocksGroup.set_header_suffix(addClockButton);
+        const toolbar = Language.widget(Gtk.Box, {spacing: 8, halign: Gtk.Align.START});
+        const languages = Language.widget(Gtk.DropDown, {model: Gtk.StringList.new(['Português (Brasil)', 'English (United States)']),
+            selected: Language.getLocale() === 'en-US' ? 1 : 0});
+        Language.set(languages, 'tooltip_text', Language.msg('settings.language'));
+        languages.connect('notify::selected', () => settings.set_string('ui-language', languages.selected === 1 ? 'en-US' : 'pt-BR'));
+        const unwatch = Language.watch(locale => { languages.selected = locale === 'en-US' ? 1 : 0; });
+        this.connect('unrealize', unwatch);
+        toolbar.append(languages);toolbar.append(addClockButton);
+        this.clocksGroup.set_header_suffix(toolbar);
         this.createRows();
     }
 
@@ -150,10 +162,10 @@ var WidgetRow = GObject.registerClass({
     },
 }, class AzClockWidgetRow extends Adw.ActionRow {
     _init(homePage, params) {
-        super._init({
+        super._init(Language.properties(this, {
             activatable: true,
             ...params,
-        });
+        }));
 
         this._params = params;
         this._settings = homePage.settings;
@@ -164,16 +176,16 @@ var WidgetRow = GObject.registerClass({
         const widgetData = widgetsData[this.widget_index];
         const widgetSettings = widgetData[0];
 
-        this.dragIcon = new Gtk.Image({
+        this.dragIcon = Language.widget(Gtk.Image, {
             gicon: Gio.icon_new_for_string('list-drag-handle-symbolic'),
             pixel_size: 12,
         });
         this.add_prefix(this.dragIcon);
 
-        const dragSource = new Gtk.DragSource({actions: Gdk.DragAction.MOVE});
+        const dragSource = Language.widget(Gtk.DragSource, {actions: Gdk.DragAction.MOVE});
         this.add_controller(dragSource);
 
-        const dropTarget = new Gtk.DropTargetAsync({actions: Gdk.DragAction.MOVE});
+        const dropTarget = Language.widget(Gtk.DropTargetAsync, {actions: Gdk.DragAction.MOVE});
         this.add_controller(dropTarget);
 
         dragSource.connect('drag-begin', (self, gdkDrag) => {
@@ -250,15 +262,15 @@ var WidgetRow = GObject.registerClass({
         };
         this.connect('activated', openWidgetSettings);
 
-        const configureButton = new Gtk.Button({
-            label: _('Configure'),
+        const configureButton = Language.widget(Gtk.Button, {
+            label: Language.msg('settings.configure'),
             has_frame: false,
             valign: Gtk.Align.CENTER,
         });
         configureButton.connect('clicked', openWidgetSettings);
         this.add_suffix(configureButton);
 
-        const goNextImage = new Gtk.Image({
+        const goNextImage = Language.widget(Gtk.Image, {
             gicon: Gio.icon_new_for_string('go-next-symbolic'),
             halign: Gtk.Align.END,
             valign: Gtk.Align.CENTER,
@@ -283,23 +295,23 @@ var WidgetRow = GObject.registerClass({
 var AddWidgetsDialog = GObject.registerClass({GTypeName: 'OrbitzWidgetsAddWidgetsDialog'},
 class AzClockAddWidgetsDialog extends DialogWindow {
     _init(settings, parent) {
-        super._init(_('Add Widget'), parent);
+        super._init(_('settings.add_widget_label'), parent);
         this._settings = settings;
         this.search_enabled = false;
         this.set_default_size(550, -1);
 
-        this.pageGroup.title = _('Preset Widgets');
-        this.pageGroup.add(this.addPresetWidget(_('Digital Clock Widget'), WidgetType.DIGITAL));
-        this.pageGroup.add(this.addPresetWidget(_('Analog Clock Widget'), WidgetType.ANALOG));
-        this.pageGroup.add(this.addPresetWidget(_('Currency Converter'), WidgetType.CURRENCY,
-            _('Show a daily BRL reference rate and choose the target currency.')));
+        this.pageGroup.title = _('settings.preset_widgets');
+        this.pageGroup.add(this.addPresetWidget(_('settings.digital_clock_widget'), WidgetType.DIGITAL));
+        this.pageGroup.add(this.addPresetWidget(_('settings.analog_clock_widget'), WidgetType.ANALOG));
+        this.pageGroup.add(this.addPresetWidget(_('settings.currency_converter'), WidgetType.CURRENCY,
+            _('settings.show_a_daily_brl_reference_rate_and_choose_the_target_currency')));
         this.pageGroup.add(this.addPresetWidget('Widget pai · painel', WidgetType.GROUP, 'Alinha subwidgets automaticamente'));
-        this.pageGroup.add(this.addPresetWidget(_('Custom Widget'), WidgetType.CUSTOM,
-            _('Add your own custom elements')));
+        this.pageGroup.add(this.addPresetWidget(_('settings.custom_widget'), WidgetType.CUSTOM,
+            _('settings.add_your_own_custom_elements')));
 
         const data = WidgetsData.data;
-        this.cloneGroup = new Adw.PreferencesGroup({
-            title: _('Clone existing Widget'),
+        this.cloneGroup = Language.widget(Adw.PreferencesGroup, {
+            title: Language.msg('settings.clone_existing_widget'),
         });
         this.cloneGroup.use_markup = true;
         this.page.add(this.cloneGroup);
@@ -309,7 +321,7 @@ class AzClockAddWidgetsDialog extends DialogWindow {
     }
 
     addPresetWidget(title, widgetType, subtitle) {
-        const addButton = new Gtk.Button({
+        const addButton = Language.widget(Gtk.Button, {
             icon_name: 'list-add-symbolic',
             valign: Gtk.Align.CENTER,
         });
@@ -349,7 +361,7 @@ class AzClockAddWidgetsDialog extends DialogWindow {
             this.emit('response', Gtk.ResponseType.APPLY);
         });
 
-        const row = new Adw.ActionRow({
+        const row = Language.widget(Adw.ActionRow, {
             subtitle: subtitle ?? '',
             title,
             activatable_widget: addButton,

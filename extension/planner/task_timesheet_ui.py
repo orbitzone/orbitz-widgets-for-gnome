@@ -1,4 +1,5 @@
 """Review and register a completed task in a local timesheet."""
+from ui_language import ui
 from datetime import date
 import gi
 gi.require_version('Gtk','3.0')
@@ -10,31 +11,31 @@ def register_task(window,task):
     window.refresh()
     current=next((t for t in window.data['tasks'] if t['id']==task['id']),None)
     if current is None or not current['done']:
-        window.status.set_text('Esta tarefa precisa estar concluída para registrar horas.');return
+        ui.call(window.status,'set_text',ui.msg('workspace.task_timesheet_ui.esta_tarefa_precisa_estar_concluida_para_registrar_horas'));return
     task=current
     recorded=[s for s in window.data['timesheets'] if any(e.get('source_task_id')==task['id'] for e in s['timesheet'])]
     choices=[s for s in window.data['timesheets'] if not s['archived'] and s not in recorded]
     if not choices:
-        window.status.set_text('Esta tarefa já está nas timesheets disponíveis. Crie uma nova pelo + ou resgate uma arquivada.' if recorded else 'Crie uma timesheet pelo + ou resgate uma arquivada para registrar esta tarefa.')
+        ui.call(window.status,'set_text',ui.msg('workspace.dialogs.task_timesheet_ui.recorded') if recorded else ui.msg('workspace.dialogs.task_timesheet_ui.no_sheet'))
         return
-    dialog=Gtk.Dialog(title='Registrar tarefa na timesheet',transient_for=window,modal=True)
-    dialog.add_buttons('Cancelar',Gtk.ResponseType.CANCEL,'Registrar',Gtk.ResponseType.OK)
+    dialog=ui.widget(Gtk.Dialog,title=ui.msg('workspace.task_timesheet_ui.registrar_tarefa_na_timesheet'),transient_for=window,modal=True)
+    ui.buttons(dialog,ui.msg('workspace.task_timesheet_ui.cancelar'),Gtk.ResponseType.CANCEL,ui.msg('workspace.task_timesheet_ui.registrar'),Gtk.ResponseType.OK)
     dialog.set_default_size(500,280)
-    box=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=10,margin=18);dialog.get_content_area().add(box)
-    description=Gtk.Label(label=task['text'],xalign=0,wrap=True);description.set_max_width_chars(55);box.add(description)
-    box.add(Gtk.Label(label='Data da tarefa: '+date.fromisoformat(task['date']).strftime('%d/%m/%Y'),xalign=0))
+    box=ui.widget(Gtk.Box,orientation=Gtk.Orientation.VERTICAL,spacing=10,margin=18);dialog.get_content_area().add(box)
+    description=ui.widget(Gtk.Label,label=task['text'],xalign=0,wrap=True);description.set_max_width_chars(55);box.add(description)
+    box.add(ui.widget(Gtk.Label,label=ui.msg('workspace.dialogs.task_timesheet_ui.task_date', date=ui.date_text(task['date'])),xalign=0))
     if recorded:
-        existing=Gtk.Label(label='Já registrada em: '+', '.join('TS - '+s['name'] for s in recorded),xalign=0,wrap=True)
+        existing=ui.widget(Gtk.Label,label=ui.msg('workspace.dialogs.task_timesheet_ui.recorded_in', sheets=', '.join('TS - '+s['name'] for s in recorded)),xalign=0,wrap=True)
         box.add(existing)
-    box.add(Gtk.Label(label='Timesheet de destino',xalign=0))
-    target=Gtk.ComboBoxText()
+    box.add(ui.widget(Gtk.Label,label=ui.msg('workspace.task_timesheet_ui.timesheet_de_destino'),xalign=0))
+    target=ui.widget(Gtk.ComboBoxText,)
     for sheet in choices:target.append(sheet['id'],'TS - '+sheet['name'])
     box.add(target)
-    grid=Gtk.Grid(column_spacing=12,row_spacing=6);box.add(grid);fields={}
-    for col,(key,title) in enumerate((('start','Início · HH:MM'),('end','Fim · HH:MM'))):
-        grid.attach(Gtk.Label(label=title,xalign=0),col,0,1,1)
-        field=Gtk.Entry();field.set_max_length(5);field.set_width_chars(10);fields[key]=field;grid.attach(field,col,1,1,1)
-    error=Gtk.Label(xalign=0,wrap=True);box.add(error)
+    grid=ui.widget(Gtk.Grid,column_spacing=12,row_spacing=6);box.add(grid);fields={}
+    for col,(key,title) in enumerate((('start',ui.msg('workspace.dialogs.task_timesheet_ui.start')),('end',ui.msg('workspace.dialogs.task_timesheet_ui.end')))):
+        grid.attach(ui.widget(Gtk.Label,label=title,xalign=0),col,0,1,1)
+        field=ui.widget(Gtk.Entry,);field.set_max_length(5);field.set_width_chars(10);fields[key]=field;grid.attach(field,col,1,1,1)
+    error=ui.widget(Gtk.Label,xalign=0,wrap=True);box.add(error)
     suggested={'start':'','end':''}
     def suggest(*_):
         sheet=next(s for s in choices if s['id']==target.get_active_id())
@@ -46,7 +47,7 @@ def register_task(window,task):
         if not end:end=datetime.now().strftime('%H:%M') if task['date']==date.today().isoformat() else ''
         if end and start and end<=start:end=''
         for key,value in [('start',start),('end',end)]:
-            if not fields[key].get_text() or fields[key].get_text()==suggested[key]:fields[key].set_text(value)
+            if not fields[key].get_text() or fields[key].get_text()==suggested[key]:ui.call(fields[key],'set_text',value)
             suggested[key]=value
     target.connect('changed',suggest);target.set_active(0)
     dialog.set_default_response(Gtk.ResponseType.OK)
@@ -59,13 +60,13 @@ def register_task(window,task):
         try:
             try:latest=store.modify(payload)
             except timesheet_model.OverlapError as failure:
-                confirm=Gtk.MessageDialog(transient_for=dialog,modal=True,message_type=Gtk.MessageType.QUESTION,buttons=Gtk.ButtonsType.YES_NO,text='Horários sobrepostos')
-                confirm.format_secondary_text(str(failure));answer=confirm.run();confirm.destroy()
+                confirm=ui.widget(Gtk.MessageDialog,transient_for=dialog,modal=True,message_type=Gtk.MessageType.QUESTION,buttons=Gtk.ButtonsType.YES_NO,text=ui.msg('workspace.task_timesheet_ui.horarios_sobrepostos'))
+                ui.call(confirm,'format_secondary_text',ui.error_message(failure));answer=confirm.run();confirm.destroy()
                 if answer!=Gtk.ResponseType.YES:continue
                 latest=store.modify(dict(payload,allow_overlap=True))
             window.data=latest;window.render()
             window.focus_sheet(payload['sheet_id'])
-            window.status.set_text('Tarefa registrada em '+target.get_active_text()+' · salvo e com backup');break
-        except Exception as failure:error.set_text(str(failure))
+            ui.call(window.status,'set_text',ui.msg('workspace.dialogs.task_timesheet_ui.saved', sheet=target.get_active_text()));break
+        except Exception as failure:ui.call(error,'set_text',ui.error_message(failure))
     dialog.destroy()
 

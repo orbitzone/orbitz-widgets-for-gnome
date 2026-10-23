@@ -1,3 +1,4 @@
+const Language = imports.misc.extensionUtils.getCurrentExtension().imports.uiLanguage.Language;
 const {Adw, GLib, GObject} = imports.gi;
 
 var DialogWindow = GObject.registerClass({
@@ -21,13 +22,13 @@ var DialogWindow = GObject.registerClass({
     },
 }, class AzClockDialogWindow extends Adw.PreferencesWindow {
     _init(title, parent, params) {
-        super._init({
+        super._init(Language.properties(this, {
             title,
             transient_for: parent.get_root(),
             modal: true,
             search_enabled: true,
             ...params,
-        });
+        }));
 
         this.page = new Adw.PreferencesPage();
         this.pageGroup = new Adw.PreferencesGroup();

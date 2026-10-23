@@ -1,9 +1,10 @@
 const ExtensionUtils = imports.misc.extensionUtils;
 const Me = ExtensionUtils.getCurrentExtension();
+const Language = Me.imports.uiLanguage.Language;
 
 const {Adw, GObject, Gtk} = imports.gi;
 const Gettext = imports.gettext.domain(Me.metadata['gettext-domain']);
-const _ = Gettext.gettext;
+const _ = Language.tr;
 
 const Settings = Me.imports.settings;
 const {SubPage} = Settings.SubPage;
@@ -22,46 +23,46 @@ class AzClockAnalogClockSubPage extends SubPage {
         const timeZoneRow = this.createTimeZoneRow();
         timeZoneGroup.add(timeZoneRow);
 
-        const generalGroup = new Adw.PreferencesGroup({
-            title: _('Clock Settings'),
+        const generalGroup = Language.widget(Adw.PreferencesGroup, {
+            title: Language.msg('settings.clock_settings'),
         });
         this.add(generalGroup);
 
-        const clockSizeRow = this.createSpinRow(_('Size'), 'Clock_Size', 100, 1000);
+        const clockSizeRow = this.createSpinRow(Language.msg('settings.size'), 'Clock_Size', 100, 1000);
         generalGroup.add(clockSizeRow);
 
-        const marginsExpanderRow = new Adw.ExpanderRow({
-            title: _('Margins'),
+        const marginsExpanderRow = Language.widget(Adw.ExpanderRow, {
+            title: Language.msg('settings.margins'),
         });
         generalGroup.add(marginsExpanderRow);
 
-        const marginTopRow = this.createSpinRow(_('Top'), 'Element_Margin_Top', 0, 200);
+        const marginTopRow = this.createSpinRow(Language.msg('settings.top'), 'Element_Margin_Top', 0, 200);
         marginsExpanderRow.add_row(marginTopRow);
-        const marginRightRow = this.createSpinRow(_('Right'), 'Element_Margin_Right', 0, 200);
+        const marginRightRow = this.createSpinRow(Language.msg('settings.right'), 'Element_Margin_Right', 0, 200);
         marginsExpanderRow.add_row(marginRightRow);
-        const marginBottomRow = this.createSpinRow(_('Bottom'), 'Element_Margin_Bottom', 0, 200);
+        const marginBottomRow = this.createSpinRow(Language.msg('settings.bottom'), 'Element_Margin_Bottom', 0, 200);
         marginsExpanderRow.add_row(marginBottomRow);
-        const marginLeftRow = this.createSpinRow(_('Left'), 'Element_Margin_Left', 0, 200);
+        const marginLeftRow = this.createSpinRow(Language.msg('settings.left'), 'Element_Margin_Left', 0, 200);
         marginsExpanderRow.add_row(marginLeftRow);
 
-        const clockFaceGroup = new Adw.PreferencesGroup({
-            title: _('Clock Face'),
+        const clockFaceGroup = Language.widget(Adw.PreferencesGroup, {
+            title: Language.msg('settings.clock_face'),
         });
         this.add(clockFaceGroup);
 
-        const clockStyleRow = this.createSpinRow(_('Style'), 'ClockFace_Style', 1, CLOCK_STYLE_COUNT);
+        const clockStyleRow = this.createSpinRow(Language.msg('settings.style'), 'ClockFace_Style', 1, CLOCK_STYLE_COUNT);
         clockFaceGroup.add(clockStyleRow);
 
-        const clockColorRow = this.createColorRow(_('Color'), 'ClockFace_Color');
+        const clockColorRow = this.createColorRow(Language.msg('settings.color'), 'ClockFace_Color');
         clockFaceGroup.add(clockColorRow);
 
-        const clockBackgroundColorRow = this.createColorRow(_('Background Color'), 'ClockFace_BackgroundColor');
+        const clockBackgroundColorRow = this.createColorRow(Language.msg('settings.background_color'), 'ClockFace_BackgroundColor');
         clockFaceGroup.add(clockBackgroundColorRow);
 
         const borderEnabled = this.getClockElementData('ClockFace_BorderEnabled', 'bool');
 
-        const borderOptionsRow = new Adw.ExpanderRow({
-            title: _('Border'),
+        const borderOptionsRow = Language.widget(Adw.ExpanderRow, {
+            title: Language.msg('settings.border'),
             show_enable_switch: true,
             enable_expansion: borderEnabled,
         });
@@ -70,18 +71,18 @@ class AzClockAnalogClockSubPage extends SubPage {
             this.setClockElementData('ClockFace_BorderEnabled', widget.enable_expansion);
         });
 
-        const borderWidthRow = this.createSpinRow(_('Border Width'), 'ClockFace_BorderWidth', 0, 15);
+        const borderWidthRow = this.createSpinRow(Language.msg('settings.border_width'), 'ClockFace_BorderWidth', 0, 15);
         borderOptionsRow.add_row(borderWidthRow);
-        const borderColorRow = this.createColorRow(_('Border Color'), 'ClockFace_BorderColor');
+        const borderColorRow = this.createColorRow(Language.msg('settings.border_color'), 'ClockFace_BorderColor');
         borderOptionsRow.add_row(borderColorRow);
 
-        const shadowExpanderRow = this.createShadowExpanderRow(_('Inner Shadow'), 'ClockFace_Shadow');
+        const shadowExpanderRow = this.createShadowExpanderRow(Language.msg('settings.inner_shadow'), 'ClockFace_Shadow');
         clockFaceGroup.add(shadowExpanderRow);
 
-        const shadowOuterExpanderRow = this.createShadowExpanderRow(_('Outer Shadow'), 'ClockFace_BoxShadow');
+        const shadowOuterExpanderRow = this.createShadowExpanderRow(Language.msg('settings.outer_shadow'), 'ClockFace_BoxShadow');
         clockFaceGroup.add(shadowOuterExpanderRow);
 
-        const enableSwitch = new Gtk.Switch({
+        const enableSwitch = Language.widget(Gtk.Switch, {
             valign: Gtk.Align.CENTER,
             active: this.getClockElementData('ClockFace_Visible', 'bool'),
         });
@@ -104,29 +105,29 @@ class AzClockAnalogClockSubPage extends SubPage {
         shadowExpanderRow.sensitive = enableSwitch.get_active();
         shadowOuterExpanderRow.sensitive = enableSwitch.get_active();
 
-        this.createHandGroup('ClockButton', _('Button in Center'), BUTTON_STYLE_COUNT);
-        this.createHandGroup('SecondHand', _('Second Hand'), CLOCK_STYLE_COUNT);
-        this.createHandGroup('MinuteHand', _('Minute Hand'), CLOCK_STYLE_COUNT);
-        this.createHandGroup('HourHand', _('Hour Hand'), CLOCK_STYLE_COUNT);
+        this.createHandGroup('ClockButton', Language.msg('settings.button_in_center'), BUTTON_STYLE_COUNT);
+        this.createHandGroup('SecondHand', Language.msg('settings.second_hand'), CLOCK_STYLE_COUNT);
+        this.createHandGroup('MinuteHand', Language.msg('settings.minute_hand'), CLOCK_STYLE_COUNT);
+        this.createHandGroup('HourHand', Language.msg('settings.hour_hand'), CLOCK_STYLE_COUNT);
     }
 
     createHandGroup(elementType, title, maxStyles) {
-        const handGroup = new Adw.PreferencesGroup({
-            title: _(title),
+        const handGroup = Language.widget(Adw.PreferencesGroup, {
+            title,
         });
         this.add(handGroup);
 
-        const styleRow = this.createSpinRow(_('Style'), `${elementType}_Style`, 1, maxStyles);
+        const styleRow = this.createSpinRow(Language.msg('settings.style'), `${elementType}_Style`, 1, maxStyles);
         handGroup.add(styleRow);
 
-        const handColorRow = this.createColorRow(_('Color'), `${elementType}_Color`);
+        const handColorRow = this.createColorRow(Language.msg('settings.color'), `${elementType}_Color`);
         handGroup.add(handColorRow);
 
-        const shadowExpanderRow = this.createShadowExpanderRow(_('Shadow'), `${elementType}_Shadow`);
+        const shadowExpanderRow = this.createShadowExpanderRow(Language.msg('settings.shadow'), `${elementType}_Shadow`);
         handGroup.add(shadowExpanderRow);
 
         if (elementType === 'SecondHand' || elementType === 'ClockButton') {
-            const enableSwitch = new Gtk.Switch({
+            const enableSwitch = Language.widget(Gtk.Switch, {
                 valign: Gtk.Align.CENTER,
                 active: this.getClockElementData(`${elementType}_Visible`, 'bool'),
             });

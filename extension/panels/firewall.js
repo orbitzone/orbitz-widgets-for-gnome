@@ -1,7 +1,7 @@
 // Firewall panel methods; state and lifecycle belong to CommandLabel.
-var create = ({Clutter, Gio, GLib, Main, Pango, St, getData, readCommandOutput, stopCommandRun, global}) => ({
+var create = ({Language, Clutter, Gio, GLib, Main, Pango, St, getData, readCommandOutput, stopCommandRun, global}) => ({
     _buildFirewallDialog() {
-        this._networkBackdrop = new St.Widget({reactive: true, visible: false});
+        this._networkBackdrop = Language.widget(St.Widget, {reactive: true, visible: false});
         this._networkBackdrop.add_constraint(new Clutter.BindConstraint({source: global.stage, coordinate: Clutter.BindCoordinate.ALL}));
         this._networkBackdrop.connect('button-press-event', (_actor, event) => {
             if (this._networkDialog?.contains(event.get_source()))
@@ -10,24 +10,24 @@ var create = ({Clutter, Gio, GLib, Main, Pango, St, getData, readCommandOutput, 
             return Clutter.EVENT_STOP;
         });
         Main.uiGroup.add_child(this._networkBackdrop);
-        this._networkDialog = new St.BoxLayout({vertical: true, reactive: true,
+        this._networkDialog = Language.widget(St.BoxLayout, {vertical: true, reactive: true,
             style: 'background-color: #202020; color: white; border: 1px solid #606060; border-radius: 8px; padding: 12px; spacing: 10px;'});
-        this._firewallHeading = new St.Label({text: 'Firewall · padrões de atividade', style: 'font-weight: bold; font-size: 18px;'});
+        this._firewallHeading = Language.widget(St.Label, {text: Language.msg('panels.firewall.title'), style: 'font-weight: bold; font-size: 18px;'});
         this._networkDialog.add_child(this._firewallHeading);
-        const note = new St.Label({text: 'Destaques por persistência e variação de portas, destinos ou protocolos. Um padrão indica o que revisar; não comprova invasão.', style: 'font-size: 12px; color: #c8c8c8;'});
+        const note = Language.widget(St.Label, {text: Language.msg('panels.firewall.note'), style: 'font-size: 12px; color: #c8c8c8;'});
         note.clutter_text.set_line_wrap(true);
         this._networkDialog.add_child(note);
-        const scroll = new St.ScrollView({style: 'width: 720px; height: 300px;', reactive: true});
+        const scroll = Language.widget(St.ScrollView, {style: 'width: 720px; height: 300px;', reactive: true});
         scroll.set_policy(St.PolicyType.NEVER, St.PolicyType.AUTOMATIC);
-        this._firewallRows = new St.BoxLayout({vertical: true, style: 'spacing: 8px;'});
+        this._firewallRows = Language.widget(St.BoxLayout, {vertical: true, style: 'spacing: 8px;'});
         scroll.add_actor(this._firewallRows);
         this._networkDialog.add_child(scroll);
-        const footer = new St.BoxLayout({style: 'spacing: 8px;'});
-        this._networkRefreshButton = new St.Button({reactive: true, can_focus: true, accessible_name: 'Atualizar eventos do firewall', style: 'background-color: transparent; color: white; padding: 6px;'});
-        this._networkRefreshButton.set_child(new St.Icon({icon_name: 'view-refresh-symbolic', icon_size: 18, style: 'color: white;'}));
+        const footer = Language.widget(St.BoxLayout, {style: 'spacing: 8px;'});
+        this._networkRefreshButton = Language.widget(St.Button, {reactive: true, can_focus: true, accessible_name: Language.msg('panels.firewall.refresh'), style: 'background-color: transparent; color: white; padding: 6px;'});
+        this._networkRefreshButton.set_child(Language.widget(St.Icon, {icon_name: 'view-refresh-symbolic', icon_size: 18, style: 'color: white;'}));
         this._networkRefreshButton.connect('clicked', () => this._refreshNetworkDialog());
         footer.add_child(this._networkRefreshButton);
-        this._networkRefreshStatus = new St.Label({text: '', style: 'font-size: 12px; color: #c8c8c8;'});
+        this._networkRefreshStatus = Language.widget(St.Label, {text: '', style: 'font-size: 12px; color: #c8c8c8;'});
         footer.add_child(this._networkRefreshStatus);
         this._networkDialog.add_child(footer);
         this._networkBackdrop.add_child(this._networkDialog);
@@ -36,60 +36,60 @@ var create = ({Clutter, Gio, GLib, Main, Pango, St, getData, readCommandOutput, 
     _renderFirewall(data) {
         this._cancelFirewallInspection();
         if (typeof data.text !== 'string' || data.text.length > 128 || typeof data.scope !== 'string' || data.scope.length > 4096 || typeof data.updated !== 'string' || !Array.isArray(data.groups) || data.groups.length > 50)
-            throw new Error('Resposta do firewall inválida.');
+            throw Language.error(Language.msg('panels.error.firewall'));
         for (const row of data.groups) {
             if (!row || !['source', 'destination', 'protocol', 'ports', 'last', 'kind', 'interface'].every(key => typeof row[key] === 'string' && row[key].length <= 512) || !Number.isInteger(row.count) || row.count < 1 || (data.pattern_mode && (typeof row.reason !== 'string' || row.reason.length > 4096)))
-                throw new Error('Evento do firewall inválido.');
+                throw Language.error(Language.msg('panels.error.firewall_event'));
         }
         this._firewallData = data;
-        this._firewallHeading.text = data.text + ' · Firewall';
+        Language.set(this._firewallHeading, 'text', data.text + ' · Firewall');
         this._firewallRows.destroy_all_children();
-        const scope = new St.Label({text: data.scope, style: 'font-size: 11px; color: #c8c8c8;'});
+        const scope = Language.widget(St.Label, {text: data.scope, style: 'font-size: 11px; color: #c8c8c8;'});
         scope.clutter_text.set_line_wrap(true);
         scope.clutter_text.set_ellipsize(Pango.EllipsizeMode.NONE);
         this._firewallRows.add_child(scope);
         if (!data.groups.length)
-            this._firewallRows.add_child(new St.Label({text: 'Nenhum padrão atingiu os critérios de destaque na janela coletada.', style: 'color: #8bd5a1; padding: 8px;'}));
+            this._firewallRows.add_child(Language.widget(St.Label, {text: Language.msg('panels.firewall.empty'), style: 'color: #8bd5a1; padding: 8px;'}));
         for (const item of data.groups) {
-            const box = new St.BoxLayout({vertical: true, style: 'padding: 8px; spacing: 4px; border-bottom: 1px solid #444;'});
+            const box = Language.widget(St.BoxLayout, {vertical: true, style: 'padding: 8px; spacing: 4px; border-bottom: 1px solid #444;'});
             const escape = value => GLib.markup_escape_text(String(value), -1);
             if (data.pattern_mode && typeof item.reason === 'string') {
-                const evidence = new St.Label({text: item.reason, style: 'font-size: 12px; color: #ffd479;'});
+                const evidence = Language.widget(St.Label, {text: item.reason, style: 'font-size: 12px; color: #ffd479;'});
                 evidence.clutter_text.set_line_wrap(true);
                 evidence.clutter_text.set_ellipsize(Pango.EllipsizeMode.NONE);
                 box.add_child(evidence);
             }
             const sourceColor = item.source_remote === true || item.kind === 'Origem externa' ? '#ff9e64' : '#82cfff';
-            const title = new St.BoxLayout({style: 'spacing: 8px;'});
-            const source = new St.Button({label: item.source, reactive: true, can_focus: true, style: `color: ${sourceColor}; padding: 0px; font-family: monospace;`});
+            const title = Language.widget(St.BoxLayout, {style: 'spacing: 8px;'});
+            const source = Language.widget(St.Button, {label: item.source, reactive: true, can_focus: true, style: `color: ${sourceColor}; padding: 0px; font-family: monospace;`});
             source.connect('clicked', () => this._inspectFirewall('ip', item.source));
             title.add_child(source);
-            title.add_child(new St.Label({text: '→'}));
-            const destination = new St.Button({label: item.destination, reactive: true, can_focus: true, style: 'color: #82cfff; padding: 0px; font-family: monospace;'});
+            title.add_child(Language.widget(St.Label, {text: '→'}));
+            const destination = Language.widget(St.Button, {label: item.destination, reactive: true, can_focus: true, style: 'color: #82cfff; padding: 0px; font-family: monospace;'});
             destination.connect('clicked', () => this._inspectFirewall('ip', item.destination));
             title.add_child(destination);
-            title.add_child(new St.Label({text: `${item.count} eventos`}));
+            title.add_child(Language.widget(St.Label, {text: Language.msg('panels.firewall.count', {count: item.count})}));
             box.add_child(title);
-            box.add_child(new St.Label({text: `${item.kind}${item.local ? ' · origem local/reservada' : ''} · ${item.protocol} · ${item.interface || '—'}`, style: 'color: #c8c8c8; font-size: 12px;'}));
-            let ports = new St.BoxLayout({style: 'spacing: 8px;'});
-            ports.add_child(new St.Label({text: 'Portas destino:', style: 'font-size: 12px;'}));
+            box.add_child(Language.widget(St.Label, {text: Language.msg('panels.firewall.kind', {kind: item.kind, local: item.local ? Language.msg('panels.firewall.local') : '', protocol: item.protocol, interface: item.interface || '—'}), style: 'color: #c8c8c8; font-size: 12px;'}));
+            let ports = Language.widget(St.BoxLayout, {style: 'spacing: 8px;'});
+            ports.add_child(Language.widget(St.Label, {text: Language.msg('panels.firewall.ports'), style: 'font-size: 12px;'}));
             const portValues = item.ports.split(', ').slice(0, 30);
             for (let i = 0; i < portValues.length; i++) {
                 const value = portValues[i];
                 if (i > 0 && i % 8 === 0) {
                     box.add_child(ports);
-                    ports = new St.BoxLayout({style: 'spacing: 8px;'});
+                    ports = Language.widget(St.BoxLayout, {style: 'spacing: 8px;'});
                 }
                 if (/^\d+$/.test(value) && Number(value) > 0 && Number(value) <= 65535) {
-                    const port = new St.Button({label: value, reactive: true, can_focus: true, style: 'color: #ffd479; padding: 0px;'});
+                    const port = Language.widget(St.Button, {label: value, reactive: true, can_focus: true, style: 'color: #ffd479; padding: 0px;'});
                     port.connect('clicked', () => this._inspectFirewall('port', value));
                     ports.add_child(port);
                 } else {
-                    ports.add_child(new St.Label({text: value, style: 'color: #ffd479;'}));
+                    ports.add_child(Language.widget(St.Label, {text: value, style: 'color: #ffd479;'}));
                 }
             }
             box.add_child(ports);
-            box.add_child(new St.Label({text: `Primeiro: ${item.first || item.last} · Último: ${item.last}`, style: 'color: #aaa; font-size: 11px;'}));
+            box.add_child(Language.widget(St.Label, {text: Language.msg('panels.firewall.times', {first: item.first || item.last, last: item.last}), style: 'color: #aaa; font-size: 11px;'}));
             this._firewallRows.add_child(box);
         }
     },
@@ -116,13 +116,13 @@ var create = ({Clutter, Gio, GLib, Main, Pango, St, getData, readCommandOutput, 
         const rows = connections ? this._networkConnectionsBox : this._firewallRows;
         if (connections) this._networkInspecting = true;
         rows.destroy_all_children();
-        const toolbar = new St.BoxLayout({style: 'spacing: 12px;'});
+        const toolbar = Language.widget(St.BoxLayout, {style: 'spacing: 12px;'});
         const button = (text, action) => {
-            const actor = new St.Button({label: text, reactive: true, can_focus: true, style: 'color: #82cfff; padding: 6px;'});
+            const actor = Language.widget(St.Button, {label: text, reactive: true, can_focus: true, style: 'color: #82cfff; padding: 6px;'});
             actor.connect('clicked', action);
             toolbar.add_child(actor);
         };
-        button('← Voltar', () => {
+        button(Language.msg('panels.firewall.back'), () => {
             if (connections) {
                 this._cancelFirewallInspection();
                 this._networkInspecting = false;
@@ -132,9 +132,9 @@ var create = ({Clutter, Gio, GLib, Main, Pango, St, getData, readCommandOutput, 
                 this._renderFirewall(this._firewallData);
             }
         });
-        button('Copiar endereço / porta', () => St.Clipboard.get_default().set_text(St.ClipboardType.CLIPBOARD, target));
+        button(Language.msg('panels.firewall.copy'), () => St.Clipboard.get_default().set_text(St.ClipboardType.CLIPBOARD, target));
         rows.add_child(toolbar);
-        const label = new St.Label({text: 'Consultando…', style: `width: ${connections ? 480 : 680}px; font-family: monospace; font-size: 12px; padding: 8px;`});
+        const label = Language.widget(St.Label, {text: Language.msg('panels.firewall.loading'), style: `width: ${connections ? 480 : 680}px; font-family: monospace; font-size: 12px; padding: 8px;`});
         label.clutter_text.set_line_wrap(true);
         label.clutter_text.set_ellipsize(Pango.EllipsizeMode.NONE);
         rows.add_child(label);
@@ -143,12 +143,12 @@ var create = ({Clutter, Gio, GLib, Main, Pango, St, getData, readCommandOutput, 
             let [, argv] = GLib.shell_parse_argv(command);
             if (connections) {
                 const script = argv.find(arg => arg.endsWith('/seguranca-widget.py'));
-                if (!script) throw new Error('Comando de conexões desconhecido.');
+                if (!script) throw Language.error(Language.msg('panels.error.connections_command'));
                 argv = ['/usr/bin/python3', GLib.build_filenamev([GLib.path_get_dirname(script), 'conexoes-inspect.py'])];
             }
             const prefix = connections ? 'AZCLOCK_CONNECTION_INSPECT:' : 'AZCLOCK_FIREWALL:';
             const flag = kind === 'dns' ? '--dns' : (kind === 'port' ? '--inspect-port' : '--inspect-ip');
-            run.proc = Gio.Subprocess.new(['/usr/bin/setsid', ...argv, flag, target], Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE);
+            run.proc = Language.spawn(['/usr/bin/setsid', ...argv, flag, target], Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE);
             run.timeout = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 15000, () => {
                 run.timeout = null;
                 run.timedOut = true;
@@ -159,31 +159,32 @@ var create = ({Clutter, Gio, GLib, Main, Pango, St, getData, readCommandOutput, 
             if (this._firewallInspection !== run || run.cancelled || this._networkDestroyed || run.generation !== this._networkGeneration)
                 return;
             if (!run.proc.get_successful() || !stdout.startsWith(prefix))
-                throw new Error(stderr.trim().slice(0, 300) || 'Falha ao inspecionar.');
+                throw Language.error(stderr.trim().slice(0, 300) || Language.msg('panels.error.inspect'));
             const data = JSON.parse(stdout.slice(prefix.length));
             if (typeof data.inspect !== 'string')
-                throw new Error('Resposta inválida.');
+                throw Language.error(Language.msg('panels.error.response'));
             const escaped = GLib.markup_escape_text(data.inspect, -1);
             const selected = GLib.markup_escape_text(target, -1);
             const color = kind === 'port' ? '#ffd479' : (data.remote === true ? '#ff9e64' : '#82cfff');
+            Language.set(label, 'text', '');
             label.clutter_text.set_markup(escaped.split(selected).join(`<span foreground="${color}">${selected}</span>`));
             if (kind === 'ip') {
-                const notice = new St.Label({text: 'Consultas abaixo usam a rede e revelam o IP consultado ao provedor.', style: 'font-size: 12px; color: #ffd479;'});
+                const notice = Language.widget(St.Label, {text: Language.msg('panels.firewall.privacy'), style: 'font-size: 12px; color: #ffd479;'});
                 notice.clutter_text.set_line_wrap(true);
                 rows.add_child(notice);
-                button('Consultar DNS (rede)', () => this._inspectFirewall('dns', target));
+                button(Language.msg('panels.firewall.dns'), () => this._inspectFirewall('dns', target));
                 if (data.remote === true)
-                    button('WHOIS / RDAP (externo)', () => {
+                    button(Language.msg('panels.firewall.rdap'), () => {
                         try {
                             Gio.AppInfo.launch_default_for_uri(`https://rdap.org/ip/${encodeURIComponent(target).replace(/%3A/gi, ':')}`, null);
                         } catch (error) {
-                            label.text = 'Não foi possível abrir a consulta externa.';
+                            Language.set(label, 'text', Language.msg('panels.firewall.external_error'));
                         }
                     });
             }
         } catch (error) {
             if (this._firewallInspection === run && !this._networkDestroyed && run.generation === this._networkGeneration)
-                label.text = run.timedOut ? 'Consulta demorou demais. Tente novamente.' : error.message;
+                Language.set(label, 'text', run.timedOut ? Language.msg('panels.firewall.timeout') : error.orbitzMessage || error.message);
         } finally {
             if (run.timeout)
                 GLib.source_remove(run.timeout);

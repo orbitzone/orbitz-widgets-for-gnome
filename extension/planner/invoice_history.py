@@ -1,4 +1,5 @@
 """Private immutable invoice copies; no index and no access to prior user PDFs."""
+from ui_language import ui as _i18n
 from contextlib import contextmanager
 from datetime import datetime, timezone
 import fcntl
@@ -20,7 +21,7 @@ MAX_METADATA = 4 * 1024 * 1024
 
 def _id(value):
     if not isinstance(value,str) or not re.fullmatch('[0-9a-f]{32}',value):
-        raise ValueError('Identidade do registro de fatura inválida.')
+        raise _i18n.exception(ValueError, 'domain.invoice_history.invalid_invoice_record_identity')
     return value
 
 
@@ -28,7 +29,7 @@ def _root(root):
     path = Path(root) if root is not None else ROOT
     path = path.absolute()
     if path.resolve() != path:
-        raise ValueError('Histórico de faturas não aceita caminho vinculado.')
+        raise _i18n.exception(ValueError, 'domain.invoice_history.invoice_history_does_not_accept_a_symlinked_path')
     return path
 
 
@@ -48,17 +49,17 @@ def _locked(root,create=False):
         yield None
         return
     if not root.is_dir():
-        raise ValueError('Armazenamento de faturas inválido.')
+        raise _i18n.exception(ValueError, 'domain.invoice_history.invalid_invoice_storage')
     try:
         fd = os.open(root/'.lock',os.O_RDWR | os.O_NOFOLLOW | os.O_NONBLOCK | (os.O_CREAT if create else 0),0o600)
     except FileNotFoundError:
         if any(root.iterdir()):
-            raise ValueError('Lock do histórico indisponível; registros preservados.') from None
+            raise _i18n.exception(ValueError, 'domain.invoice_history.history_lock_unavailable_records_preserved') from None
         yield root
         return
     with os.fdopen(fd,'r+') as lock:
         if not stat.S_ISREG(os.fstat(lock.fileno()).st_mode):
-            raise ValueError('Lock do histórico inválido.')
+            raise _i18n.exception(ValueError, 'domain.invoice_history.invalid_history_lock')
         if create:os.fchmod(lock.fileno(),0o600)
         fcntl.flock(lock,fcntl.LOCK_EX)
         yield root
@@ -69,11 +70,11 @@ def _read(path,limit):
     with os.fdopen(fd,'rb') as stream:
         before = os.fstat(stream.fileno())
         if not stat.S_ISREG(before.st_mode) or before.st_size > limit:
-            raise ValueError('Arquivo da fatura inválido ou acima do limite.')
+            raise _i18n.exception(ValueError, 'domain.invoice_history.invoice_file_invalid_or_above_the_size_limit')
         value = stream.read(limit+1)
         after = os.fstat(stream.fileno())
     if len(value)>limit or (before.st_ino,before.st_size,before.st_mtime_ns)!=(after.st_ino,after.st_size,after.st_mtime_ns) or len(value)!=after.st_size:
-        raise ValueError('Arquivo da fatura mudou durante leitura.')
+        raise _i18n.exception(ValueError, 'domain.invoice_history.invoice_file_changed_while_being_read')
     return value
 
 
@@ -91,7 +92,7 @@ def _validated_snapshot(value):
     # mappings; reject malformed activities here rather than masking arbitrary
     # programming errors from the domain with a broad exception handler.
     if not isinstance(value,dict) or not isinstance(value.get('entries'),list) or any(not isinstance(entry,dict) for entry in value['entries']):
-        raise ValueError('Estrutura das atividades da fatura inválida.')
+        raise _i18n.exception(ValueError, 'domain.invoice_history.invalid_invoice_activity_structure')
     return invoice.validate_snapshot(value)
 
 
@@ -109,38 +110,38 @@ def _metadata(identity,snapshot,pdf,created_at):
 def _get(root,identity,verify_pdf=True):
     identity = _id(identity)
     if root is None:
-        raise FileNotFoundError('Registro de fatura não encontrado.')
+        raise _i18n.exception(FileNotFoundError, 'domain.invoice_history.invoice_record_not_found')
     directory = root/identity
     if directory.is_symlink() or not directory.is_dir():
-        raise ValueError('Diretório do registro de fatura inválido.')
+        raise _i18n.exception(ValueError, 'domain.invoice_history.invalid_invoice_record_directory')
     names = {path.name for path in directory.iterdir()}
     if not {'metadata.json','invoice.pdf'} <= names or names - {'metadata.json','invoice.pdf','versions','payment.json'}:
-        raise ValueError('Conteúdo inesperado no registro; arquivos preservados.')
+        raise _i18n.exception(ValueError, 'domain.invoice_history.unexpected_record_contents_files_preserved')
     data = json.loads(_read(directory/'metadata.json',MAX_METADATA))
     if not isinstance(data,dict) or data.get('id')!=identity or type(data.get('version')) is not int or data['version']!=1:
-        raise ValueError('Metadados da fatura inválidos.')
+        raise _i18n.exception(ValueError, 'domain.invoice_history.invalid_invoice_metadata')
     timestamp = datetime.fromisoformat(data['created_at'])
     if timestamp.tzinfo is None:
-        raise ValueError('Data do registro inválida.')
+        raise _i18n.exception(ValueError, 'domain.invoice_history.invalid_record_date')
     snapshot = _validated_snapshot(data['snapshot'])
     if type(data.get('pdf_size')) is not int or not 0 < data['pdf_size'] <= MAX_PDF or not isinstance(data.get('pdf_sha256'),str) or not re.fullmatch('[0-9a-f]{64}',data['pdf_sha256']):
-        raise ValueError('Metadados do PDF inválidos.')
+        raise _i18n.exception(ValueError, 'domain.invoice_history.invalid_pdf_metadata')
     if verify_pdf:
         pdf = _read(directory/'invoice.pdf',MAX_PDF)
         expected = _metadata(identity,snapshot,pdf,data['created_at'])
         if not pdf.startswith(b'%PDF-'):
-            raise ValueError('Integridade do registro da fatura inválida.')
+            raise _i18n.exception(ValueError, 'domain.invoice_history.invalid_invoice_record_integrity')
     else:
         # Browsing does not load/hash the entire archive. Full verification is
         # reserved for get/open/export/delete; obvious size/type damage is flagged.
         info = (directory/'invoice.pdf').lstat()
         if not stat.S_ISREG(info.st_mode) or info.st_size != data['pdf_size']:
-            raise ValueError('Arquivo do PDF inválido.')
+            raise _i18n.exception(ValueError, 'domain.invoice_history.invalid_pdf_file')
         pdf = None
         expected = _metadata(identity,snapshot,b'',data['created_at'])
         expected.update(pdf_sha256=data['pdf_sha256'],pdf_size=data['pdf_size'])
     if data != expected:
-        raise ValueError('Integridade do registro da fatura inválida.')
+        raise _i18n.exception(ValueError, 'domain.invoice_history.invalid_invoice_record_integrity')
     return data,pdf
 
 
@@ -148,17 +149,17 @@ def record(snapshot,pdf_path,*,root=None):
     snapshot = _validated_snapshot(snapshot)
     pdf = _read(Path(pdf_path),MAX_PDF)
     if not pdf.startswith(b'%PDF-'):
-        raise ValueError('O arquivo exportado não contém um PDF válido.')
+        raise _i18n.exception(ValueError, 'domain.invoice_history.the_exported_file_does_not_contain_a_valid_pdf')
     with _locked(root,create=True) as folder:
         for _ in range(8):
             identity = uuid.uuid4().hex
             if not os.path.lexists(folder/identity):break
         else:
-            raise RuntimeError('Não foi possível criar identidade exclusiva para fatura.')
+            raise _i18n.exception(RuntimeError, 'domain.invoice_history.could_not_create_a_unique_invoice_identity')
         data = _metadata(identity,snapshot,pdf,datetime.now(timezone.utc).isoformat())
         raw = json.dumps(data,ensure_ascii=False,indent=2).encode('utf-8')
         if len(raw)>MAX_METADATA:
-            raise ValueError('Metadados da fatura excedem o limite do histórico.')
+            raise _i18n.exception(ValueError, 'domain.invoice_history.invoice_metadata_exceeds_the_history_limit')
         with tempfile.TemporaryDirectory(prefix='.record-',dir=folder) as temporary:
             stage = Path(temporary)/identity
             stage.mkdir(mode=0o700)
@@ -166,7 +167,7 @@ def record(snapshot,pdf_path,*,root=None):
             _write(stage/'metadata.json',raw)
             _sync(stage)
             if os.path.lexists(folder/identity):
-                raise FileExistsError('Identidade de fatura já existe; registro anterior preservado.')
+                raise _i18n.exception(FileExistsError, 'domain.invoice_history.invoice_identity_already_exists_previous_record_preserved')
             os.rename(stage,folder/identity)
             _sync(folder)
         return data
@@ -209,21 +210,21 @@ def list_records(*,root=None):
 def _stamp(path):
     info = path.lstat()
     if not stat.S_ISREG(info.st_mode):
-        raise ValueError('Destino da cópia deve ser arquivo regular, sem link simbólico.')
+        raise _i18n.exception(ValueError, 'domain.invoice_history.the_copy_destination_must_be_a_regular_file_without_a_symlink')
     return info.st_dev,info.st_ino,info.st_size,info.st_mtime_ns
 
 
 def _export_bytes(pdf,target,*,overwrite=False,root=None):
     if type(overwrite) is not bool:
-        raise ValueError('Confirmação de substituição inválida.')
+        raise _i18n.exception(ValueError, 'domain.invoice_history.invalid_replacement_confirmation')
     target = Path(target).expanduser().absolute()
     if target.suffix.lower()!='.pdf':
-        raise ValueError('Escolha um arquivo com extensão .pdf.')
+        raise _i18n.exception(ValueError, 'domain.invoice_history.choose_a_file_with_a_pdf_extension')
     if target.resolve().is_relative_to(_root(root)):
-        raise ValueError('A cópia deve ficar fora do armazenamento gerenciado.')
+        raise _i18n.exception(ValueError, 'domain.invoice_history.the_copy_must_be_outside_managed_storage')
     previous = None
     if target.exists() or target.is_symlink():
-        if not overwrite:raise FileExistsError('A cópia já existe; confirme a substituição na interface.')
+        if not overwrite:raise _i18n.exception(FileExistsError, 'domain.invoice_history.the_copy_already_exists_confirm_replacement_in_the_interface')
         previous = _stamp(target)
     fd,name = tempfile.mkstemp(prefix='.invoice-copy-',suffix='.pdf',dir=target.parent)
     try:
@@ -234,7 +235,7 @@ def _export_bytes(pdf,target,*,overwrite=False,root=None):
             os.link(name,target)
         else:
             if _stamp(target)!=previous:
-                raise FileExistsError('O destino mudou durante a cópia; existente preservado.')
+                raise _i18n.exception(FileExistsError, 'domain.invoice_history.the_destination_changed_during_copying_existing_file_preserved')
             os.replace(name,target)
         _sync(target.parent)
     finally:Path(name).unlink(missing_ok=True)
@@ -252,35 +253,35 @@ def _check_versions_delete(directory):
     versions = directory/'versions'
     if not os.path.lexists(versions):return
     if versions.is_symlink() or not versions.is_dir():
-        raise ValueError('Pasta de versões inválida; original preservado.')
+        raise _i18n.exception(ValueError, 'domain.invoice_history.invalid_versions_folder_original_preserved')
     for child in versions.iterdir():
         identity = child.name.removeprefix('.deleted-')
         _id(identity)
         if child.is_symlink() or not child.is_dir():
-            raise ValueError('Pasta de versão inválida; original preservado.')
+            raise _i18n.exception(ValueError, 'domain.invoice_history.invalid_version_folder_original_preserved')
         for item in child.iterdir():
             if item.name not in ('metadata.json','invoice.pdf') or not stat.S_ISREG(item.lstat().st_mode):
-                raise ValueError('Conteúdo inesperado nas versões; original preservado.')
+                raise _i18n.exception(ValueError, 'domain.invoice_history.unexpected_version_contents_original_preserved')
 
 
 def delete(identity,*,root=None):
     _id(identity)
     with _locked(root) as folder:
-        if folder is None:raise FileNotFoundError('Registro de fatura não encontrado.')
+        if folder is None:raise _i18n.exception(FileNotFoundError, 'domain.invoice_history.invoice_record_not_found')
         deleted = folder/('.deleted-'+identity)
         if deleted.exists() or deleted.is_symlink():
-            raise ValueError('Exclusão anterior pendente; arquivos preservados para recuperação.')
+            raise _i18n.exception(ValueError, 'domain.invoice_history.previous_deletion_pending_files_preserved_for_recovery')
         _get(folder,identity)
         _check_versions_delete(folder/identity)
         payment=folder/identity/'payment.json'
-        if os.path.lexists(payment) and not stat.S_ISREG(payment.lstat().st_mode):raise ValueError('Estado de pagamento inválido; registro preservado.')
+        if os.path.lexists(payment) and not stat.S_ISREG(payment.lstat().st_mode):raise _i18n.exception(ValueError, 'domain.invoice_history.invalid_payment_status_record_preserved')
         os.rename(folder/identity,deleted)
         _sync(folder)
         try:
             shutil.rmtree(deleted)
             _sync(folder)
         except OSError:
-            raise OSError('Registro retirado da lista; limpeza privada pendente. O PDF externo foi preservado.') from None
+            raise _i18n.exception(OSError, 'domain.invoice_history.record_removed_from_the_list_private_cleanup_pending_the_external') from None
 
 
 def get_payment(identity,*,root=None):
@@ -289,7 +290,7 @@ def get_payment(identity,*,root=None):
 
 
 def set_payment(identity,state,*,root=None):
-    if state not in ('not_reported','reported_paid'):raise ValueError('Estado manual de pagamento inválido.')
+    if state not in ('not_reported','reported_paid'):raise _i18n.exception(ValueError, 'domain.invoice_history.invalid_manual_payment_status')
     import invoice_payments
     return invoice_payments.set_paid(identity,state=='reported_paid',root=root)
 

@@ -1,10 +1,11 @@
 const ExtensionUtils = imports.misc.extensionUtils;
 const Me = ExtensionUtils.getCurrentExtension();
+const Language = Me.imports.uiLanguage.Language;
 
 const {Adw, GLib, GObject, Gtk} = imports.gi;
 
 const Gettext = imports.gettext.domain(Me.metadata['gettext-domain']);
-const _ = Gettext.gettext;
+const _ = Language.tr;
 
 const {CommandLabelSubPage} = Me.imports.settings.CommandLabelSubPage;
 const {DialogWindow} = Me.imports.settings.DialogWindow;
@@ -37,9 +38,9 @@ var WidgetSettingsPage = GObject.registerClass({
     },
 }, class AzClockWidgetSettingsPage extends Adw.ApplicationWindow {
     _init(settings, homePage, params) {
-        super._init({
+        super._init(Language.properties(this, {
             ...params,
-        });
+        }));
         this._homePage = homePage;
         this._settings = settings;
 
@@ -50,30 +51,30 @@ var WidgetSettingsPage = GObject.registerClass({
         this.set_content(mainLeaflet);
 
         // The main content stack
-        this._widgetElementsStack = new Gtk.Stack({
+        this._widgetElementsStack = Language.widget(Gtk.Stack, {
             transition_type: Gtk.StackTransitionType.CROSSFADE,
         });
 
         // Sidebar
-        const sidebarBox = new Gtk.Box({
+        const sidebarBox = Language.widget(Gtk.Box, {
             orientation: Gtk.Orientation.VERTICAL,
         });
-        const sidebarHeaderBar = new Adw.HeaderBar({
-            title_widget: new Gtk.Label({label: _('Configure Widget')}),
+        const sidebarHeaderBar = Language.widget(Adw.HeaderBar, {
+            title_widget: Language.widget(Gtk.Label, {label: Language.msg('settings.configure_widget')}),
             show_end_title_buttons: false,
         });
         sidebarBox.append(sidebarHeaderBar);
-        const sidebarScrolledWindow = new Gtk.ScrolledWindow({
+        const sidebarScrolledWindow = Language.widget(Gtk.ScrolledWindow, {
             vexpand: true,
             width_request: 200,
         });
         sidebarBox.append(sidebarScrolledWindow);
         mainLeaflet.append(sidebarBox);
 
-        mainLeaflet.append(new Gtk.Separator({orientation: Gtk.Orientation.VERTICAL}));
+        mainLeaflet.append(Language.widget(Gtk.Separator, {orientation: Gtk.Orientation.VERTICAL}));
 
         // Sidebar List Box
-        this._sidebarListBox = new Gtk.ListBox({
+        this._sidebarListBox = Language.widget(Gtk.ListBox, {
             css_classes: ['navigation-sidebar'],
         });
         sidebarScrolledWindow.set_child(this._sidebarListBox);
@@ -88,7 +89,7 @@ var WidgetSettingsPage = GObject.registerClass({
         });
         this._sidebarListBox.set_header_func(row => {
             if (row.get_index() === 1) {
-                const separator = new Gtk.Separator({
+                const separator = Language.widget(Gtk.Separator, {
                     orientation: Gtk.Orientation.HORIZONTAL,
                 });
                 row.set_header(separator);
@@ -102,37 +103,37 @@ var WidgetSettingsPage = GObject.registerClass({
             this.createWidgetSettingsPage(widgetData[i], i);
 
         // Content ToolbarView
-        this._contentBox = new Gtk.Box({
+        this._contentBox = Language.widget(Gtk.Box, {
             orientation: Gtk.Orientation.VERTICAL,
             hexpand: true,
             vexpand: true,
         });
-        this._contentHeaderBar = new Adw.HeaderBar({
-            title_widget: new Gtk.Label({label: widgetData[0]['Name']}),
+        this._contentHeaderBar = Language.widget(Adw.HeaderBar, {
+            title_widget: Language.widget(Gtk.Label, {label: widgetData[0]['Name']}),
         });
         this._contentBox.append(this._contentHeaderBar);
 
-        const actionBar = new Gtk.ActionBar({
+        const actionBar = Language.widget(Gtk.ActionBar, {
             valign: Gtk.Align.END,
             vexpand: true,
         });
-        const deleteWidgetButton = new Gtk.Button({
+        const deleteWidgetButton = Language.widget(Gtk.Button, {
             halign: Gtk.Align.START,
             valign: Gtk.Align.CENTER,
             hexpand: false,
-            label: _('Delete Widget'),
+            label: Language.msg('settings.delete_widget'),
         });
         deleteWidgetButton.connect('clicked', () => {
-            const dialog = new Gtk.MessageDialog({
-                text: `<b>${GLib.markup_escape_text(_('Delete %s?').format(widgetData[0]['Name']), -1)}</b>`,
-                secondary_text: _('Please confirm you wish to delete %s?').format(widgetData[0]['Name']),
+            const dialog = Language.widget(Gtk.MessageDialog, {
+                text: Language.msg('settings.delete_named_markup', {name: GLib.markup_escape_text(widgetData[0]['Name'], -1)}),
+                secondary_text: Language.msg('settings.delete_named_confirm', {name: widgetData[0]['Name']}),
                 use_markup: true,
                 buttons: Gtk.ButtonsType.YES_NO,
                 message_type: Gtk.MessageType.WARNING,
                 transient_for: this.get_root(),
                 modal: true,
             });
-            const deleteChildren = new Gtk.CheckButton({label: 'Excluir também os subwidgets', active: false,
+            const deleteChildren = Language.widget(Gtk.CheckButton, {label: Language.msg('settings.delete_subwidgets'), active: false,
                 visible: widgetData[0].Box_IsGroup === 'true'});
             dialog.get_message_area().append(deleteChildren);
             dialog.connect('response', (widget, response) => {
@@ -157,11 +158,11 @@ var WidgetSettingsPage = GObject.registerClass({
             });
             dialog.show();
         });
-        const deleteElementButton = new Gtk.Button({
+        const deleteElementButton = Language.widget(Gtk.Button, {
             halign: Gtk.Align.START,
             valign: Gtk.Align.CENTER,
             hexpand: false,
-            label: _('Delete Element'),
+            label: Language.msg('settings.delete_element'),
             visible: false,
         });
         deleteElementButton.connect('clicked', () => {
@@ -172,9 +173,9 @@ var WidgetSettingsPage = GObject.registerClass({
                 return;
 
             const name = WidgetsData.data[this.widget_index][elementIndex]['Name'];
-            const dialog = new Gtk.MessageDialog({
-                text: `<b>${GLib.markup_escape_text(_('Delete %s?').format(name), -1)}</b>`,
-                secondary_text: _('Please confirm you wish to delete this element from %s.').format(name),
+            const dialog = Language.widget(Gtk.MessageDialog, {
+                text: Language.msg('settings.delete_named_markup', {name: GLib.markup_escape_text(name, -1)}),
+                secondary_text: Language.msg('settings.delete_element_confirm', {name}),
                 use_markup: true,
                 buttons: Gtk.ButtonsType.YES_NO,
                 message_type: Gtk.MessageType.WARNING,
@@ -201,9 +202,9 @@ var WidgetSettingsPage = GObject.registerClass({
             dialog.show();
         });
 
-        const addButton = new Gtk.Button({
+        const addButton = Language.widget(Gtk.Button, {
             valign: Gtk.Align.CENTER,
-            label: _('Add Element'),
+            label: Language.msg('settings.add_element'),
         });
         addButton.connect('clicked', () => {
             const dialog = new AddElementsDialog(this._settings, this, {
@@ -218,7 +219,7 @@ var WidgetSettingsPage = GObject.registerClass({
                 }
             });
         });
-        const subwidgetButton = new Gtk.Button({label: 'Criar subwidget', valign: Gtk.Align.CENTER,
+        const subwidgetButton = Language.widget(Gtk.Button, {label: Language.msg('settings.create_subwidget'), valign: Gtk.Align.CENTER,
             sensitive: !widgetData[0].Parent_Id});
         subwidgetButton.connect('clicked', () => {
             const data = this._settings.get_value('widget-data').deep_unpack();
@@ -228,7 +229,7 @@ var WidgetSettingsPage = GObject.registerClass({
             parent.Box_IsGroup = 'true';
             parent.Group_Columns = parent.Group_Columns || '1';
             const child = JSON.parse(JSON.stringify(Utils.EmptyWidgetSettings));
-            child[0] = {...child[0], Name: 'Novo subwidget', Widget_Id: GLib.uuid_string_random(), Parent_Id: parent.Widget_Id};
+            child[0] = {...child[0], Name: Language.tr('settings.new_subwidget'), Widget_Id: GLib.uuid_string_random(), Parent_Id: parent.Widget_Id};
             data.push(child);
             this._settings.set_value('changed-data', new GLib.Variant('a{ss}', {}));
             this._settings.set_value('widget-data', new GLib.Variant('aaa{ss}', data));
@@ -280,14 +281,14 @@ var WidgetSettingsPage = GObject.registerClass({
 
     createWidgetSettingsPage(elementData, elementIndex) {
         const title = elementData['Name'];
-        const listBoxRowLabel = new Gtk.Label({
+        const listBoxRowLabel = Language.widget(Gtk.Label, {
             halign: Gtk.Align.START,
             hexpand: true,
             label: title,
             max_width_chars: 25,
             wrap: true,
         });
-        const listBoxRow = new Gtk.ListBoxRow({
+        const listBoxRow = Language.widget(Gtk.ListBoxRow, {
             child: listBoxRowLabel,
         });
         this._sidebarListBox.append(listBoxRow);
@@ -348,21 +349,21 @@ var WidgetSettingsPage = GObject.registerClass({
 var AddElementsDialog = GObject.registerClass({GTypeName: 'OrbitzWidgetsAddElementsDialog'},
 class AzClockAddElementsDialog extends DialogWindow {
     _init(settings, parent, params) {
-        super._init(_('Add Element to %s').format(params.widget_title), parent, params);
+        super._init(Language.msg('settings.add_element_named', {name: params.widget_title}), parent, params);
         this._settings = settings;
         this.search_enabled = false;
         this.set_default_size(550, -1);
 
-        this.pageGroup.title = _('Preset Elements');
-        this.pageGroup.add(this.addPresetElement(_('Date Label'), ElementType.DATE));
-        this.pageGroup.add(this.addPresetElement(_('Time Label'), ElementType.TIME));
-        this.pageGroup.add(this.addPresetElement(_('Text Label'), ElementType.TEXT));
-        this.pageGroup.add(this.addPresetElement(_('Command Label'), ElementType.COMMAND));
-        this.pageGroup.add(this.addPresetElement(_('Analog Clock'), ElementType.ANALOG));
+        Language.set(this.pageGroup, 'title', Language.msg('settings.preset_elements'));
+        this.pageGroup.add(this.addPresetElement(Language.msg('settings.date_label'), ElementType.DATE));
+        this.pageGroup.add(this.addPresetElement(Language.msg('settings.time_label'), ElementType.TIME));
+        this.pageGroup.add(this.addPresetElement(Language.msg('settings.text_label'), ElementType.TEXT));
+        this.pageGroup.add(this.addPresetElement(Language.msg('settings.command_label'), ElementType.COMMAND));
+        this.pageGroup.add(this.addPresetElement(Language.msg('settings.analog_clock'), ElementType.ANALOG));
 
         const data = this._settings.get_value('widget-data').deep_unpack();
-        this.cloneGroup = new Adw.PreferencesGroup({
-            title: _('Clone existing Element'),
+        this.cloneGroup = Language.widget(Adw.PreferencesGroup, {
+            title: Language.msg('settings.clone_existing_element'),
         });
         this.cloneGroup.use_markup = true;
         this.page.add(this.cloneGroup);
@@ -374,7 +375,7 @@ class AzClockAddElementsDialog extends DialogWindow {
     }
 
     addPresetElement(title, widgetType, subtitle) {
-        const addButton = new Gtk.Button({
+        const addButton = Language.widget(Gtk.Button, {
             icon_name: 'list-add-symbolic',
             valign: Gtk.Align.CENTER,
         });
@@ -409,7 +410,7 @@ class AzClockAddElementsDialog extends DialogWindow {
             this.emit('response', Gtk.ResponseType.APPLY);
         });
 
-        const row = new Adw.ActionRow({
+        const row = Language.widget(Adw.ActionRow, {
             subtitle: subtitle ?? '',
             title,
             activatable_widget: addButton,

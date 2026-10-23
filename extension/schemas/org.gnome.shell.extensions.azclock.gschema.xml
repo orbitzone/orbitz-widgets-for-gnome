@@ -1,6 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <schemalist>
     <schema id="org.gnome.shell.extensions.azclock" path="/org/gnome/shell/extensions/azclock/">
+        <key type="s" name="ui-language">
+            <default>'pt-BR'</default>
+            <choices><choice value="pt-BR"/><choice value="en-US"/></choices>
+            <summary>Orbitz interface language</summary>
+        </key>
         <key type="a{ss}" name="changed-data">
             <default>{}</default>
             <summary>Store details about which widget-data entry changed.</summary>

@@ -1,4 +1,5 @@
 """Bounded UFW state validation, aggregation and presentation; no system I/O."""
+from orbitz_i18n import t
 import datetime
 import ipaddress
 import json
@@ -101,28 +102,29 @@ def summarize(source,g,now):
     burst=count>=30 and len(ports)>=12
     reason=[];priority=0
     if persistent and varied:
-        priority=3;reason.append('Persistência com variação de caminhos: portas, destinos ou protocolos.')
+        priority=3;reason.append(t('widgets.firewall_patterns.persistence_with_varying_paths_ports_destinations_or_protocols'))
     elif persistent and count>=30:
-        priority=2;reason.append('Repetição persistente, mesmo sem variar o caminho.')
+        priority=2;reason.append(t('widgets.firewall_patterns.persistent_repetition_even_without_path_variation'))
     elif burst:
-        priority=2;reason.append('Muitas portas em uma sequência de bloqueios; possível varredura.')
+        priority=2;reason.append(t('widgets.firewall_patterns.many_ports_in_a_sequence_of_blocks_possible_scan'))
     if not priority:return None
     if not ipaddress.ip_address(source).is_global:
-        reason.append('Origem local/reservada: pode ser comunicação normal entre dispositivos. Revise o equipamento antes de atribuir intenção.')
+        reason.append(t('widgets.firewall_patterns.local_reserved_source_this_may_be_normal_device_communication_rev'))
         priority=min(priority,2)
-    reason.append(f'{count} bloqueios · {active} intervalos de 5 min com atividade · período de {minutes:.0f} min · {len(ports)} portas · {len(destinations)} destinos · {len(protocols)} protocolos.')
-    if last<now-1800:reason.append('Sem novos registros desta origem nos últimos 30 min.')
-    else:reason.append('Atividade registrada nos últimos 30 min.')
+    reason.append(t('widgets.firewall_patterns.value0_blocks_value1_active_5_minute_intervals_period_of_value2_0', value0=count, value1=active, value2=minutes, value3=len(ports), value4=len(destinations), value5=len(protocols)))
+    if last<now-1800:reason.append(t('widgets.firewall_patterns.no_new_records_from_this_source_in_the_last_30_min'))
+    else:reason.append(t('widgets.firewall_patterns.activity_recorded_in_the_last_30_min'))
     remote=ipaddress.ip_address(source).is_global
-    return dict(source=source,source_remote=remote,destination=destinations[0],protocol=', '.join(protocols),ports=', '.join(ports[:24]),port_values=ports[:24],count=count,first=date(first),last=date(last),last_epoch=last,interface=', '.join(values('interfaces')),kind=('Atividade local persistente' if not remote else ('Persistência com variação' if priority==3 else 'Padrão para revisar')),priority=priority,reason='\n'.join(reason),local=not remote)
+    return dict(source=source,source_remote=remote,destination=destinations[0],protocol=', '.join(protocols),ports=', '.join(ports[:24]),port_values=ports[:24],count=count,first=date(first),last=date(last),last_epoch=last,interface=', '.join(values('interfaces')),kind=(t('widgets.firewall_patterns.persistent_local_activity') if not remote else (t('widgets.firewall_patterns.persistence_with_variation') if priority==3 else t('widgets.firewall_patterns.pattern_to_review'))),priority=priority,reason='\n'.join(reason),local=not remote)
 
 def payload(data,now=None):
     now=time.time() if now is None else now;prune(data,now)
     groups=[p for s,g in data['sources'].items() if (p:=summarize(s,g,now))]
     groups.sort(key=lambda g:(-g['priority'],-g['last_epoch'],-g['count']))
     count=sum(b['count'] for b in data['totals'].values());noise=sum(b['noise'] for b in data['totals'].values())
-    scope='Últimas 24 h · atualização automática a cada 60 s · análise por origem e intervalos de 5 min'
-    if data['partial']:scope+='\nColeta em andamento: próximo lote retoma do último registro; diagnóstico parcial.'
-    if data.get('limited_until',0)>now:scope+='\nLimite de armazenamento atingido: algumas origens antigas foram descartadas; cobertura parcial.'
-    scope+=f'\n{count} bloqueios analisados · {noise} de descoberta/multicast resumidos · {max(0,len(groups)-30)} padrões adicionais.'
-    return dict(text=f"Firewall: {len(groups)} {'padrão' if len(groups)==1 else 'padrões'}"+(' · parcial' if data['partial'] or data.get('limited_until',0)>now else ''),count=count,groups=groups[:30],scope=scope,updated=date(data['updated']) if data['updated'] else 'Consulta pendente',pattern_mode=True)
+    scope=t('widgets.firewall_patterns.last_24_h_automatic_refresh_every_60_s_analysis_by_source_and_5_m')
+    if data['partial']:scope+=t('widgets.firewall_patterns.collection_in_progress_the_next_batch_resumes_from_the_last_recor')
+    if data.get('limited_until',0)>now:scope+=t('widgets.firewall_patterns.storage_limit_reached_some_older_sources_were_discarded_partial_c')
+    scope+=t('widgets.firewall_patterns.value0_blocks_analyzed_value1_discovery_multicast_blocks_summariz', value0=count, value1=noise, value2=max(0, len(groups) - 30))
+    label=t('widgets.firewall_patterns.pattern') if len(groups)==1 else t('widgets.firewall_patterns.patterns')
+    return dict(text=t('widgets.firewall_patterns.summary', count=len(groups), label=label)+(t('widgets.firewall_patterns.partial') if data['partial'] or data.get('limited_until',0)>now else ''),count=count,groups=groups[:30],scope=scope,updated=date(data['updated']) if data['updated'] else t('widgets.firewall_patterns.query_pending'),pattern_mode=True)

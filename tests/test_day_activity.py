@@ -8,6 +8,7 @@ import sys
 import unittest
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'extension/planner'))
 from day_activity import external_activity,local_activity,local_details,day_description
+from ui_language import ui
 
 
 class DayActivityTests(unittest.TestCase):
@@ -76,7 +77,7 @@ class AgendaIntegrationTests(unittest.TestCase):
         def button(**kwargs):
             widget=Mock();buttons.append((kwargs['label'],widget));return widget
         remote=SimpleNamespace(read=lambda:dict(cache=self.cache),cache_key=self.key)
-        namespace=dict(date=date,timedelta=timedelta,remote=remote,external_activity=external_activity,
+        namespace=dict(ui=ui,date=date,timedelta=timedelta,remote=remote,external_activity=external_activity,
             local_activity=local_activity,Gtk=SimpleNamespace(Label=label,Button=button),re=__import__('re'))
         exec(compile(ast.Module(body=[node],type_ignores=[]),'external_ui.py','exec'),namespace)
         obj=object.__new__(namespace['ExternalCalendars']);obj.alive=True;obj.accounts=self.accounts

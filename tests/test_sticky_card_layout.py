@@ -1,19 +1,24 @@
 """Sticky editor layout contracts and optional GTK smoke; never opens personal notes."""
 import ast
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock
 
+sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'i18n'))
+import ui_i18n as ui
+
 SOURCE=Path(__file__).resolve().parents[1]/'sticky-notes/card.py'
 TREE=ast.parse(SOURCE.read_text())
 EDITOR=next(n for n in TREE.body if isinstance(n,ast.FunctionDef) and n.name=='editor_scroll')
+TITLE_PLACEHOLDER=next(n for n in TREE.body if isinstance(n,ast.FunctionDef) and n.name=='sync_title_placeholder')
 CARD=next(n for n in TREE.body if isinstance(n,ast.ClassDef) and n.name=='Card')
 COLOR=next(n for n in CARD.body if isinstance(n,ast.FunctionDef) and n.name=='apply_color')
 
 def functions(gtk):
-    namespace={'Gtk':gtk}
-    exec(compile(ast.Module(body=[EDITOR,COLOR],type_ignores=[]),str(SOURCE),'exec'),namespace)
+    namespace={'Gtk':gtk,'ui':ui}
+    exec(compile(ast.Module(body=[EDITOR,TITLE_PLACEHOLDER,COLOR],type_ignores=[]),str(SOURCE),'exec'),namespace)
     return namespace
 
 try:
@@ -24,6 +29,33 @@ except (ImportError,ValueError):
     Gtk=None
 
 class StickyLayoutTests(unittest.TestCase):
+    def test_title_placeholder_stays_visible_until_first_character(self):
+        entry=Mock();placeholder=Mock();entry.get_text.side_effect=['','Orbitz','']
+        sync=functions(None)['sync_title_placeholder']
+        sync(entry,placeholder);placeholder.set_visible.assert_called_with(True)
+        sync(entry,placeholder);placeholder.set_visible.assert_called_with(False)
+        sync(entry,placeholder);placeholder.set_visible.assert_called_with(True)
+
+    def test_title_placeholder_is_translated_overlay_that_passes_input_through(self):
+        calls=[node for node in ast.walk(CARD) if isinstance(node,ast.Call)
+            and isinstance(node.func,ast.Attribute) and node.func.attr=='widget'
+            and isinstance(node.func.value,ast.Name) and node.func.value.id=='ui'
+            and node.args and isinstance(node.args[0],ast.Attribute)
+            and node.args[0].attr=='Label']
+        translated=[node for node in calls if any(keyword.arg=='label' and isinstance(keyword.value,ast.Call)
+            and isinstance(keyword.value.func,ast.Attribute) and keyword.value.func.attr=='msg'
+            and keyword.value.args and isinstance(keyword.value.args[0],ast.Constant)
+            and keyword.value.args[0].value=='sticky.title' for keyword in node.keywords)]
+        self.assertEqual(len(translated),1)
+        wired=any(isinstance(node,ast.Call) and isinstance(node.func,ast.Attribute)
+            and node.func.attr=='set_overlay_pass_through' and node.args
+            and isinstance(node.args[0],ast.Attribute) and node.args[0].attr=='title_placeholder'
+            for node in ast.walk(CARD))
+        self.assertTrue(wired)
+        changed=next(node for node in CARD.body if isinstance(node,ast.FunctionDef) and node.name=='title_changed')
+        self.assertTrue(any(isinstance(node,ast.Call) and isinstance(node.func,ast.Name)
+            and node.func.id=='sync_title_placeholder' for node in ast.walk(changed)))
+
     def test_editor_uses_overflow_scrollbar_without_requesting_content_height(self):
         scroll=Mock();bar=scroll.get_vscrollbar.return_value;text=Mock()
         gtk=SimpleNamespace(ScrolledWindow=lambda:scroll,PolicyType=SimpleNamespace(NEVER=0,AUTOMATIC=1),
@@ -42,7 +74,7 @@ class StickyLayoutTests(unittest.TestCase):
         grip=Mock();icon=Mock();cursor=Mock();callback=Mock();signals={}
         grip.connect.side_effect=lambda name,handler:signals.update({name:handler})
         gtk=SimpleNamespace(EventBox=lambda:grip,Label=lambda **kw:icon,Align=SimpleNamespace(END=1))
-        namespace=dict(Gtk=gtk,Gdk=SimpleNamespace(Cursor=SimpleNamespace(new_from_name=cursor)))
+        namespace=dict(ui=ui,Gtk=gtk,Gdk=SimpleNamespace(Cursor=SimpleNamespace(new_from_name=cursor)))
         exec(compile(ast.Module(body=[node],type_ignores=[]),str(SOURCE),'exec'),namespace)
         self.assertIs(namespace['resize_grip'](callback),grip)
         grip.set_size_request.assert_called_once_with(28,28)

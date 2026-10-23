@@ -1,11 +1,12 @@
 """Calendar with explicit event contrast and a separate holiday indicator."""
-from day_activity import day_description
+from day_activity import day_messages
+from ui_language import ui
 import calendar
 from datetime import date,timedelta
 import gi
 gi.require_version('Gtk','3.0')
 from gi.repository import Gtk,GObject,Gdk
-MONTHS=['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro']
+MONTHS=[ui.msg('workspace.live.month_1'), ui.msg('workspace.live.month_2'), ui.msg('workspace.live.month_3'), ui.msg('workspace.live.month_4'), ui.msg('workspace.live.month_5'), ui.msg('workspace.live.month_6'), ui.msg('workspace.live.month_7'), ui.msg('workspace.live.month_8'), ui.msg('workspace.live.month_9'), ui.msg('workspace.live.month_10'), ui.msg('workspace.live.month_11'), ui.msg('workspace.live.month_12')]
 class MonthCalendar(Gtk.Box):
     _provider=None
     __gsignals__={'day-selected':(GObject.SignalFlags.RUN_FIRST,None,()),'month-changed':(GObject.SignalFlags.RUN_FIRST,None,())}
@@ -26,12 +27,12 @@ class MonthCalendar(Gtk.Box):
             MonthCalendar._provider=css
         header=Gtk.Box(spacing=2);self.pack_start(header,False,False,0)
         def nav(text,months,tooltip):
-            b=Gtk.Button(label=text);b.get_style_context().add_class('nav');b.set_tooltip_text(tooltip);b.connect('clicked',lambda *_:self.shift(months));header.pack_start(b,False,False,0)
-        nav('«',-12,'Ano anterior');nav('‹',-1,'Mês anterior')
+            b=Gtk.Button(label=text);b.get_style_context().add_class('nav');ui.call(b,'set_tooltip_text',tooltip);b.connect('clicked',lambda *_:self.shift(months));header.pack_start(b,False,False,0)
+        nav('«',-12,ui.msg('workspace.live.previous_year'));nav('‹',-1,ui.msg('workspace.live.previous_month'))
         self.title=Gtk.Label();header.pack_start(self.title,True,True,0)
-        nav('›',1,'Próximo mês');nav('»',12,'Próximo ano')
+        nav('›',1,ui.msg('workspace.live.next_month'));nav('»',12,ui.msg('workspace.live.next_year'))
         self.grid=Gtk.Grid(column_homogeneous=True,row_spacing=1,column_spacing=1);self.pack_start(self.grid,False,False,0)
-        legend=Gtk.Label(xalign=0);legend.set_markup('<span foreground="#ffffff" weight="bold">●</span> Atividades  <span foreground="#f6c453">━</span> Feriado\nFundo colorido: seleção')
+        legend=Gtk.Label(xalign=0);ui.call(legend,'set_markup',ui.msg('workspace.live.calendar_legend'))
         legend.set_line_wrap(True);legend.set_max_width_chars(28)
         self.pack_start(legend,False,False,0);self.redraw()
     def get_date(self):return self.year,self.month-1,self.chosen.day
@@ -53,8 +54,8 @@ class MonthCalendar(Gtk.Box):
         self.holidays=holidays or {};self.details=details or {};self.redraw()
     def redraw(self):
         for child in self.grid.get_children():child.destroy()
-        self.title.set_text(MONTHS[self.month-1]+' '+str(self.year));self.buttons={}
-        for column,name in enumerate(['dom','seg','ter','qua','qui','sex','sáb']):self.grid.attach(Gtk.Label(label=name),column,0,1,1)
+        ui.call(self.title,'set_text',MONTHS[self.month-1]+' '+str(self.year));self.buttons={}
+        for column,name in enumerate([ui.msg('workspace.live.weekday_0'), ui.msg('workspace.live.weekday_1'), ui.msg('workspace.live.weekday_2'), ui.msg('workspace.live.weekday_3'), ui.msg('workspace.live.weekday_4'), ui.msg('workspace.live.weekday_5'), ui.msg('workspace.live.weekday_6')]):self.grid.attach(ui.widget(Gtk.Label,label=name),column,0,1,1)
         first=date(self.year,self.month,1);offset=(first.weekday()+1)%7
         start=first-timedelta(days=offset)
         for i in range(42):
@@ -65,8 +66,8 @@ class MonthCalendar(Gtk.Box):
             button=Gtk.Button();button.add(label);style=button.get_style_context();style.add_class('day')
             if selected:style.add_class('selected')
             if holiday:style.add_class('holiday')
-            text=day_description(day,selected,marked,self.holidays.get(day.day,[]) if inside else (),self.details.get(day.day,[]) if inside else ())
-            button.set_tooltip_text('\n'.join(text));button.get_accessible().set_name(' · '.join(text))
+            text=day_messages(day,selected,marked,self.holidays.get(day.day,[]) if inside else (),self.details.get(day.day,[]) if inside else ())
+            ui.call(button,'set_tooltip_text',ui.join('\n',text));ui.call(button.get_accessible(),'set_name',ui.join(' · ',text))
             button.connect('clicked',lambda _,d=day:self.click(d));self.grid.attach(button,i%7,i//7+1,1,1)
             if inside:self.buttons[day.day]=button
         self.grid.show_all()

@@ -13,12 +13,15 @@ class Actor {
     destroy() { this.destroyed = true; }
 }
 let postitCloses = 0;
+let postitsLaunched = 0;
+const postitsExitCallbacks = [];
 let created = 0, destroyed = 0, settingsRead = 0, stopped = 0, fail = -1, failValidation = false;
 const timers = new Map();
 const settings = {
     disconnectObject() {}, connectObject() {},
     get_value() { return {deep_unpack: () => ({})}; }, set_value() {},
 };
+const loggedErrors = [];
 const context = {
     Calendar: {enable() {}, disable() {}},
     Meta: {WindowType:{DESKTOP:1}},
@@ -30,12 +33,19 @@ const context = {
     Utils: {unpackData() { return [[{Widget_Type:'Widget_Box'}, {Element_Type:'Digital_Clock'}],[{Widget_Type:'Widget_Box'}],[{Widget_Type:'Widget_Box'}]]; }},
     Main: {panel: {height:28, addToStatusArea() {}}, layoutManager: {addChrome(actor, params) { actor.inputTracked = params; }, primaryMonitor: {x:0,y:0,width:1920,height:1080}, disconnectObject() {}, connectObject() {}, _backgroundGroup: {add_child() {}}}, notifyError() {}},
     PanelMenu: {Button: Actor}, St: {Button: Actor, Label: Actor, Icon: Actor}, Clutter: {ActorAlign: {CENTER:0}},
-    Gio: {icon_new_for_string: value => value, DBusCallFlags: {NO_AUTO_START: 1},
+    Gio: {icon_new_for_string: value => value, SubprocessFlags: {NONE: 0},
+        Subprocess: {new(argv, flags) {
+            assert.equal(flags, 0); assert(argv.includes('/user-data/orbitz-postits/app/postits.py'));
+            postitsLaunched++;
+            return {wait_check_async(_cancellable, callback) { postitsExitCallbacks.push(callback); },
+                wait_check_finish(result) { if (result.error) throw result.error; return true; }};
+        }},
+        DBusCallFlags: {NO_AUTO_START: 1},
         DBus: {session: {call(name, object, iface, method, params, resultType, flags, timeout, cancel, callback) {
             assert.equal(name, 'io.orbitz.Postits'); assert.equal(method, 'Activate');
             assert.equal(flags, 1); postitCloses++; callback({call_finish() {}}, {});
         }}}},
-    GLib: {build_filenamev: parts => parts.join('/'), Variant: class {}, PRIORITY_DEFAULT:0, SOURCE_CONTINUE: true, SOURCE_REMOVE:false,
+    GLib: {build_filenamev: parts => parts.join('/'), get_user_data_dir: () => '/user-data', Variant: class {}, PRIORITY_DEFAULT:0, SOURCE_CONTINUE: true, SOURCE_REMOVE:false,
         timeout_add(priority, delay, fn) { const id = timers.size + 1; timers.set(id,fn); return id; },
         source_remove(id) { timers.delete(id); }},
     DesktopWidget: class extends Actor {
@@ -44,8 +54,9 @@ const context = {
         destroy() { destroyed++; super.destroy(); }
     },
     stopMetrics() { stopped++; }, stopCommandRun(run) { run.cancelled = true; return Promise.resolve(); },
-    logError() {}, debugLog() {}, global: {get_window_actors: () => [], workspace_manager: {get_active_workspace: () => 0, connectObject() {}}, display: {get_n_monitors: () => 1, connectObject() {}}, window_group: {add_child() {}, get_children: () => [{meta_window:{get_window_type:()=>0}}], set_child_below_sibling(actor,sibling){actor.below=sibling}, set_child_above_sibling(){}}},
+    logError(error, label) { loggedErrors.push([error, label]); }, debugLog() {}, global: {get_window_actors: () => [], workspace_manager: {get_active_workspace: () => 0, connectObject() {}}, display: {get_n_monitors: () => 1, connectObject() {}}, window_group: {add_child() {}, get_children: () => [{meta_window:{get_window_type:()=>0}}], set_child_below_sibling(actor,sibling){actor.below=sibling}, set_child_above_sibling(){}}},
 };
+context.Language = require('./helpers/ui_language').create(context,'pt-BR');
 vm.createContext(context);
 vm.runInContext(source.slice(source.indexOf('class AzClock {')) + 'this.Controller = AzClock;', context);
 (async () => {
@@ -56,7 +67,8 @@ vm.runInContext(source.slice(source.indexOf('class AzClock {')) + 'this.Controll
     assert.equal(typeof controller._controller.events.clicked, "function");
     assert.equal(controller._controller.visible, true); assert(controller._controller.style.includes('background-color: transparent')); assert.equal(controller._controllerIcon.icon_size, 24); assert.equal(controller._controller.width, 40);
     assert.equal(controller._controller.x, 1868); assert.equal(controller._controller.y, 36);
-    assert.equal(created, 0); assert.equal(settingsRead, 1); assert.equal(timers.size, 0);
+    assert.equal(created, 0); assert.equal(settingsRead, 2); // UI locale configuration and layout settings are read separately.
+    assert.equal(timers.size, 0);
     assert.equal(controller._controllerIcon.gicon, '/extension/media/controls/widgets-white.svg');
     const coveringWindow = {get_window_type: () => 0, showing_on_its_workspace: () => true,
         located_on_workspace: () => true, get_frame_rect: () => ({x:1800,y:0,width:120,height:100})};
@@ -86,6 +98,7 @@ vm.runInContext(source.slice(source.indexOf('class AzClock {')) + 'this.Controll
     settings.get_value=originalGet; controller._positionController();
     controller._controller.events.clicked();
     assert.equal(created, 3); assert.equal(controller.widgets.length, 3); assert(timers.size > 0);
+    assert.equal(postitsLaunched, 1, 'notes launch as part of the same start action');
     assert.equal(controller._controllerIcon.gicon, '/extension/media/controls/widgets-white.svg');
     const run = {}; context.activeCommandRuns.add(run);
     let release; const pending = new Promise(resolve => { release = resolve; }); context.pendingStops.add(pending);
@@ -97,19 +110,28 @@ vm.runInContext(source.slice(source.indexOf('class AzClock {')) + 'this.Controll
     assert.equal(context.widgetsEnabled, false); assert.equal(context.WIDGETDATA, null); assert.equal(timers.size, 0);
     assert.equal(controller._controllerIcon.gicon, '/extension/media/controls/widgets-white.svg');
     controller._startWidgets(); assert.equal(created, 6);
+    assert.equal(postitsLaunched, 2);
     await controller._stopWidgets(); assert.equal(destroyed, 6);
     controller._startWidgets();
     controller.widgets[0]._onInitializationError(Error('delayed initialization'));
     await controller._stopping; assert.equal(created, 9); assert.equal(destroyed, 9);
+    assert.equal(postitsLaunched, 3, 'notes start before asynchronous widget initialization');
+    assert.equal(postitCloses, 2, 'widget rollback leaves independently launched notes open');
     fail = 1;
     controller._startWidgets();
     await controller._stopping;
     assert.equal(created, 10); assert.equal(destroyed, 10); assert.equal(controller.widgets.length, 0);
     assert.equal(controller._running, false);
+    assert.equal(postitsLaunched, 4, 'notes are launched even when widget construction throws');
+    assert.equal(postitCloses, 2, 'synchronous widget rollback does not close notes');
     fail = -1; failValidation = true;
     controller._startWidgets(); await controller._stopping; assert.equal(created, 10);
+    assert.equal(postitsLaunched, 4, 'invalid configuration is rejected before starting notes');
+    const logsBeforeChildFailure = loggedErrors.length;
+    postitsExitCallbacks.at(-1)(null, {error: Error('child exited unsuccessfully')});
+    assert.equal(loggedErrors.length, logsBeforeChildFailure + 1, 'non-zero child exit is logged for diagnosis');
     controller.disable(); await controller._stopping;
     assert.equal(controller._controllerButton, null);
     assert(stopped > 0); assert(postitCloses > 0);
-    console.log('OK: startup without widgets/collectors/timers, metadata-only monitor selection; Play/Stop; repeated cycles; cancelled runs; rollback on widget/config failure.');
+    console.log('OK: startup/stop lifecycle, notes launch survives widget rollback, child failure diagnostics, monitor selection, and widget construction rollback.');
 })().catch(error => { console.error(error); process.exitCode = 1; });

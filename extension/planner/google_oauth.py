@@ -1,4 +1,5 @@
 """Google Desktop authorization using browser, loopback, state and S256 PKCE."""
+from ui_language import ui as _i18n
 import base64
 from contextlib import contextmanager
 import hashlib
@@ -24,7 +25,7 @@ def private_config_path(config_home=None):
     home=Path(config_home) if config_home is not None else Path(os.environ.get('XDG_CONFIG_HOME') or Path.home()/'.config')
     path=home/'orbitz-widgets/google-client.json'
     if not path.is_absolute() or path.resolve()!=path:
-        raise CalendarError('Diretório da configuração privada OAuth inválido ou vinculado.')
+        raise _i18n.exception(CalendarError, 'domain.google_oauth.invalid_or_symlinked_private_oauth_configuration_directory')
     return path
 
 
@@ -54,7 +55,7 @@ def read_client_config(path,*,private=False,required_client_id=None):
             raw=stream.read(32769)
         if len(raw)>32768:raise ValueError()
         return _client_config(json.loads(raw)['installed'],required_client_id,require_secret=private)
-    except (OSError,ValueError,KeyError,TypeError):raise CalendarError('Configuração OAuth Google inválida; confira o cliente Desktop e as permissões privadas configuradas.') from None
+    except (OSError,ValueError,KeyError,TypeError):raise _i18n.exception(CalendarError, 'domain.google_oauth.invalid_google_oauth_configuration_check_the_desktop_client_and_c') from None
 
 
 def load_config(path=None):
@@ -96,7 +97,7 @@ class Loopback:
                 # Commit only validated results before any response I/O. A closed
                 # browser may break headers/body writes after completing OAuth.
                 if valid:owner.code=code;owner.denied=denied
-                message=('Autorização recebida. Pode fechar esta página.' if valid else 'Resposta de autorização inválida.').encode('utf-8')
+                message=(_i18n.tr('domain.google_oauth.authorization_received_you_can_close_this_page') if valid else _i18n.tr('domain.google_oauth.invalid_authorization_response')).encode('utf-8')
                 try:
                     self.send_response(200 if valid else 400)
                     self.send_header('Content-Type','text/plain; charset=utf-8');self.send_header('Content-Length',str(len(message)))
@@ -112,14 +113,14 @@ class Loopback:
         return AUTH_URL+'?'+urlencode(dict(client_id=config['client_id'],redirect_uri=self.redirect_uri,response_type='code',scope=' '.join(SCOPES),state=self.state,code_challenge=challenge,code_challenge_method='S256',access_type='offline',prompt='consent'))
 
     def wait(self,cancel_event=None,timeout=180):
-        if not isinstance(timeout,(int,float)) or not 0<timeout<=300:raise CalendarError('Tempo de autorização inválido.')
+        if not isinstance(timeout,(int,float)) or not 0<timeout<=300:raise _i18n.exception(CalendarError, 'domain.google_oauth.invalid_authorization_timeout')
         deadline=time.monotonic()+timeout
         while self.code is None and not self.denied:
             http.cancelled(cancel_event)
-            if time.monotonic()>=deadline:raise CalendarError('Autorização Google expirou; tente novamente.')
+            if time.monotonic()>=deadline:raise _i18n.exception(CalendarError, 'domain.google_oauth.google_authorization_expired_try_again')
             self.server.handle_request()
         http.cancelled(cancel_event)
-        if self.denied:raise CalendarError('A autorização Google não foi concedida.')
+        if self.denied:raise _i18n.exception(CalendarError, 'domain.google_oauth.google_authorization_was_not_granted')
         result=self.code;self.code=None
         return result
 
@@ -136,14 +137,14 @@ def _tokens(response,previous=None):
         expires=response.get('expires_in')
         if type(expires) is not int or not 30<=expires<=86400:raise ValueError()
         return dict(access_token=access,refresh_token=refresh,scope=scopes,expires_at=time.time()+expires)
-    except (ValueError,KeyError,TypeError,AttributeError):raise CalendarError('Autorização Google incompleta; conceda os dois escopos de leitura e tente novamente.') from None
+    except (ValueError,KeyError,TypeError,AttributeError):raise _i18n.exception(CalendarError, 'domain.google_oauth.incomplete_google_authorization_grant_both_read_scopes_and_try_ag') from None
 
 
 PROGRESS_STAGES=frozenset(('waiting_authorization','exchanging_token','loading_calendars','saving_credentials'))
 
 
 def notify_progress(callback,stage):
-    if stage not in PROGRESS_STAGES:raise ValueError('Etapa de autorização inválida.')
+    if stage not in PROGRESS_STAGES:raise _i18n.exception(ValueError, 'domain.google_oauth.invalid_authorization_stage')
     if callback is not None:
         try:callback(stage)
         except Exception:pass  # UI disposal/progress failure must not change grants.
@@ -152,12 +153,12 @@ def notify_progress(callback,stage):
 def authorize(config_path=None,*,cancel_event=None,open_browser=None,on_progress=None):
     config=load_config(config_path);http.cancelled(cancel_event)
     try:flow=Loopback()
-    except OSError:raise CalendarError('Não foi possível abrir o retorno local OAuth. Verifique as permissões de rede local.') from None
+    except OSError:raise _i18n.exception(CalendarError, 'domain.google_oauth.could_not_open_the_local_oauth_callback_check_local_network_permi') from None
     try:
         notify_progress(on_progress,'waiting_authorization')
         try:opened=(open_browser or webbrowser.open)(flow.authorization_url(config))
-        except Exception:raise CalendarError('Não foi possível abrir o navegador para autorizar o Google.') from None
-        if opened is False:raise CalendarError('Não foi possível abrir o navegador para autorizar o Google.')
+        except Exception:raise _i18n.exception(CalendarError, 'domain.google_oauth.could_not_open_the_browser_to_authorize_google') from None
+        if opened is False:raise _i18n.exception(CalendarError, 'domain.google_oauth.could_not_open_the_browser_to_authorize_google')
         code=flow.wait(cancel_event)
         notify_progress(on_progress,'exchanging_token')
         form=dict(config,code=code,code_verifier=flow.verifier,redirect_uri=flow.redirect_uri,grant_type='authorization_code')
@@ -173,6 +174,6 @@ def refresh(payload,*,cancel_event=None):
         if not isinstance(config,dict):raise ValueError()
         form=dict(client_id=http.secret(config['client_id']),refresh_token=http.secret(payload['refresh_token']),grant_type='refresh_token')
         if config.get('client_secret'):form['client_secret']=http.secret(config['client_secret'])
-    except (KeyError,TypeError,ValueError):raise CalendarError('Autorização Google no cofre inválida; reconecte a conta.') from None
+    except (KeyError,TypeError,ValueError):raise _i18n.exception(CalendarError, 'domain.google_oauth.invalid_google_authorization_in_the_vault_reconnect_the_account') from None
     result=_tokens(http.request_json(TOKEN_URL,host='oauth2.googleapis.com',path_prefix='/token',form=form,cancel_event=cancel_event),payload)
     return dict(result,config=dict(config))

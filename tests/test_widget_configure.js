@@ -43,6 +43,7 @@ const GObject = {
     registerClass: (...args) => args.at(-1),
     ParamSpec: {int: () => ({})}, ParamFlags: {READWRITE: 1}, TYPE_UINT: 1,
 };
+Me.imports.uiLanguage={Language:require('./helpers/ui_language').create({})};
 const context = vm.createContext({imports: {
     misc: {extensionUtils: {getCurrentExtension: () => Me}},
     gi: {Adw: {PreferencesPage: Actor, ActionRow: Actor}, Gtk, Gdk: {DragAction: {MOVE: 1}, ContentProvider},

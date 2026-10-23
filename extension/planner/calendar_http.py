@@ -1,4 +1,5 @@
 """Bounded fixed-host calendar HTTP; credentials only in headers/form, never errors."""
+from ui_language import ui as _i18n
 import json
 import time
 from urllib.error import HTTPError,URLError
@@ -15,12 +16,12 @@ class NoRedirect(HTTPRedirectHandler):
 
 
 def cancelled(event):
-    if event is not None and event.is_set():raise CalendarError('Conexão cancelada.')
+    if event is not None and event.is_set():raise _i18n.exception(CalendarError, 'domain.calendar_http.connection_cancelled')
 
 
 def secret(value):
     if not isinstance(value,str) or not 0<len(value)<=16384 or any(ord(c)<33 or ord(c)>126 for c in value):
-        raise CalendarError('Credencial inválida; informe o valor completo sem espaços.')
+        raise _i18n.exception(CalendarError, 'domain.calendar_http.invalid_credential_enter_the_complete_value_without_spaces')
     return value
 
 
@@ -29,20 +30,20 @@ def checked_url(url,host,path_prefix):
         part=urlsplit(url)
         if part.scheme!='https' or part.hostname!=host or part.port not in (None,443) or part.username or part.password or part.fragment or not part.path.startswith(path_prefix):raise ValueError()
         if any(ord(c)<33 for c in url):raise ValueError()
-    except (TypeError,ValueError):raise CalendarError('Endereço de calendário inválido; consulta recusada.') from None
+    except (TypeError,ValueError):raise _i18n.exception(CalendarError, 'domain.calendar_http.invalid_calendar_address_query_refused') from None
     return part
 
 
-def _token_error(error):
+def _token_error_message(error):
     # Only allowlisted identifiers and two exact templates produce fixed text.
     # No arbitrary description, header, URL or credential is ever returned.
     messages={
-        'invalid_client':'Cliente não aceito (invalid_client). Confira a configuração Desktop do projeto.',
-        'invalid_grant':'Código ou autorização recusado/expirado (invalid_grant).',
-        'access_denied':'Autorização não concedida (access_denied).',
-        'invalid_scope':'Escopos de leitura não aceitos (invalid_scope).',
-        'unauthorized_client':'Cliente não autorizado para este fluxo (unauthorized_client).',
-        'invalid_request':'Requisição de autorização rejeitada (invalid_request).',
+        'invalid_client':_i18n.msg('domain.calendar_http.client_not_accepted_invalid_client_check_the_project_desktop_conf'),
+        'invalid_grant':_i18n.msg('domain.calendar_http.code_or_authorization_denied_expired_invalid_grant'),
+        'access_denied':_i18n.msg('domain.calendar_http.authorization_not_granted_access_denied'),
+        'invalid_scope':_i18n.msg('domain.calendar_http.read_scopes_not_accepted_invalid_scope'),
+        'unauthorized_client':_i18n.msg('domain.calendar_http.client_not_authorized_for_this_flow_unauthorized_client'),
+        'invalid_request':_i18n.msg('domain.calendar_http.authorization_request_rejected_invalid_request'),
     }
     try:
         raw=error.read(4097)
@@ -52,9 +53,15 @@ def _token_error(error):
         if not isinstance(code,str) or code not in messages:return None
         if code=='invalid_request' and payload.get('error_description') in (
             'client_secret is missing.', 'Missing required parameter: client_secret'):
-            return 'O endpoint informou que o parâmetro client_secret do cliente Desktop está ausente (invalid_request). Conclua a configuração privada do mantenedor nesta instalação; nenhum valor foi exibido.'
+            return _i18n.msg('domain.calendar_http.the_endpoint_reported_that_the_desktop_client_client_secret_param')
         return messages[code]
     except (OSError,ValueError,TypeError):return None
+
+
+def _token_error(error):
+    """Compatibility: callers still receive only a sanitized builtin string."""
+    message = _token_error_message(error)
+    return str(message) if message is not None else None
 
 
 def request_json(url,*,host,path_prefix,bearer=None,form=None,cancel_event=None,timeout=15,limit=2*1024*1024):
@@ -63,14 +70,14 @@ def request_json(url,*,host,path_prefix,bearer=None,form=None,cancel_event=None,
     if bearer is not None:headers['Authorization']='Bearer '+secret(bearer)
     body=None
     if form is not None:
-        if host!='oauth2.googleapis.com' or url!='https://oauth2.googleapis.com/token':raise CalendarError('Escrita remota não permitida.')
+        if host!='oauth2.googleapis.com' or url!='https://oauth2.googleapis.com/token':raise _i18n.exception(CalendarError, 'domain.calendar_http.remote_writes_are_not_allowed')
         body=urlencode(form).encode('ascii');headers['Content-Type']='application/x-www-form-urlencoded'
     request=Request(url,data=body,headers=headers,method='POST' if form is not None else 'GET')
     try:
         with build_opener(NoRedirect()).open(request,timeout=timeout) as response:
             raw=response.read(limit+1)
         cancelled(cancel_event)
-        if len(raw)>limit:raise CalendarError('Resposta do calendário excedeu o limite de leitura.')
+        if len(raw)>limit:raise _i18n.exception(CalendarError, 'domain.calendar_http.calendar_response_exceeded_the_read_limit')
         value=json.loads(raw)
         if not isinstance(value,dict):raise ValueError()
         return value
@@ -78,33 +85,36 @@ def request_json(url,*,host,path_prefix,bearer=None,form=None,cancel_event=None,
         detail=None
         token_endpoint=url=='https://oauth2.googleapis.com/token' and form is not None
         try:
-            if token_endpoint:detail=_token_error(error)
+            if token_endpoint:detail=_token_error_message(error)
         finally:error.close()
-        status=str(error.code) if type(error.code) is int and 100<=error.code<=599 else 'indisponível'
+        status=str(error.code) if type(error.code) is int and 100<=error.code<=599 else _i18n.msg('domain.calendar_http.unavailable')
         if token_endpoint:
-            message='Google OAuth - troca de token (HTTP '+status+'): '+(detail or 'Resposta de erro não reconhecida; não foi possível concluir esta etapa.')
+            failure=_i18n.exception(CalendarError, 'domain.calendar_http.token_exchange_failure', status=status,
+                                   detail=detail or _i18n.msg('domain.calendar_http.unrecognized_error_response_could_not_complete_this_stage'))
         else:
-            if error.code in (400,401):message='Autorização indisponível ou expirada; reconecte a conta.'
-            elif error.code==403:message='Permissão recusada; confira os escopos de leitura concedidos.'
-            elif error.code==429:message='Limite de consultas atingido; aguarde antes de atualizar.'
-            else:message='Não foi possível consultar o calendário. Os dados locais foram preservados.'
+            if error.code in (400,401):key='domain.calendar_http.authorization_unavailable_or_expired_reconnect_the_account'
+            elif error.code==403:key='domain.calendar_http.permission_denied_check_the_granted_read_scopes'
+            elif error.code==429:key='domain.calendar_http.query_limit_reached_wait_before_refreshing'
+            else:key='domain.calendar_http.could_not_query_the_calendar_local_data_was_preserved'
             if host=='www.googleapis.com':
                 path=urlsplit(url).path
-                stage='lista de calendários' if path=='/calendar/v3/users/me/calendarList' else 'consulta de eventos' if path.startswith('/calendar/v3/calendars/') and path.endswith('/events') else 'consulta à API'
-                if error.code==400:message='A API recusou a consulta enviada.'
-                elif error.code==401:message='A API não aceitou a autorização enviada.'
-                message='Google Calendar - '+stage+' (HTTP '+status+'): '+message
-        raise CalendarError(message) from None
+                stage=_i18n.msg('domain.calendar_http.calendar_list') if path=='/calendar/v3/users/me/calendarList' else _i18n.msg('domain.calendar_http.event_query') if path.startswith('/calendar/v3/calendars/') and path.endswith('/events') else _i18n.msg('domain.calendar_http.api_query')
+                if error.code==400:key='domain.calendar_http.the_api_refused_the_submitted_query'
+                elif error.code==401:key='domain.calendar_http.the_api_did_not_accept_the_submitted_authorization'
+                failure=_i18n.exception(CalendarError, 'domain.calendar_http.api_stage_failure', stage=stage, status=status, detail=_i18n.msg(key))
+            else:
+                failure=_i18n.exception(CalendarError, key)
+        raise failure from None
     except (URLError,OSError,TimeoutError,ValueError,UnicodeError):
-        raise CalendarError('Falha de conexão ou resposta inválida do calendário; dados locais preservados.') from None
+        raise _i18n.exception(CalendarError, 'domain.calendar_http.connection_failed_or_invalid_calendar_response_local_data_preserv') from None
 
 
 def page_token(value):
-    if not isinstance(value,str) or not 0<len(value)<=4096 or any(ord(c)<33 or ord(c)>126 for c in value):raise CalendarError('Paginação do calendário inválida.')
+    if not isinstance(value,str) or not 0<len(value)<=4096 or any(ord(c)<33 or ord(c)>126 for c in value):raise _i18n.exception(CalendarError, 'domain.calendar_http.invalid_calendar_pagination')
     return value
 
 
 def check_page(index,deadline,count,cancel_event):
     cancelled(cancel_event)
     if index>=MAX_PAGES or time.monotonic()>deadline or count>MAX_ITEMS:
-        raise CalendarError('Consulta excedeu o limite; cache anterior preservado.')
+        raise _i18n.exception(CalendarError, 'domain.calendar_http.query_exceeded_the_limit_previous_cache_preserved')

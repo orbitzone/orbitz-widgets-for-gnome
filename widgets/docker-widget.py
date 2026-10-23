@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from orbitz_i18n import t
 import ipaddress,json,os,sys,subprocess
 from urllib.parse import urlsplit
 from widget_runtime import run,read_json
@@ -17,8 +18,8 @@ def valid_url(url):
 def collect(details=False):
     result=run(['docker','ps','-q','--no-trunc'],timeout=3,check=True)
     ids=[line for line in result.stdout.splitlines() if line]
-    if any(len(x)!=64 or any(c not in '0123456789abcdef' for c in x) for x in ids):raise ValueError('IDs inválidos')
-    payload={'text':f'Docker Containers: {len(ids)}','items':[],'omitted':0,'skipped_containers':0}
+    if any(len(x)!=64 or any(c not in '0123456789abcdef' for c in x) for x in ids):raise ValueError(t('widgets.docker_widget.invalid_ids'))
+    payload={'text':t('widgets.docker_widget.container_count', count=len(ids)),'items':[],'omitted':0,'skipped_containers':0}
     if not details:return payload
     overrides=read_json(Path(os.environ.get('XDG_CONFIG_HOME', Path.home()/'.config'))/'orbitz-widgets'/'docker-urls.json')
     if not isinstance(overrides,dict):overrides={}
@@ -51,16 +52,16 @@ def collect(details=False):
                     override=overrides.get(f'{name}:{port}',overrides.get(name,''))
                     if override and valid_url(override):url=override
                     rows.append({'name':name,'ports':f'{host}:{port} → {private}','url':url})
-            if not rows:rows=[{'name':name,'ports':'Rede do host' if item.get('mode')=='host' else 'Sem porta publicada no host','url':''}]
+            if not rows:rows=[{'name':name,'ports':t('widgets.docker_widget.host_network') if item.get('mode')=='host' else t('widgets.docker_widget.no_port_published_on_the_host'),'url':''}]
             for row in rows:
                 if len(payload['items'])<MAX_ROWS:payload['items'].append(row)
                 else:payload['omitted']+=1
     # The ps snapshot counts all containers, including those skipped for detail.
-    payload['text']+=(' · detalhes parciais' if payload['skipped_containers'] else '')
+    payload['text']+=(t('widgets.docker_widget.partial_details') if payload['skipped_containers'] else '')
     return payload
 
 if __name__=='__main__':
     try:payload=collect('--details' in sys.argv)
     except (OSError,ValueError,KeyError,TypeError,AttributeError,subprocess.SubprocessError):
-        payload={'text':'Docker Containers: indisponível','items':[],'error':'Não foi possível consultar o Docker. Verifique o serviço e o acesso da sua conta.'}
+        payload={'text':t('widgets.docker_widget.docker_containers_unavailable'),'items':[],'error':t('widgets.docker_widget.could_not_query_docker_check_the_service_and_your_account_access')}
     print('AZCLOCK_DOCKER:'+json.dumps(payload,ensure_ascii=False))

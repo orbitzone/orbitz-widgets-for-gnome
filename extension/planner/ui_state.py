@@ -1,4 +1,5 @@
 """Small durable UI preferences/drafts, separate from historical records."""
+from ui_language import ui as _i18n
 import fcntl,json,os
 import atomic_json
 from pathlib import Path
@@ -7,7 +8,7 @@ PATH=Path(os.environ.get('XDG_DATA_HOME') or Path.home()/'.local/share')/'orbitz
 def read():
     try:
         data=json.loads(PATH.read_text())
-        if not isinstance(data,dict):raise ValueError('Arquivo de rascunhos inválido; original preservado.')
+        if not isinstance(data,dict):raise _i18n.exception(ValueError, 'domain.ui_state.invalid_drafts_file_original_preserved')
         return data
     except FileNotFoundError:return {}
 

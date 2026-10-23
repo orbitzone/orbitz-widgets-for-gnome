@@ -1,4 +1,5 @@
 """Provider-independent iCalendar recurrence, identity, dates and alarm rules."""
+from ui_language import ui as _i18n
 import hashlib
 import sys
 from pathlib import Path
@@ -36,7 +37,7 @@ def normalize_events(raw,account_id,calendar_id,start,end):
                 alarm_minutes=alarm_minutes(item,begin,finish),categories=str(item.get('CATEGORIES',''))[:1000],description=str(item.get('DESCRIPTION',''))[:10000],location=str(item.get('LOCATION',''))[:1000],
                 start=local_value(begin),end=local_value(finish),all_day=all_day))
         return result
-    except Exception:raise CalendarError('Não foi possível interpretar os eventos deste calendário. Os dados locais foram preservados.') from None
+    except Exception:raise _i18n.exception(CalendarError, 'domain.calendar_events.could_not_parse_this_calendar_s_events_local_data_was_preserved') from None
 
 def json_identity(*parts):
     import json

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from orbitz_i18n import t
 import json,re,subprocess,sys
 from pathlib import Path
 from widget_runtime import load,save,run
@@ -12,39 +13,39 @@ def read(path):
 # References: VirtualSMC/Docs/SMCSensorKeys.txt and exelban/stats SensorsList.
 # SMC locations can vary by model; unknown keys receive an explicit fallback.
 SMC_DESCRIPTIONS = {
-    'TA0V': 'Estimativa da temperatura ambiente próxima ao equipamento.',
-    'TC0E': 'Temperatura interna estimada do processador.',
-    'TC0F': 'Temperatura interna do processador com filtragem da leitura.',
-    'TC0P': 'Temperatura próxima ao processador.',
-    'TCGC': 'Temperatura dos gráficos integrados ao processador.',
-    'TCXC': 'Leitura térmica do processador pela interface PECI.',
-    'TG0D': 'Temperatura interna da GPU.',
-    'TG0P': 'Temperatura próxima à GPU.',
-    'TGDD': 'Temperatura da GPU dedicada AMD.',
-    'TM0P': 'Temperatura próxima à memória RAM.',
-    'TPCD': 'Temperatura do controlador central da placa, o chipset.',
-    'TTLD': 'Temperatura do controlador Thunderbolt esquerdo.',
-    'TTRD': 'Temperatura do controlador Thunderbolt direito.',
-    'TW0P': 'Temperatura próxima ao módulo Wi-Fi.',
-    'Ts0P': 'Temperatura na região do apoio das mãos ou trackpad, conforme o modelo.',
-    'Ts1P': 'Outro sensor na região do apoio das mãos; localização varia por modelo.',
-    'Ts0S': 'Estimativa térmica da superfície inferior do gabinete.',
-    'Ts1S': 'Estimativa térmica da superfície superior do gabinete.',
+    'TA0V': 'widgets.temperaturas_widget.estimated_ambient_temperature_near_the_equipment',
+    'TC0E': 'widgets.temperaturas_widget.estimated_internal_processor_temperature',
+    'TC0F': 'widgets.temperaturas_widget.internal_processor_temperature_with_filtered_reading',
+    'TC0P': 'widgets.temperaturas_widget.temperature_near_the_processor',
+    'TCGC': 'widgets.temperaturas_widget.temperature_of_the_integrated_processor_graphics',
+    'TCXC': 'widgets.temperaturas_widget.processor_temperature_reading_via_the_peci_interface',
+    'TG0D': 'widgets.temperaturas_widget.internal_gpu_temperature',
+    'TG0P': 'widgets.temperaturas_widget.temperature_near_the_gpu',
+    'TGDD': 'widgets.temperaturas_widget.dedicated_amd_gpu_temperature',
+    'TM0P': 'widgets.temperaturas_widget.temperature_near_ram',
+    'TPCD': 'widgets.temperaturas_widget.motherboard_controller_chipset_temperature',
+    'TTLD': 'widgets.temperaturas_widget.left_thunderbolt_controller_temperature',
+    'TTRD': 'widgets.temperaturas_widget.right_thunderbolt_controller_temperature',
+    'TW0P': 'widgets.temperaturas_widget.temperature_near_the_wi_fi_module',
+    'Ts0P': 'widgets.temperaturas_widget.temperature_near_the_palm_rest_or_trackpad_depending_on_the_model',
+    'Ts1P': 'widgets.temperaturas_widget.another_sensor_near_the_palm_rest_location_varies_by_model',
+    'Ts0S': 'widgets.temperaturas_widget.estimated_bottom_enclosure_surface_temperature',
+    'Ts1S': 'widgets.temperaturas_widget.estimated_top_enclosure_surface_temperature',
 }
 
 def describe(group, name):
     code=name.split(' · ')[-1]
     if group.startswith('applesmc'):
-        if code in SMC_DESCRIPTIONS:return SMC_DESCRIPTIONS[code]
-        if re.fullmatch(r'TC[0-9]C',code):return 'Temperatura de um núcleo do processador, identificado por '+code+'.'
-        if re.fullmatch(r'TH0[A-Ca-c]',code):return 'Sensor de temperatura do armazenamento SSD, ponto '+code[-1].upper()+'.'
-        if re.fullmatch(r'Th[0-9]H',code):return 'Temperatura do conjunto de dissipação de calor.'
-        return 'Sensor Apple SMC '+code+'. Componente ou posição exata não identificados para este modelo.'
+        if code in SMC_DESCRIPTIONS:return t(SMC_DESCRIPTIONS[code])
+        if re.fullmatch(r'TC[0-9]C',code):return t('widgets.temperaturas_widget.temperature_of_a_processor_core_identified_by')+code+'.'
+        if re.fullmatch(r'TH0[A-Ca-c]',code):return t('widgets.temperaturas_widget.ssd_storage_temperature_sensor_point')+code[-1].upper()+'.'
+        if re.fullmatch(r'Th[0-9]H',code):return t('widgets.temperaturas_widget.heatsink_assembly_temperature')
+        return t('widgets.temperaturas_widget.apple_smc_sensor')+code+t('widgets.temperaturas_widget.exact_component_or_location_not_identified_for_this_model')
     if group.startswith('coretemp'):
-        return 'Temperatura do conjunto do processador.' if 'Package' in name else 'Temperatura do núcleo do processador indicado no nome.'
-    if group.startswith('nvme'):return 'Temperatura do SSD NVMe; Composite é a leitura composta informada pela unidade.'
-    if group.startswith(('amdgpu','NVIDIA')):return 'Temperatura da GPU; a identificação do ponto é fornecida pelo driver.'
-    return 'Sensor de temperatura exposto por '+group+'. O sistema não fornece uma descrição mais específica.'
+        return t('widgets.temperaturas_widget.processor_package_temperature') if 'Package' in name else t('widgets.temperaturas_widget.temperature_of_the_processor_core_indicated_in_the_name')
+    if group.startswith('nvme'):return t('widgets.temperaturas_widget.nvme_ssd_temperature_composite_is_the_combined_reading_reported_b')
+    if group.startswith(('amdgpu','NVIDIA')):return t('widgets.temperaturas_widget.gpu_temperature_the_point_is_identified_by_the_driver')
+    return t('widgets.temperaturas_widget.temperature_sensor_exposed_by')+group+t('widgets.temperaturas_widget.the_system_does_not_provide_a_more_specific_description')
 
 def details():
     import math, shutil
@@ -87,7 +88,7 @@ def details():
             label=(zone/'type').read_text().strip(); value=int((zone/'temp').read_text().strip())/1000
         except (OSError,ValueError): continue
         if label=='x86_pkg_temp' and 'coretemp' in covered:continue
-        if -20<=value<=250: items.append(dict(group='Sistema · '+zone.name,name=label[:100],value=value))
+        if -20<=value<=250: items.append(dict(group=t('widgets.temperaturas_widget.system')+zone.name,name=label[:100],value=value))
     if shutil.which('nvidia-smi'):
         try:
             output=run(['nvidia-smi','--query-gpu=name,temperature.gpu','--format=csv,noheader,nounits'],timeout=3,check=True).stdout
@@ -102,7 +103,7 @@ def details():
     return dict(items=items[:256],omitted=max(0,len(items)-256))
 
 def display(value):
-    if value is None:return 'N/D'
+    if value is None:return t('widgets.temperaturas_widget.n_a')
     text=f'{value:.0f}°C'
     return f'<span foreground="#ff5c5c">{text}</span>' if value>80 else text
 
@@ -138,7 +139,7 @@ def main():
     if gpu is None and load('gpu-absent.json',60) is not True:
         try:
             data=json.loads(run(['sensors','-j'],timeout=3,check=True).stdout)
-            if not isinstance(data,dict):raise ValueError('Sensores inválidos')
+            if not isinstance(data,dict):raise ValueError(t('widgets.temperaturas_widget.invalid_sensors'))
             for chip,values in data.items():
                 if chip.startswith('applesmc') and isinstance(values,dict):
                     sensor=values.get('TG0D',{})

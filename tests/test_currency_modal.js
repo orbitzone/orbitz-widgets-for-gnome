@@ -20,7 +20,7 @@ const GLib = {
 };
 const context = vm.createContext({});
 vm.runInContext(fs.readFileSync('extension/panels/currency.js', 'utf8'), context);
-const methods = context.create({GLib, Me, Utils});
+const methods = context.create({Language: require('./helpers/ui_language').create(context,'pt-BR'), GLib, Me, Utils});
 const host = {
     widgetIndex: 0,
     elementIndex: 1,
@@ -29,7 +29,7 @@ const host = {
     _refreshCurrencyDialog: value => refreshed.push(value),
 };
 const getData = (_widget, _element, key) => key === 'Text_Command' ? command : undefined;
-const panelMethods = context.create({GLib, Me, Utils, getData, getWidgetData: () => widgetData});
+const panelMethods = context.create({Language: require('./helpers/ui_language').create(context,'pt-BR'), GLib, Me, Utils, getData, getWidgetData: () => widgetData});
 Object.assign(host, panelMethods);
 host._refreshCurrencyDialog = value => refreshed.push(value);
 assert.deepEqual(host._currencyCommandInfo(command).quote, 'EUR');

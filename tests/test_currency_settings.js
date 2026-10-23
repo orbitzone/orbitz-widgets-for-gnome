@@ -43,6 +43,7 @@ const gi = {
     Gtk: {INVALID_LIST_POSITION: 4294967295, DropDown, StringList, Switch, Align: {CENTER: 0}},
 };
 const Me = {metadata: {}, imports: {settings: {TextLabelSubPage: {TextLabelSubPage: class {}}}}};
+Me.imports.uiLanguage={Language:require('./helpers/ui_language').create({Gio:gi.Gio})};
 const imports = {
     gi,
     misc: {extensionUtils: {getCurrentExtension: () => Me}},

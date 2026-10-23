@@ -17,8 +17,9 @@ let widgetDragKeySignal = 0;
 const activeCommandRuns = new Set();
 const pendingStops = new Set();
 const Utils = Me.imports.utils;
+const Language = Me.imports.uiLanguage.Language;
 const WorldClock = Me.imports.worldClock;
-const launchTerminalAction = Me.imports.terminalLaunch.create({Gio, global});
+const launchTerminalAction = Me.imports.terminalLaunch.create({Gio, global, Language});
 const Calendar = Me.imports.planner.calendar;
 
 const Gettext = imports.gettext.domain(Me.metadata['gettext-domain']);
@@ -51,7 +52,7 @@ function stopCommandRun(run) {
     run.stopPromise = (async () => {
         try {
             if (pid && birth && /^\d+$/.test(pid)) {
-                const killer = Gio.Subprocess.new(['python3', GLib.build_filenamev([Me.path, 'stop-collectors.py']), pid, birth],
+                const killer = Language.spawn(['python3', GLib.build_filenamev([Me.path, 'stop-collectors.py']), pid, birth],
                     Gio.SubprocessFlags.STDOUT_SILENCE | Gio.SubprocessFlags.STDERR_SILENCE);
                 await killer.wait_async(null);
                 if (!killer.get_successful()) throw new Error('Falha ao encerrar árvore do coletor.');
@@ -182,7 +183,7 @@ async function startMetrics() {
         return;
     try {
         metricCancellable = new Gio.Cancellable();
-        metricProc = Gio.Subprocess.new(['/usr/bin/setsid', 'python3', path, ...Array.from(jobs, ([mode, interval]) => `${mode}:${interval}`)],
+        metricProc = Language.spawn(['/usr/bin/setsid', 'python3', path, ...Array.from(jobs, ([mode, interval]) => `${mode}:${interval}`)],
             Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_SILENCE);
         const proc = metricProc;
         const cancellable = metricCancellable;
@@ -525,8 +526,8 @@ class AzClockDesktopWidget extends St.Widget {
             const clockType = getData(this._widgetIndex, i, 'Element_Type');
             if (clockType === DIGITAL_CLOCK) {
                 const digitalClock = new DigitalClock(this._widgetIndex, i);
-                const clockButton = new St.Button({reactive:true,can_focus:true,child:digitalClock,
-                    accessible_name:'Abrir calendário e tarefas',style:'padding:0;'});
+                const clockButton = Language.widget(St.Button, {reactive:true,can_focus:true,child:digitalClock,
+                    accessible_name:Language.msg('panels.shell.open_calendar'),style:'padding:0;'});
                 bindDesktopLauncher(clockButton,()=>Calendar.openCalendar());
                 this.add_child(clockButton);
                 this._digitalClocks.push(digitalClock);
@@ -539,7 +540,7 @@ class AzClockDesktopWidget extends St.Widget {
                 const gemini = clockData[i].Launcher_Action === 'gemini';
                 const btop = clockData[i].Launcher_Action === 'btop';
                 const name = notes ? 'Post-its Orbitz' : btop ? 'Monitor do sistema' : gemini ? 'Gemini' : 'YouTube';
-                const button = new St.Button({reactive: true, can_focus: true, accessible_name: `Abrir ${name}`,
+                const button = Language.widget(St.Button, {reactive: true, can_focus: true, accessible_name: Language.msg('panels.shell.open_app', {name: notes ? Language.msg('panels.shell.notes_name') : btop ? Language.msg('panels.shell.monitor_name') : name}),
                     style: 'padding: 4px; border-radius: 8px;'});
                 button.set_child(new St.Icon({gicon: Gio.icon_new_for_string(GLib.build_filenamev([Me.path, notes ? 'notes-widget' : btop ? 'media' : gemini ? 'gemini-widget' : 'youtube-widget', notes ? 'notes.svg' : btop ? 'btop.png' : gemini ? 'gemini.svg' : 'youtube.svg'])), icon_size: 32}));
                 bindDesktopLauncher(button, async () => {
@@ -547,12 +548,12 @@ class AzClockDesktopWidget extends St.Widget {
                         const argv = notes ? ['/usr/bin/env', 'GDK_BACKEND=x11', '/usr/bin/python3', GLib.build_filenamev([GLib.get_user_data_dir(), 'orbitz-postits', 'app', 'postits.py'])] : btop ? ['/usr/bin/tilix', '--action=app-new-window', '-e', '/usr/bin/btop'] : gemini
                             ? ['/usr/bin/google-chrome', '--app=https://gemini.google.com/', '--window-size=1100,900']
                             : ['/usr/bin/python3', GLib.build_filenamev([Me.path, 'youtube-widget', 'youtube-widget.py'])];
-                        const proc = btop ? launchTerminalAction(argv, this) : Gio.Subprocess.new(argv, Gio.SubprocessFlags.NONE);
+                        const proc = btop ? launchTerminalAction(argv, this) : Language.spawn(argv, Gio.SubprocessFlags.NONE);
                         await proc.wait_async(null);
                         if (!proc.get_successful()) throw new Error('O aplicativo encerrou com erro.');
                     } catch (error) {
                         logError(error, `Lançador ${name}`);
-                        Main.notify(name, 'Não foi possível abrir o aplicativo. Consulte os logs da sessão.');
+                        Main.notify(notes ? Language.tr('panels.shell.notes_name') : btop ? Language.tr('panels.shell.monitor_name') : name, Language.tr('panels.shell.app_error'));
                     }
                 });
                 this.add_child(button);
@@ -784,11 +785,12 @@ class AzClockDesktopWidget extends St.Widget {
             });
 
             const lockWidget = getData(this._widgetIndex, WIDGET_DATA_INDEX, 'Lock_Widget', 'bool');
-            lockWidgetItem.label.text = lockWidget ? _('Unlock') : _('Lock');
+            Language.set(lockWidgetItem.label, 'text', lockWidget ? Language.msg('panels.shell.unlock') : Language.msg('panels.shell.lock'));
 
-            this._menu.addAction(_('Configurações do Orbitz'), () => {
+            const settingsItem = this._menu.addAction(Language.tr('panels.shell.settings'), () => {
                 ExtensionUtils.openPrefs();
             });
+            Language.set(settingsItem.label, 'text', Language.msg('panels.shell.settings'));
 
             Main.uiGroup.add_actor(this._menu.actor);
             this._menuManager.addMenu(this._menu);
@@ -1100,7 +1102,7 @@ class AzClockDigitalClock extends Label {
             }
             if (this.text === next)
                 return;
-            this.text = next;
+            Language.set(this, 'text', next);
             this.clutter_text.set_markup(this.text);
         }
 
@@ -1117,7 +1119,7 @@ class AzClockTextLabel extends Label {
     setStyle() {
         super.setStyle();
         const text = getData(this.widgetIndex, this.elementIndex, 'Text_Text');
-        this.text = text;
+        Language.set(this, 'text', text);
         this.clutter_text.set_markup(this.text);
     }
 });
@@ -1224,24 +1226,24 @@ Me.imports.commandPanels.install(class AzClockCommandLabel extends Label {
         if (this._ejectRun || this._networkDestroyed) return;
         const run = {cancellable: new Gio.Cancellable(), proc: null};
         this._ejectRun = run;
-        Main.notify(`${device.label} · ${device.name}`, 'Ejetando dispositivo. Aguarde a confirmação antes de desconectar.');
+        Main.notify(`${device.label} · ${device.name}`, Language.tr('panels.shell.eject_wait'));
         let timeout, timedOut = false;
         try {
             const [, argv] = GLib.shell_parse_argv(getData(this.widgetIndex, this.elementIndex, 'Text_Command'));
-            run.proc = Gio.Subprocess.new(['/usr/bin/setsid', ...argv, '--eject', '--device', device.name, '--identity', device.identity],
+            run.proc = Language.spawn(['/usr/bin/setsid', ...argv, '--eject', '--device', device.name, '--identity', device.identity],
                 Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE);
             timeout = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 25000, () => { timeout = null; timedOut = true; stopCommandRun(run); return GLib.SOURCE_REMOVE; });
             const [stdout] = await readCommandOutput(run);
             if (this._networkDestroyed) return;
-            if (run.cancelled) { if (timedOut) Main.notify('Ejeção não concluída', 'Tempo excedido. Não desconecte ainda.'); return; }
-            if (!run.proc.get_successful() || !stdout.startsWith('AZCLOCK_EJECT:')) throw new Error('Falha na ejeção. Não desconecte ainda.');
+            if (run.cancelled) { if (timedOut) Main.notify(Language.tr('panels.shell.eject_incomplete'), Language.tr('panels.shell.eject_timeout')); return; }
+            if (!run.proc.get_successful() || !stdout.startsWith('AZCLOCK_EJECT:')) throw Language.error(Language.msg('panels.shell.eject_error'));
             const result = JSON.parse(stdout.slice('AZCLOCK_EJECT:'.length));
             if (typeof result.ok !== 'boolean' || typeof result.message !== 'string' || result.message.length > 256)
-                throw new Error('Resposta de ejeção inválida. Não desconecte ainda.');
+                throw Language.error(Language.msg('panels.shell.eject_response'));
             Main.notify(`${device.label} · ${device.name}`, result.message);
             if (result.ok) { stopMetrics(); scheduleMetrics(); }
         } catch (error) {
-            if (!this._networkDestroyed) Main.notify('Ejeção não concluída', timedOut ? 'Tempo excedido. Não desconecte ainda.' : error.message);
+            if (!this._networkDestroyed) Main.notify(Language.tr('panels.shell.eject_incomplete'), timedOut ? Language.tr('panels.shell.eject_timeout') : error.message);
         } finally {
             if (timeout) GLib.source_remove(timeout);
             if (this._ejectRun === run) this._ejectRun = null;
@@ -1275,7 +1277,7 @@ Me.imports.commandPanels.install(class AzClockCommandLabel extends Label {
                     if (this._storageExternal) {
                         const index = Number(target.split(':')[1]);
                         const device = this._networkClickDeviceMap?.[index];
-                        if (!device) throw new Error('Dispositivo não disponível. Aguarde a próxima atualização.');
+                        if (!device) throw Language.error(Language.msg('panels.shell.device_unavailable'));
                         this._storageDevice = {...device, label: index ? `EXT${index}` : 'EXT'};
                         if (target.startsWith('eject:')) {
                             this._ejectExternalDevice(this._storageDevice);
@@ -1297,38 +1299,83 @@ Me.imports.commandPanels.install(class AzClockCommandLabel extends Label {
     }
 
     _closeNetworkDialog() {
+        const cleanup = (callback, context) => {
+            try { callback(); }
+            catch (error) { logError(error, context); }
+        };
         if (this._networkModalGrab) {
-            Main.popModal(this._networkModalGrab);
-            this._networkModalGrab = null;
+            const grab = this._networkModalGrab;
+            try {
+                Main.popModal(grab);
+            } catch (error) {
+                // GNOME 42 resets focus/action mode before throwing for an
+                // already-dismissed modal. Do not reuse that stale token.
+                logError(error, 'Falha ao liberar o modal do widget');
+            } finally {
+                // popModal mutates GNOME's modal stack before all of its
+                // bookkeeping completes. Never retry the same token after it
+                // throws; destruction of the backdrop also invalidates it.
+                if (this._networkModalGrab === grab)
+                    this._networkModalGrab = null;
+            }
         }
-        this._cancelFirewallInspection();
+        cleanup(() => this._cancelFirewallInspection(), 'Falha ao encerrar inspeção do firewall');
+        cleanup(() => this._weatherClose?.(), 'Falha ao encerrar painel do clima');
         this._networkInspecting = false;
         this._networkConnectionSignature = null;
         this._networkGeneration++;
         this._networkRefreshPending = false;
-        this._networkDialog?.hide();
-        this._networkBackdrop?.hide();
+        cleanup(() => this._networkDialog?.hide(), 'Falha ao ocultar diálogo do widget');
+        if (this._networkBackdrop) {
+            // Even if actor hide fails, never leave the full-screen backdrop
+            // reactive and intercepting clicks over the desktop.
+            this._networkBackdrop.reactive = false;
+            cleanup(() => this._networkBackdrop.hide(), 'Falha ao ocultar fundo do diálogo');
+        }
         this._networkClickStart = null;
         if (this._networkRefreshTimeout) {
-            GLib.source_remove(this._networkRefreshTimeout);
+            const timeout = this._networkRefreshTimeout;
             this._networkRefreshTimeout = null;
+            cleanup(() => GLib.source_remove(timeout), 'Falha ao remover timeout do diálogo');
         }
-        stopCommandRun(this._networkRefreshRun);
+        cleanup(() => stopCommandRun(this._networkRefreshRun), 'Falha ao cancelar atualização do diálogo');
         if (this._speedtestTimeout) {
-            GLib.source_remove(this._speedtestTimeout);
+            const timeout = this._speedtestTimeout;
             this._speedtestTimeout = null;
+            cleanup(() => GLib.source_remove(timeout), 'Falha ao remover timeout do teste de velocidade');
         }
-        stopCommandRun(this._speedtestRun);
+        cleanup(() => stopCommandRun(this._speedtestRun), 'Falha ao cancelar teste de velocidade');
+    }
+
+    _pushNetworkModal() {
+        this._networkBackdrop.reactive = true;
+        this._networkBackdrop.show();
+        try {
+            const grab = Main.pushModal(this._networkBackdrop, {
+                actionMode: Shell.ActionMode.POPUP,
+            });
+            if (!grab)
+                throw new Error('GNOME Shell não criou o grab modal do widget.');
+            this._networkModalGrab = grab;
+        } catch (error) {
+            // A failed modal grab must never leave a full-screen actor
+            // visible and intercepting input.
+            this._networkBackdrop.reactive = false;
+            this._networkBackdrop.hide();
+            this._networkModalGrab = null;
+            throw error;
+        }
     }
 
     async _refreshNetworkDialog() {
         if (this._trafficDialog && this._speedtestProcess) {
-            this._networkRefreshStatus.text = 'Aguarde o teste de velocidade terminar.';
+            Language.set(this._networkRefreshStatus, 'text', Language.msg('panels.shell.wait_speed'));
             return;
         }
         if (this._networkDestroyed || !this._networkDialog?.visible)
             return;
         const currentCommand = getData(this.widgetIndex, this.elementIndex, 'Text_Command');
+        if (currentCommand.includes('/clima-widget.py')) { this._refreshWeatherDialog();return; }
         if (currentCommand.includes('/currency-widget.py')) {
             this._refreshCurrencyDialog();
             return;
@@ -1341,8 +1388,8 @@ Me.imports.commandPanels.install(class AzClockCommandLabel extends Label {
         const run = {generation: this._networkGeneration, cancellable: new Gio.Cancellable(), proc: null};
         this._networkRefreshRun = run;
         this._networkRefreshButton.reactive = false;
-        this._networkRefreshButton.accessible_name = this._temperatureRows ? 'Consultando temperaturas' : this._processesDialog ? 'Consultando processos' : this._updatesRows ? 'Consultando atualizações' : this._dockerRows ? 'Atualizando serviços Docker' : this._firewallRows ? 'Atualizando eventos do firewall' : 'Atualizando conexões e portas';
-        this._networkRefreshStatus.text = '';
+        Language.set(this._networkRefreshButton, 'accessible_name', this._temperatureRows ? Language.msg('panels.shell.query_temperatures') : this._processesDialog ? Language.msg('panels.shell.query_processes') : this._updatesRows ? Language.msg('panels.shell.query_updates') : this._dockerRows ? Language.msg('panels.shell.query_docker') : this._firewallRows ? Language.msg('panels.shell.query_firewall') : Language.msg('panels.shell.query_connections'));
+        Language.set(this._networkRefreshStatus, 'text', '');
         let proc;
         try {
             const command = getData(this.widgetIndex, this.elementIndex, 'Text_Command');
@@ -1352,7 +1399,7 @@ Me.imports.commandPanels.install(class AzClockCommandLabel extends Label {
                 if (this._storageDevice) argv.push('--device', this._storageDevice.name, '--identity', this._storageDevice.identity);
             }
             if (this._hardwareMode) argv.push('--hardware', this._hardwareMode);
-            proc = Gio.Subprocess.new(['/usr/bin/setsid', ...argv, '--details'], Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE);
+            proc = Language.spawn(['/usr/bin/setsid', ...argv, '--details'], Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE);
             this._networkRefreshProcess = proc;
             run.proc = proc;
             this._networkRefreshTimeout = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 15000, () => {
@@ -1364,90 +1411,90 @@ Me.imports.commandPanels.install(class AzClockCommandLabel extends Label {
             if (this._networkDestroyed || run.cancelled || run.generation !== this._networkGeneration || !this._networkDialog.visible)
                 return;
             if (this._hardwareMode) {
-                if (!proc.get_successful() || !stdout.startsWith('AZCLOCK_HARDWARE:')) throw new Error('Falha ao consultar o hardware.');
+                if (!proc.get_successful() || !stdout.startsWith('AZCLOCK_HARDWARE:')) throw Language.error(Language.msg('panels.shell.hardware_error'));
                 this._renderHardware(JSON.parse(stdout.slice('AZCLOCK_HARDWARE:'.length)));
-                this._networkRefreshStatus.text = 'Consultado às ' + GLib.DateTime.new_now_local().format('%H:%M');
+                Language.set(this._networkRefreshStatus, 'text', Language.msg('panels.shell.queried', {time: GLib.DateTime.new_now_local().format('%H:%M')}));
                 return;
             }
             if (command.includes('/armazenamento-widget.py') || command.includes('/cpu-ram-widget.py')) {
-                if (!proc.get_successful() || !stdout.startsWith('AZCLOCK_STORAGE:')) throw new Error('Falha ao consultar armazenamento.');
+                if (!proc.get_successful() || !stdout.startsWith('AZCLOCK_STORAGE:')) throw Language.error(Language.msg('panels.shell.storage_error'));
                 this._renderStorage(JSON.parse(stdout.slice('AZCLOCK_STORAGE:'.length)));
-                this._networkRefreshStatus.text = 'Consultado às ' + GLib.DateTime.new_now_local().format('%H:%M');
+                Language.set(this._networkRefreshStatus, 'text', Language.msg('panels.shell.queried', {time: GLib.DateTime.new_now_local().format('%H:%M')}));
                 return;
             }
             if (command.includes('/rede-widget.py')) {
-                if (!proc.get_successful() || !stdout.startsWith('AZCLOCK_QUALITY:')) throw new Error('Não foi possível testar a qualidade.');
+                if (!proc.get_successful() || !stdout.startsWith('AZCLOCK_QUALITY:')) throw Language.error(Language.msg('panels.shell.quality_error'));
                 this._renderQuality(JSON.parse(stdout.slice('AZCLOCK_QUALITY:'.length)));
-                this._networkRefreshStatus.text = 'Consultado às ' + GLib.DateTime.new_now_local().format('%H:%M');
+                Language.set(this._networkRefreshStatus, 'text', Language.msg('panels.shell.queried', {time: GLib.DateTime.new_now_local().format('%H:%M')}));
                 return;
             }
             if (command.includes('/servicos-widget.py')) {
                 if (!proc.get_successful() || !stdout.startsWith('AZCLOCK_SERVICES:'))
-                    throw new Error('Não foi possível consultar os serviços.');
+                    throw Language.error(Language.msg('panels.shell.services_error'));
                 this._renderServices(JSON.parse(stdout.slice('AZCLOCK_SERVICES:'.length)));
-                this._networkRefreshStatus.text = 'Consultado às ' + GLib.DateTime.new_now_local().format('%H:%M');
+                Language.set(this._networkRefreshStatus, 'text', Language.msg('panels.shell.queried', {time: GLib.DateTime.new_now_local().format('%H:%M')}));
                 return;
             }
             if (command.includes('/temperaturas-widget.py')) {
                 if (!proc.get_successful() || !stdout.startsWith('AZCLOCK_TEMPERATURES:'))
-                    throw new Error('Não foi possível consultar os sensores.');
+                    throw Language.error(Language.msg('panels.shell.sensors_error'));
                 this._renderTemperatures(JSON.parse(stdout.slice('AZCLOCK_TEMPERATURES:'.length)));
-                this._networkRefreshStatus.text = 'Atualizado às ' + GLib.DateTime.new_now_local().format('%H:%M');
+                Language.set(this._networkRefreshStatus, 'text', Language.msg('panels.shell.updated', {time: GLib.DateTime.new_now_local().format('%H:%M')}));
                 return;
             }
             if (command.includes('/processos-widget.py')) {
                 if (!proc.get_successful() || !stdout.startsWith('AZCLOCK_PROCESSES:'))
-                    throw new Error('Não foi possível consultar os processos.');
+                    throw Language.error(Language.msg('panels.shell.processes_error'));
                 this._renderProcesses(JSON.parse(stdout.slice('AZCLOCK_PROCESSES:'.length)));
-                this._networkRefreshStatus.text = 'Consultado às ' + GLib.DateTime.new_now_local().format('%H:%M');
+                Language.set(this._networkRefreshStatus, 'text', Language.msg('panels.shell.queried', {time: GLib.DateTime.new_now_local().format('%H:%M')}));
                 return;
             }
             if (command.includes('/atualizacoes-widget.py')) {
                 if (!proc.get_successful() || !stdout.startsWith('AZCLOCK_UPDATES:'))
-                    throw new Error('Não foi possível consultar as atualizações.');
+                    throw Language.error(Language.msg('panels.shell.updates_error'));
                 const data = JSON.parse(stdout.slice('AZCLOCK_UPDATES:'.length));
                 this._renderUpdates(data);
-                this.text = data.text;
+                Language.set(this, 'text', data.text);
                 this.clutter_text.set_markup(GLib.markup_escape_text(data.text, -1));
-                this._networkRefreshStatus.text = 'Consultado às ' + GLib.DateTime.new_now_local().format('%H:%M');
+                Language.set(this._networkRefreshStatus, 'text', Language.msg('panels.shell.queried', {time: GLib.DateTime.new_now_local().format('%H:%M')}));
                 return;
             }
             if (command.includes('/docker-widget.py')) {
                 if (!proc.get_successful() || !stdout.startsWith('AZCLOCK_DOCKER:'))
-                    throw new Error('Não foi possível consultar o Docker.');
+                    throw Language.error(Language.msg('panels.shell.docker_error'));
                 const data = JSON.parse(stdout.slice('AZCLOCK_DOCKER:'.length));
                 this._renderDocker(data);
-                this.text = data.text;
+                Language.set(this, 'text', data.text);
                 this.clutter_text.set_markup(GLib.markup_escape_text(data.text, -1));
-                this._networkRefreshStatus.text = data.error || ('Atualizado às ' + GLib.DateTime.new_now_local().format('%H:%M'));
+                Language.set(this._networkRefreshStatus, 'text', data.error || (Language.msg('panels.shell.updated', {time: GLib.DateTime.new_now_local().format('%H:%M')})));
                 return;
             }
             if (command.includes('/firewall-widget.py')) {
                 if (!proc.get_successful() || !stdout.startsWith('AZCLOCK_FIREWALL:'))
-                    throw new Error('Sem acesso aos logs ou falha na coleta.');
+                    throw Language.error(Language.msg('panels.shell.firewall_error'));
                 const data = JSON.parse(stdout.slice('AZCLOCK_FIREWALL:'.length));
                 this._renderFirewall(data);
-                this.text = data.text;
+                Language.set(this, 'text', data.text);
                 this.clutter_text.set_markup(GLib.markup_escape_text(data.text, -1));
-                this._networkRefreshStatus.text = 'Atualizado: ' + data.updated;
+                Language.set(this._networkRefreshStatus, 'text', Language.msg('panels.shell.updated_value', {time: data.updated}));
                 return;
             }
             if (!proc.get_successful() || !stdout.startsWith('AZCLOCK_NETWORK:'))
-                throw new Error('Não foi possível atualizar. Tente novamente.');
+                throw Language.error(Language.msg('panels.shell.refresh_error'));
             const payload = JSON.parse(stdout.slice('AZCLOCK_NETWORK:'.length));
             if (typeof payload.tooltip !== 'string' || payload.tooltip.length > 8192 || !Array.isArray(payload.connection_items) || payload.connection_items.length > 200 ||
                 payload.connection_items.some(item => !item || typeof item.ip !== 'string' || typeof item.port !== 'string' ||
                     typeof item.hostname !== 'string' || typeof item.display !== 'string' || item.hostname.length > 253 || item.display.length > 253 ||
                     item.ip.length > 64 || !/^\d{1,5}$/.test(item.port) || Number(item.port) < 1 || Number(item.port) > 65535))
-                throw new Error('Resposta inválida.');
-            this._networkTooltipText = payload.tooltip || 'Nenhuma porta escutando';
+                throw Language.error(Language.msg('panels.shell.response_error'));
+            this._networkTooltipText = payload.tooltip || '';
             this._networkConnectionItems = payload.connection_items || [];
             this._networkConnectionOmitted = Number.isInteger(payload.omitted) && payload.omitted > 0 ? payload.omitted : 0;
             this._updateNetworkTooltip();
-            this._networkRefreshStatus.text = 'Atualizado às ' + GLib.DateTime.new_now_local().format('%H:%M');
+            Language.set(this._networkRefreshStatus, 'text', Language.msg('panels.shell.updated', {time: GLib.DateTime.new_now_local().format('%H:%M')}));
         } catch (error) {
             if (!this._networkDestroyed && run.generation === this._networkGeneration && this._networkDialog?.visible)
-                this._networkRefreshStatus.text = error.message || 'Não foi possível atualizar. Tente novamente.';
+                Language.set(this._networkRefreshStatus, 'text', error.orbitzMessage || error.message || Language.msg('panels.shell.refresh_error'));
         } finally {
             if (this._networkRefreshTimeout) {
                 GLib.source_remove(this._networkRefreshTimeout);
@@ -1459,7 +1506,7 @@ Me.imports.commandPanels.install(class AzClockCommandLabel extends Label {
             this._networkRefreshPending = false;
             if (!this._networkDestroyed) {
                 this._networkRefreshButton.reactive = true;
-                this._networkRefreshButton.accessible_name = this._temperatureRows ? 'Atualizar temperaturas' : this._processesDialog ? 'Atualizar diagnóstico e processos' : this._updatesRows ? 'Atualizar consulta de atualizações' : this._dockerRows ? 'Atualizar serviços Docker' : this._firewallRows ? 'Atualizar eventos do firewall' : 'Atualizar conexões e portas';
+                Language.set(this._networkRefreshButton, 'accessible_name', this._temperatureRows ? Language.msg('panels.shell.refresh_temperatures') : this._processesDialog ? Language.msg('panels.shell.refresh_processes') : this._updatesRows ? Language.msg('panels.shell.refresh_updates') : this._dockerRows ? Language.msg('panels.shell.refresh_docker') : this._firewallRows ? Language.msg('panels.shell.refresh_firewall') : Language.msg('panels.shell.refresh_connections'));
                 if (pending && this._networkDialog?.visible)
                     this._refreshNetworkDialog();
             }
@@ -1494,9 +1541,16 @@ Me.imports.commandPanels.install(class AzClockCommandLabel extends Label {
             this._buildFirewallDialog();
         if (getData(this.widgetIndex, this.elementIndex, 'Text_Command').includes('/currency-widget.py') && !this._networkDialog)
             this._buildCurrencyDialog();
+        if (getData(this.widgetIndex,this.elementIndex,'Text_Command').includes('/clima-widget.py') && !this._networkDialog)
+            this._buildWeatherDialog();
         if (!this._networkDialog) {
-            this._networkBackdrop = new St.Widget({reactive: true, visible: false});
+            this._networkBackdrop = Language.widget(St.Widget, {reactive: true, visible: false});
             this._networkBackdrop.add_constraint(new Clutter.BindConstraint({source: global.stage, coordinate: Clutter.BindCoordinate.ALL}));
+            this._networkBackdrop.connect('destroy', () => {
+                // GNOME Shell automatically removes a modal when its actor is
+                // destroyed. Keep the owner's token synchronized with that.
+                this._networkModalGrab = null;
+            });
             this._networkBackdrop.connect('button-press-event', (_actor, event) => {
             if (this._networkDialog?.contains(event.get_source()))
                 return Clutter.EVENT_PROPAGATE;
@@ -1504,22 +1558,22 @@ Me.imports.commandPanels.install(class AzClockCommandLabel extends Label {
                 return Clutter.EVENT_STOP;
             });
             Main.uiGroup.add_child(this._networkBackdrop);
-            this._networkDialog = new St.BoxLayout({
+            this._networkDialog = Language.widget(St.BoxLayout, {
                 vertical: true,
                 reactive: true,
                 style: 'background-color: #202020; color: white; border: 1px solid #606060; border-radius: 8px; padding: 12px; spacing: 8px;',
             });
-            const columns = new St.BoxLayout({vertical: false, style: 'spacing: 18px;'});
+            const columns = Language.widget(St.BoxLayout, {vertical: false, style: 'spacing: 18px;'});
             const buildColumn = (title, width, interactive = false) => {
-                const column = new St.BoxLayout({vertical: true, style: 'spacing: 8px;'});
-                column.add_child(new St.Label({text: title, style: 'font-weight: bold; color: #ededed;'}));
-                const scroll = new St.ScrollView({
+                const column = Language.widget(St.BoxLayout, {vertical: true, style: 'spacing: 8px;'});
+                column.add_child(Language.widget(St.Label, {text: title, style: 'font-weight: bold; color: #ededed;'}));
+                const scroll = Language.widget(St.ScrollView, {
                     style: width === null ? 'height: 260px;' : `width: ${width}px; height: 260px;`,
                     reactive: true, overlay_scrollbars: false,
                 });
                 scroll.set_policy(St.PolicyType.NEVER, St.PolicyType.AUTOMATIC);
-                const box = new St.BoxLayout({vertical: true});
-                const label = new St.Label({
+                const box = Language.widget(St.BoxLayout, {vertical: true});
+                const label = Language.widget(St.Label, {
                     style: 'font-family: monospace; font-size: 14px; padding: 6px;',
                     x_align: Clutter.ActorAlign.START,
                 });
@@ -1532,31 +1586,34 @@ Me.imports.commandPanels.install(class AzClockCommandLabel extends Label {
                 columns.add_child(column);
                 return interactive ? box : label;
             };
-            this._networkDialogLabel = buildColumn('Portas locais', 130);
-            this._networkConnectionsBox = buildColumn('Conexões externas · destino / porta', null, true);
+            this._networkDialogLabel = buildColumn(Language.msg('panels.shell.local_ports'), 130);
+            this._networkConnectionsBox = buildColumn(Language.msg('panels.shell.connections_title'), null, true);
             this._networkConnectionSignature = null;
             this._networkDialog.add_child(columns);
-            const footer = new St.BoxLayout({style: 'spacing: 8px;'});
-            this._networkRefreshButton = new St.Button({
-                reactive: true, can_focus: true, accessible_name: 'Atualizar conexões e portas',
+            const footer = Language.widget(St.BoxLayout, {style: 'spacing: 8px;'});
+            this._networkRefreshButton = Language.widget(St.Button, {
+                reactive: true, can_focus: true, accessible_name: Language.msg('panels.shell.refresh_connections'),
                 x_align: Clutter.ActorAlign.START,
                 style: 'background-color: transparent; color: white; padding: 6px;',
             });
-            this._networkRefreshButton.set_child(new St.Icon({
+            this._networkRefreshButton.set_child(Language.widget(St.Icon, {
                 icon_name: 'view-refresh-symbolic', icon_size: 18, style: 'color: white;',
             }));
             this._networkRefreshButton.connect('clicked', () => this._refreshNetworkDialog());
             footer.add_child(this._networkRefreshButton);
-            this._networkRefreshStatus = new St.Label({text: '', style: 'color: #c8c8c8; font-size: 12px;', y_align: Clutter.ActorAlign.CENTER});
+            this._networkRefreshStatus = Language.widget(St.Label, {text: '', style: 'color: #c8c8c8; font-size: 12px;', y_align: Clutter.ActorAlign.CENTER});
             footer.add_child(this._networkRefreshStatus);
             this._networkDialog.add_child(footer);
             this._networkBackdrop.add_child(this._networkDialog);
         }
-        this._networkBackdrop.show();
+        // A closed backdrop is non-reactive; acquire a fresh grab before it
+        // can intercept input again.
         if (!this._networkModalGrab)
-            this._networkModalGrab = Main.pushModal(this._networkBackdrop, {
-                actionMode: Shell.ActionMode.POPUP,
-            });
+            this._pushNetworkModal();
+        else {
+            this._networkBackdrop.reactive = true;
+            this._networkBackdrop.show();
+        }
         Main.uiGroup.set_child_above_sibling(this._networkBackdrop, null);
         this._networkDialog.show();
         const [x, y] = this.get_transformed_position();
@@ -1576,11 +1633,13 @@ Me.imports.commandPanels.install(class AzClockCommandLabel extends Label {
         this._networkDialog.set_position(px, py);
         this._networkBackdrop.set_child_above_sibling(this._networkDialog, null);
         this._refreshNetworkDialog();
+        if (this._weatherSearch) this._weatherSearch.grab_key_focus();
+        else this._weatherCloseButton?.grab_key_focus();
     }
 
     async _startSpeedtest() {
         if (this._networkRefreshRun) {
-            this._speedtestStatus.text = 'Aguarde o teste de qualidade terminar.';
+            Language.set(this._speedtestStatus, 'text', Language.msg('panels.shell.wait_quality'));
             this._speedtestStatus.show();
             return;
         }
@@ -1588,7 +1647,7 @@ Me.imports.commandPanels.install(class AzClockCommandLabel extends Label {
             return;
         this._speedtestButton.reactive = false;
         this._speedtestButton.can_focus = false;
-        this._speedtestButton.label = 'Testando…';
+        Language.set(this._speedtestButton, 'label', Language.msg('panels.shell.testing'));
         this._speedtestStatus.hide();
         const run = {generation: this._networkGeneration, proc: null, cancellable: new Gio.Cancellable()};
         this._speedtestRun = run;
@@ -1596,7 +1655,7 @@ Me.imports.commandPanels.install(class AzClockCommandLabel extends Label {
         let timedOut = false;
         try {
             const binary = GLib.build_filenamev([Me.path, 'speedtest']);
-            proc = Gio.Subprocess.new(['/usr/bin/setsid', binary, '--accept-license', '--accept-gdpr', '--format=json', '--progress=no'],
+            proc = Language.spawn(['/usr/bin/setsid', binary, '--accept-license', '--accept-gdpr', '--format=json', '--progress=no'],
                 Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE);
             this._speedtestProcess = proc;
             run.proc = proc;
@@ -1610,25 +1669,25 @@ Me.imports.commandPanels.install(class AzClockCommandLabel extends Label {
             if (this._networkDestroyed || run.generation !== this._networkGeneration || !this._networkDialog?.visible)
                 return;
             if (timedOut)
-                throw new Error('O teste demorou demais. Tente novamente.');
+                throw Language.error(Language.msg('panels.shell.speed_timeout'));
             if (!proc.get_successful())
-                throw new Error('Não foi possível concluir. Verifique a conexão e tente novamente.');
+                throw Language.error(Language.msg('panels.shell.speed_error'));
             const data = JSON.parse(stdout);
             const download = Number(data.download?.bandwidth) * 8 / 1000000;
             const upload = Number(data.upload?.bandwidth) * 8 / 1000000;
             const ping = Number(data.ping?.latency);
             if (![download, upload, ping].every(Number.isFinite))
-                throw new Error('O serviço retornou um resultado inválido.');
+                throw Language.error(Language.msg('panels.shell.speed_response_error'));
             const format = value => value.toFixed(1).replace('.', ',');
-            this._speedtestResult.text = `Download: ${format(download)} Mbps\nUpload: ${format(upload)} Mbps\nPing: ${format(ping)} ms`;
+            Language.set(this._speedtestResult, 'text', `Download: ${format(download)} Mbps\nUpload: ${format(upload)} Mbps\nPing: ${format(ping)} ms`);
             this._speedtestResult.show();
             const time = GLib.DateTime.new_now_local().format('%H:%M');
-            this._speedtestStatus.text = `Último teste: ${time}\nSpeedtest by Ookla`;
+            Language.set(this._speedtestStatus, 'text', Language.msg('panels.shell.speed_last', {time}));
             this._speedtestStatus.show();
         } catch (error) {
             if (!this._networkDestroyed && run.generation === this._networkGeneration && this._networkDialog?.visible) {
-                this._speedtestStatus.text = timedOut ? 'O teste demorou demais. Tente novamente.' :
-                    (proc ? error.message : 'Serviço de teste indisponível. Recarregue a extensão.');
+                Language.set(this._speedtestStatus, 'text', timedOut ? Language.msg('panels.shell.speed_timeout') :
+                    (proc ? error.orbitzMessage || error.message : Language.msg('panels.shell.speed_unavailable')));
                 this._speedtestStatus.show();
             }
         } finally {
@@ -1639,7 +1698,7 @@ Me.imports.commandPanels.install(class AzClockCommandLabel extends Label {
             this._speedtestProcess = null;
             this._speedtestRun = null;
             if (!this._networkDestroyed) {
-                this._speedtestButton.label = 'Testar novamente';
+                Language.set(this._speedtestButton, 'label', Language.msg('panels.shell.speed_again'));
                 this._speedtestButton.reactive = true;
                 this._speedtestButton.can_focus = true;
             }
@@ -1649,19 +1708,19 @@ Me.imports.commandPanels.install(class AzClockCommandLabel extends Label {
     _updateNetworkTooltip() {
         // The details now appear only in the click-opened modal.
         if (!this._networkDestroyed && this._networkDialogLabel) {
-            this._networkDialogLabel.text = this._networkTooltipText;
+            Language.set(this._networkDialogLabel, 'text', this._networkTooltipText || Language.msg('panels.shell.no_ports'));
             if (this._networkConnectionsBox && !this._networkInspecting) {
                 const signature = JSON.stringify([this._networkConnectionItems, this._networkConnectionOmitted || 0]);
                 if (signature !== this._networkConnectionSignature) {
                     this._networkConnectionSignature = signature;
                     this._networkConnectionsBox.destroy_all_children();
                     for (const item of this._networkConnectionItems) {
-                        const row = new St.BoxLayout({style: 'spacing: 6px; padding: 6px; font-family: monospace; font-size: 14px;'});
+                        const row = Language.widget(St.BoxLayout, {style: 'spacing: 6px; padding: 6px; font-family: monospace; font-size: 14px;'});
                         if (item.hostname) {
-                            const host = new St.Button({
+                            const host = Language.widget(St.Button, {
                                 label: item.display || item.hostname,
                                 reactive: true, can_focus: true,
-                                accessible_name: `Copiar hostname completo: ${item.hostname}`,
+                                accessible_name: Language.msg('panels.shell.copy_hostname', {hostname: item.hostname}),
                                 style: 'color: #82cfff; padding: 0px;',
                             });
                             host.connect('clicked', () => {
@@ -1669,21 +1728,21 @@ Me.imports.commandPanels.install(class AzClockCommandLabel extends Label {
                             });
                             row.add_child(host);
                         }
-                        const ip = new St.Button({label: `(${item.ip})`, reactive: true, can_focus: true,
-                            accessible_name: `Consultar IP ${item.ip}`, style: 'color: #82cfff; padding: 0px;'});
+                        const ip = Language.widget(St.Button, {label: `(${item.ip})`, reactive: true, can_focus: true,
+                            accessible_name: Language.msg('panels.shell.inspect_ip', {ip: item.ip}), style: 'color: #82cfff; padding: 0px;'});
                         ip.connect('clicked', () => this._inspectFirewall('ip', item.ip));
                         row.add_child(ip);
-                        row.add_child(new St.Label({text: '—', style: 'color: #c8c8c8;'}));
-                        const port = new St.Button({label: String(item.port), reactive: true, can_focus: true,
-                            accessible_name: `Consultar porta ${item.port}`, style: 'color: #ffd479; padding: 0px;'});
+                        row.add_child(Language.widget(St.Label, {text: '—', style: 'color: #c8c8c8;'}));
+                        const port = Language.widget(St.Button, {label: String(item.port), reactive: true, can_focus: true,
+                            accessible_name: Language.msg('panels.shell.inspect_port', {port: item.port}), style: 'color: #ffd479; padding: 0px;'});
                         port.connect('clicked', () => this._inspectFirewall('port', item.port));
                         row.add_child(port);
                         this._networkConnectionsBox.add_child(row);
                     }
                     if (this._networkConnectionOmitted)
-                        this._networkConnectionsBox.add_child(new St.Label({text: `${this._networkConnectionOmitted} conexões adicionais omitidas.`, style: 'padding: 6px;'}));
+                        this._networkConnectionsBox.add_child(Language.widget(St.Label, {text: Language.msg('panels.shell.connections_omitted', {count: this._networkConnectionOmitted}), style: 'padding: 6px;'}));
                     if (!this._networkConnectionItems.length)
-                        this._networkConnectionsBox.add_child(new St.Label({text: 'Nenhuma conexão externa', style: 'padding: 6px;'}));
+                        this._networkConnectionsBox.add_child(Language.widget(St.Label, {text: Language.msg('panels.shell.connections_empty'), style: 'padding: 6px;'}));
                 }
             }
         }
@@ -1691,7 +1750,7 @@ Me.imports.commandPanels.install(class AzClockCommandLabel extends Label {
 
     _setErrorState() {
         this._hasError = true;
-        this.text = _('error');
+        Language.set(this, 'text', Language.msg('panels.shell.error'));
         this.clutter_text.set_markup(this.text);
     }
 
@@ -1842,10 +1901,10 @@ Me.imports.commandPanels.install(class AzClockCommandLabel extends Label {
                             break;
                     } catch (error) { /* Player may disappear between discovery and read. */ }
                 }
-            } catch (error) { text = 'Mídia indisponível'; }
+            } catch (error) { text = Language.msg('panels.shell.media_unavailable'); }
             if (!this._networkDestroyed && generation === this._mediaGeneration) {
-                this.text = text;
-                this.clutter_text.set_text(text);
+                Language.set(this, 'text', text);
+                this.clutter_text.set_text(Language.text(text));
                 this._setMediaIcon(selectedPlayer);
                 this._mediaBusy = false;
                 if (this._mediaPending) {
@@ -1859,7 +1918,7 @@ Me.imports.commandPanels.install(class AzClockCommandLabel extends Label {
     _executeCommand() {
         if (!widgetsEnabled || this._networkDestroyed) return;
         const command = getData(this.widgetIndex, this.elementIndex, 'Text_Command');
-        if (command.includes('/currency-widget.py'))
+        if (command.includes('/currency-widget.py') || command.includes('/clima-widget.py'))
             this._scheduleNetworkClick();
         if (metricMode(command)) {
             if (['cpu', 'processes', 'network'].includes(metricMode(command)))
@@ -1931,7 +1990,7 @@ Me.imports.commandPanels.install(class AzClockCommandLabel extends Label {
             if (input !== null)
                 flags |= Gio.SubprocessFlags.STDIN_PIPE;
 
-            const proc = Gio.Subprocess.new(argv, flags);
+            const proc = Language.spawn(argv, flags);
             run.proc = proc;
             run.timeout = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 30000, () => {
                 run.timeout = null;
@@ -1993,7 +2052,7 @@ Me.imports.commandPanels.install(class AzClockCommandLabel extends Label {
             if (command.includes('/firewall-widget.py') && response.startsWith('AZCLOCK_FIREWALL:')) {
                 const payload = JSON.parse(response.slice('AZCLOCK_FIREWALL:'.length));
                 displayText = payload.text;
-                this.accessible_name = payload.text + ' · ' + (payload.updated || 'Atualização manual pendente');
+                Language.set(this, 'accessible_name', Language.join(payload.text, ' · ', payload.updated || Language.msg('panels.shell.manual_update_pending')));
                 this._scheduleNetworkClick();
             }
             if (command.includes('/seguranca-widget.py') && response.startsWith('AZCLOCK_NETWORK:')) {
@@ -2003,7 +2062,7 @@ Me.imports.commandPanels.install(class AzClockCommandLabel extends Label {
 
             }
             if (this.text !== displayText) {
-                this.text = displayText;
+                Language.set(this, 'text', displayText);
                 this.clutter_text.set_markup(this.text);
             }
         } catch (err) {
@@ -2023,7 +2082,7 @@ Me.imports.commandPanels.install(class AzClockCommandLabel extends Label {
                 this._execCommand(pending.command, pending.input, pending.cancellable);
         }
     }
-}, {Clutter, Gio, GLib, Main, Me, Pango, St, Utils, getData, getWidgetData: () => WIDGETDATA,
+}, {Clutter, Gio, GLib, Main, Me, Pango, St, Utils, Language, getData, getWidgetData: () => WIDGETDATA,
     readCommandOutput, stopCommandRun, global, launchTerminalAction}));
 
 // eslint-disable-next-line no-unused-vars
@@ -2034,6 +2093,21 @@ function init() {
 
 class AzClock {
     enable() {
+        Language.configure(ExtensionUtils.getSettings());
+        this._uiLanguageUnwatch = Language.watch(() => {
+            if (!this._running) return;
+            stopMetrics();scheduleMetrics();
+            for (const widget of this.widgets) {
+                widget.updateComponents(0);
+                for (const label of widget._commandLabels || []) {
+                    if(label._weatherRows){label._weatherRefreshLocale();continue;}
+                    if (label._networkDialog?.visible && !label._currencyAmountEntry && !label._firewallInspection && !label._networkInspecting) {
+                        if (label._networkRefreshRun) label._networkRefreshPending = true;
+                        else label._refreshNetworkDialog();
+                    }
+                }
+            }
+        });
         Calendar.enable(Me.path, () => {
             if (!this._running || !WIDGETDATA) return null;
             const widget = this.widgets.find(w => w.get_paint_visibility() &&
@@ -2046,8 +2120,8 @@ class AzClock {
         widgetsEnabled = false;
         this.widgets = [];
         this._running = false;
-        this._controller = new St.Button({reactive: true, can_focus: true, visible: true,
-            width: 40, height: 36, accessible_name: 'Iniciar widgets',
+        this._controller = Language.widget(St.Button, {reactive: true, can_focus: true, visible: true,
+            width: 40, height: 36, accessible_name: Language.msg('panels.shell.start_widgets'),
             style: 'padding: 0px; border: 0px; background-color: transparent; box-shadow: none;'});
         this._controllerButton = this._controller;
         this._controllerIcons = {
@@ -2147,7 +2221,7 @@ class AzClock {
         this._controllerButton.reactive = !busy;
         this._controllerButton.can_focus = !busy;
         this._controllerIcon.gicon = running || busy ? this._controllerIcons.running : this._controllerIcons.stopped;
-        this._controllerButton.accessible_name = busy ? 'Encerrando widgets' : running ? 'Encerrar todos os widgets' : 'Iniciar widgets';
+        Language.set(this._controllerButton, 'accessible_name', busy ? Language.msg('panels.shell.stopping_widgets') : running ? Language.msg('panels.shell.stop_widgets') : Language.msg('panels.shell.start_widgets'));
     }
 
     _startWidgets() {
@@ -2158,27 +2232,37 @@ class AzClock {
             Me.imports.settings.SettingsImport.validateWidgets(WIDGETDATA);
             widgetsEnabled = true;
             this._running = true;
+            // Sticky Notes are a separate desktop app. Start them before
+            // constructing widgets so a bad widget cannot suppress notes.
+            this._openPostits();
             this._createWidgets();
             this._startClockTimer();
-            this._openPostits();
             this._setControllerState(true);
         } catch (error) { this._startupFailed(error); }
     }
 
     _startupFailed(error) {
         logError(error, 'Falha ao iniciar widgets');
-        this._stopWidgets();
-        Main.notifyError('Widgets interrompidos', String(error.message || error).slice(0, 300));
+        // Roll back only the widget layer. Notes were launched independently
+        // and should remain available after a widget startup failure.
+        this._stopWidgets(false);
+        Main.notifyError(Language.tr('panels.shell.widgets_stopped'), String(error.message || error).slice(0, 300));
     }
 
     _openPostits() {
         try {
-            Gio.Subprocess.new(['/usr/bin/env', 'GDK_BACKEND=x11', '/usr/bin/python3',
+            const process = Language.spawn(['/usr/bin/env', 'GDK_BACKEND=x11', '/usr/bin/python3',
                 GLib.build_filenamev([GLib.get_user_data_dir(), 'orbitz-postits', 'app', 'postits.py'])],
                 Gio.SubprocessFlags.NONE);
+            // Catch asynchronous startup/runtime failures without surfacing a
+            // notification for normal app shutdown.
+            process?.wait_check_async?.(null, (child, result) => {
+                try { child.wait_check_finish(result); }
+                catch (error) { logError(error, 'Sticky Notes encerrou com erro'); }
+            });
         } catch (error) {
             logError(error, 'Falha ao abrir Sticky Notes');
-            Main.notifyError('Sticky Notes', 'Não foi possível abrir as notas.');
+            Main.notifyError('Sticky Notes', Language.tr('panels.shell.notes_error'));
         }
     }
 
@@ -2196,9 +2280,9 @@ class AzClock {
             });
     }
 
-    _stopWidgets() {
+    _stopWidgets(closePostits = true) {
         if (this._stopping) return this._stopping;
-        this._closePostits();
+        if (closePostits) this._closePostits();
         this._running = false;
         widgetsEnabled = false;
         this._setControllerState(false, true);
@@ -2229,6 +2313,7 @@ class AzClock {
     }
 
     disable() {
+        this._uiLanguageUnwatch?.();this._uiLanguageUnwatch = null;
         Calendar.disable();
         this._stopWidgets();
         this._controller?.destroy();
@@ -2298,7 +2383,7 @@ class AzClock {
             const spacing = Math.max(0, Math.min(50, Number(meta.Box_Spacing) || 8));
             parent.layout_manager.orientation = Clutter.Orientation.VERTICAL;
             const box = new St.BoxLayout({vertical: true, style: `spacing: ${spacing}px;`});
-            box.add_child(new St.Label({text: meta.Name || 'Sistema', style: PANEL_TITLE_STYLE}));
+            box.add_child(Language.widget(St.Label, {text: meta.Name || Language.msg('panels.shell.system'), style: PANEL_TITLE_STYLE}));
             parent.add_child(box);
             parent._subwidgetBox = box;
             let row;

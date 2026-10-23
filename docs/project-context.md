@@ -1,6 +1,6 @@
 # Contexto atual do Orbitz
 
-Atualizado em 21/10/2026. Índice operacional, não histórico completo nem promessa de memória infalível. Conferir código/diff/instalação conforme a tarefa; não carregar todo o arquivo histórico por padrão.
+Atualizado em 22/10/2026. Índice operacional, não histórico completo nem promessa de memória infalível. Conferir código/diff/instalação conforme a tarefa; não carregar todo o arquivo histórico por padrão.
 
 ## Processo vigente
 
@@ -49,6 +49,8 @@ WSP-01 implementado e auditado: [parecer integrado](audits/2026-10-19-workspace-
 
 FX-01/RC-40 conversor único Fiat/Crypto: Fiat usa Frankfurter latest, BRL↔moeda selecionada; cripto usa CoinPaprika tickers, USD↔ativo selecionado (BTC padrão). Ambos atualizam automaticamente a cada 4h e permitem atualização manual pela modal; não há histórico, previsão nem fallback. O widget mostra somente a conversão. Fiat e cripto→USD exibem duas casas pt-BR; USD→cripto mantém a precisão recebida para não apresentar ativos pequenos como `0,00`. CoinPaprika mostra atribuição na modal; plano Free é pessoal e uso comercial voltado a clientes exige licença compatível. Revisão 21/10 corrigiu: JSON aninhado, expoentes inválidos e inteiros longos que escapavam como erro técnico, quantização Decimal em valores extremos, gravação das preferências após renomear, resposta Fiat obsoleta após mudar para Crypto e arredondamento da unidade cripto a zero. Testes dirigidos FX 24/24; instalação/GNOME visual desta revisão seguem pendentes. WID-02 relógio mundial permanece não resolvido conforme relato do usuário; manter em backlog.
 
+I18N-01: código integrado para PT-BR/EN-US em Settings, Workspace, widgets/painéis, Sticky Notes, YouTube e mensagens; os dois catálogos têm 1.735 chaves idênticas. GSettings persiste a escolha, PT-BR é padrão/fallback e telas abertas atualizam texto vinculado; erros Orbitz mantêm origem explícita para re-renderização. Validação atual: suíte Python 428 casos passaram e 4 skips ambientais; os 36 scripts Node passaram. Em 22/10, o usuário informou que aplicou a atualização e que aparentemente tudo funciona; registra smoke manual positivo, enquanto instalação e inspeção gráfica desta revisão continuam separadas.
+
 ## Último estado verificado das fontes
 
 - Refatoração modular, identidade Orbitz e marca 1.0 implementadas. Usuário confirmou em 20/10 que o clique RAM não é mais um problema; BUG-01 encerrado por observação manual. Diferenças de dispositivos externos/alertas permanecem pendência separada (BUG-02).
@@ -57,5 +59,6 @@ FX-01/RC-40 conversor único Fiat/Crypto: Fiat usa Frankfurter latest, BRL↔moe
 - Original e versões preservados; portais abertos só por ação do usuário, upload/login manuais. Importação/hash não validam assinatura ou correspondência; estado pendente. IH-A01/02 corrigidos no histórico: corrupção isolada e guarda de destino gerenciado.
 - GTK/AT/chooser/browser real de invoices/assinatura permanecem testes manuais separados. O usuário confirmou instalação funcional das integrações Google Calendar e Datas comemorativas em 20/10. Fechar/reabrir agenda após futuras atualizações Python; conferir plano/retorno do atualizador antes de afirmar instalada uma versão futura.
 - Histórico/perfis privados em `~/.local/share/orbitz-widgets/`, fora do repositório; nunca usar dados reais nos testes. Histórico de invoices separado dos backups da agenda.
+- STICKY-06/RC-47: fonte implementa PIN global de 4 dígitos com hash/salt e cooldown, Settings, bloqueio de nota ao reiniciar e após 15s de ponteiro fora, autenticação ao revelar/desmarcar/excluir. O escopo confirmado pelo usuário é bloqueio de interface, sem criptografia: SQLite/backups seguem legíveis. 84 testes Sticky (82 pass/2 skips sem display GTK), seis testes de idioma, compilação/JSON/diff-check aprovados. Auditoria focada concluída sem bypass reproduzível; smoke visual GTK pendente.
 
 Histórico anterior preservado em `docs/archive/2026-10-19-agent-workflow/project-context.md`; evidências originais em `docs/audits/` e `docs/design/`. Ler somente quando a investigação exigir.

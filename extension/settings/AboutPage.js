@@ -1,46 +1,47 @@
 const ExtensionUtils = imports.misc.extensionUtils;
 const Me = ExtensionUtils.getCurrentExtension();
+const Language = Me.imports.uiLanguage.Language;
 
 const {Adw, Gdk, Gio, GLib, GObject, Gtk} = imports.gi;
 const Gettext = imports.gettext.domain(Me.metadata['gettext-domain']);
-const _ = Gettext.gettext;
+const _ = Language.tr;
 
-const PROJECT_DESCRIPTION = _('Widgets, monitoramento, agenda e notas para GNOME.');
+const PROJECT_DESCRIPTION = Language.msg('settings.widgets_monitoring_calendar_and_notes_for_gnome');
 const PROJECT_IMAGE = GLib.build_filenamev([Me.path, 'media', 'orbitz-logo.svg']);
 const SettingsImport = Me.imports.settings.SettingsImport;
 
 var AboutPage = GObject.registerClass({GTypeName: 'OrbitzWidgetsAboutPage'},
 class AzClockAboutPage extends Adw.PreferencesPage {
     _init() {
-        super._init({
-            title: _('About'),
+        super._init(Language.properties(this, {
+            title: Language.msg('settings.about'),
             icon_name: 'help-about-symbolic',
             name: 'AboutPage',
-        });
+        }));
 
         // Project Logo, title, description-------------------------------------
         const projectHeaderGroup = new Adw.PreferencesGroup();
-        const projectHeaderBox = new Gtk.Box({
+        const projectHeaderBox = Language.widget(Gtk.Box, {
             orientation: Gtk.Orientation.VERTICAL,
             hexpand: false,
             vexpand: false,
         });
 
-        const projectImage = new Gtk.Image({
+        const projectImage = Language.widget(Gtk.Image, {
             margin_bottom: 5,
             gicon: new Gio.FileIcon({file: Gio.File.new_for_path(PROJECT_IMAGE)}),
             pixel_size: 100,
         });
 
-        const projectTitleLabel = new Gtk.Label({
+        const projectTitleLabel = Language.widget(Gtk.Label, {
             label: Me.metadata.name,
             css_classes: ['title-1'],
             vexpand: true,
             valign: Gtk.Align.FILL,
         });
 
-        const projectDescriptionLabel = new Gtk.Label({
-            label: _(PROJECT_DESCRIPTION),
+        const projectDescriptionLabel = Language.widget(Gtk.Label, {
+            label: PROJECT_DESCRIPTION,
             hexpand: false,
             vexpand: false,
         });
@@ -55,58 +56,58 @@ class AzClockAboutPage extends Adw.PreferencesPage {
         // Extension/OS Info and Links Group------------------------------------------------
         const infoGroup = new Adw.PreferencesGroup();
 
-        const projectVersionRow = new Adw.ActionRow({
-            title: _('Versão do Orbitz'),
+        const projectVersionRow = Language.widget(Adw.ActionRow, {
+            title: Language.msg('settings.orbitz_version'),
         });
-        projectVersionRow.add_suffix(new Gtk.Label({
+        projectVersionRow.add_suffix(Language.widget(Gtk.Label, {
             label: Me.metadata['version-name'] || (Me.metadata.version === 1 ? '1.0' : Me.metadata.version.toString()),
             css_classes: ['dim-label'],
         }));
         infoGroup.add(projectVersionRow);
 
         if (Me.metadata.commit) {
-            const commitRow = new Adw.ActionRow({
-                title: _('Git Commit'),
+            const commitRow = Language.widget(Adw.ActionRow, {
+                title: Language.msg('settings.git_commit'),
             });
-            commitRow.add_suffix(new Gtk.Label({
+            commitRow.add_suffix(Language.widget(Gtk.Label, {
                 label: Me.metadata.commit.toString(),
                 css_classes: ['dim-label'],
             }));
             infoGroup.add(commitRow);
         }
 
-        const gnomeVersionRow = new Adw.ActionRow({
-            title: _('GNOME Version'),
+        const gnomeVersionRow = Language.widget(Adw.ActionRow, {
+            title: Language.msg('settings.gnome_version'),
         });
-        gnomeVersionRow.add_suffix(new Gtk.Label({
+        gnomeVersionRow.add_suffix(Language.widget(Gtk.Label, {
             label: imports.misc.config.PACKAGE_VERSION.toString(),
             css_classes: ['dim-label'],
         }));
         infoGroup.add(gnomeVersionRow);
 
-        const osRow = new Adw.ActionRow({
-            title: _('OS Name'),
+        const osRow = Language.widget(Adw.ActionRow, {
+            title: Language.msg('settings.os_name'),
         });
 
         const name = GLib.get_os_info('NAME');
         const prettyName = GLib.get_os_info('PRETTY_NAME');
 
-        osRow.add_suffix(new Gtk.Label({
+        osRow.add_suffix(Language.widget(Gtk.Label, {
             label: prettyName ? prettyName : name,
             css_classes: ['dim-label'],
         }));
         infoGroup.add(osRow);
 
-        const sessionTypeRow = new Adw.ActionRow({
-            title: _('Windowing System'),
+        const sessionTypeRow = Language.widget(Adw.ActionRow, {
+            title: Language.msg('settings.windowing_system'),
         });
-        sessionTypeRow.add_suffix(new Gtk.Label({
+        sessionTypeRow.add_suffix(Language.widget(Gtk.Label, {
             label: GLib.getenv('XDG_SESSION_TYPE') === 'wayland' ? 'Wayland' : 'X11',
             css_classes: ['dim-label'],
         }));
         infoGroup.add(sessionTypeRow);
 
-        const projectRow = this._createLinkRow(_('Orbitz no GitHub'), Me.metadata.url);
+        const projectRow = this._createLinkRow(Language.msg('settings.orbitz_on_github'), Me.metadata.url);
         infoGroup.add(projectRow);
 
         const authorRow = this._createLinkRow('Felipe Santiago · orbitzone', 'https://github.com/orbitzone');
@@ -117,18 +118,18 @@ class AzClockAboutPage extends Adw.PreferencesPage {
 
         // Save/Load Settings----------------------------------------------------------
         const settingsGroup = new Adw.PreferencesGroup();
-        const settingsRow = new Adw.ActionRow({
-            title: _('Configurações do Orbitz'),
+        const settingsRow = Language.widget(Adw.ActionRow, {
+            title: Language.msg('settings.orbitz_settings'),
         });
-        const loadButton = new Gtk.Button({
-            label: _('Load'),
+        const loadButton = Language.widget(Gtk.Button, {
+            label: Language.msg('settings.load'),
             valign: Gtk.Align.CENTER,
         });
         loadButton.connect('clicked', () => {
             this._showFileChooser(
-                _('Load Settings'),
+                Language.msg('settings.load_settings'),
                 {action: Gtk.FileChooserAction.OPEN},
-                '_Open',
+                Language.msg('settings.open'),
                 filename => {
                     if (filename)
                         this._importSettings(filename);
@@ -136,15 +137,15 @@ class AzClockAboutPage extends Adw.PreferencesPage {
                 }
             );
         });
-        const saveButton = new Gtk.Button({
-            label: _('Save'),
+        const saveButton = Language.widget(Gtk.Button, {
+            label: Language.msg('settings.save'),
             valign: Gtk.Align.CENTER,
         });
         saveButton.connect('clicked', () => {
             this._showFileChooser(
-                _('Save Settings'),
+                Language.msg('settings.save_settings'),
                 {action: Gtk.FileChooserAction.SAVE},
-                '_Save',
+                Language.msg('settings.save'),
                 filename => {
                     if (!filename)
                         return;
@@ -166,17 +167,17 @@ class AzClockAboutPage extends Adw.PreferencesPage {
         this.add(settingsGroup);
         // -----------------------------------------------------------------------
 
-        const creditsGroup = new Adw.PreferencesGroup({title: _('Créditos')});
+        const creditsGroup = Language.widget(Adw.PreferencesGroup, {title: Language.msg('settings.credits')});
         creditsGroup.add(this._createLinkRow(
-            _('Base original: azclock · Andrew Zaech'), 'https://gitlab.com/AndrewZaech/azclock'));
+            Language.msg('settings.original_base_azclock_andrew_zaech'), 'https://gitlab.com/AndrewZaech/azclock'));
         this.add(creditsGroup);
 
-        const gnuSofwareLabel = new Gtk.Label({
-            label: _(GNU_SOFTWARE),
+        const gnuSofwareLabel = Language.widget(Gtk.Label, {
+            label: GNU_SOFTWARE,
             use_markup: true,
             justify: Gtk.Justification.CENTER,
         });
-        const gnuSofwareLabelBox = new Gtk.Box({
+        const gnuSofwareLabelBox = Language.widget(Gtk.Box, {
             orientation: Gtk.Orientation.VERTICAL,
             valign: Gtk.Align.END,
             vexpand: true,
@@ -186,9 +187,9 @@ class AzClockAboutPage extends Adw.PreferencesPage {
     }
 
     _showError(message) {
-        const dialog = new Gtk.MessageDialog({transient_for: this.get_root(), modal: true,
+        const dialog = Language.widget(Gtk.MessageDialog, {transient_for: this.get_root(), modal: true,
             message_type: Gtk.MessageType.ERROR, buttons: Gtk.ButtonsType.CLOSE,
-            text: 'Não foi possível concluir a operação.', secondary_text: String(message).slice(0, 2048)});
+            text: Language.msg('settings.operation_error'), secondary_text: message?.orbitzMessage ? message : String(message).slice(0, 2048)});
         dialog.connect('response', () => dialog.destroy());
         dialog.present();
     }
@@ -197,13 +198,13 @@ class AzClockAboutPage extends Adw.PreferencesPage {
         try {
             const settings = ExtensionUtils.getSettings();
             const prepared = SettingsImport.parse(SettingsImport.read(filename), settings);
-            const dialog = new Gtk.MessageDialog({transient_for: this.get_root(), modal: true,
+            const dialog = Language.widget(Gtk.MessageDialog, {transient_for: this.get_root(), modal: true,
                 message_type: Gtk.MessageType.QUESTION, buttons: Gtk.ButtonsType.NONE,
-                text: 'Importar widgets e ativar estes comandos?'});
-            dialog.add_button('Cancelar', Gtk.ResponseType.CANCEL);
-            dialog.add_button('Importar', Gtk.ResponseType.ACCEPT);
-            const scroll = new Gtk.ScrolledWindow({min_content_width: 550, min_content_height: 220});
-            const label = new Gtk.Label({label: prepared.commands.join('\n\n') || 'Nenhum comando.',
+                text: Language.msg('settings.import_commands_confirm')});
+            Language.button(dialog, Language.msg('settings.cancel'), Gtk.ResponseType.CANCEL);
+            Language.button(dialog, Language.msg('settings.import'), Gtk.ResponseType.ACCEPT);
+            const scroll = Language.widget(Gtk.ScrolledWindow, {min_content_width: 550, min_content_height: 220});
+            const label = Language.widget(Gtk.Label, {label: prepared.commands.join('\n\n') || Language.msg('settings.no_commands'),
                 wrap: true, selectable: true, xalign: 0});
             scroll.set_child(label);
             dialog.get_message_area().append(scroll);
@@ -214,25 +215,25 @@ class AzClockAboutPage extends Adw.PreferencesPage {
                         transaction.delay();
                         for (const [key, value] of Object.entries(prepared.values))
                             if (!transaction.set_value(key, value))
-                                throw new Error('Falha de gravação: ' + key);
+                                throw Language.error(Language.msg('settings.validation.write', {key}));
                         transaction.set_value('changed-data', new GLib.Variant('a{ss}', {}));
                         transaction.apply();
                         Gio.Settings.sync();
-                    } catch (error) { this._showError(error.message); }
+                    } catch (error) { this._showError(error.orbitzMessage || error.message); }
                 }
                 dialog.destroy();
             });
             dialog.present();
-        } catch (error) { this._showError(error.message); }
+        } catch (error) { this._showError(error.orbitzMessage || error.message); }
     }
 
     _createLinkRow(title, uri) {
-        const image = new Gtk.Image({
+        const image = Language.widget(Gtk.Image, {
             icon_name: 'adw-external-link-symbolic',
             valign: Gtk.Align.CENTER,
         });
-        const linkRow = new Adw.ActionRow({
-            title: _(title),
+        const linkRow = Language.widget(Adw.ActionRow, {
+            title,
             activatable: true,
         });
         linkRow.connect('activated', () => {
@@ -244,21 +245,21 @@ class AzClockAboutPage extends Adw.PreferencesPage {
     }
 
     _showFileChooser(title, params, acceptBtn, acceptHandler) {
-        const dialog = new Gtk.FileChooserDialog({
-            title: _(title),
+        const dialog = Language.widget(Gtk.FileChooserDialog, {
+            title,
             transient_for: this.get_root(),
             modal: true,
             action: params.action,
         });
-        dialog.add_button('_Cancel', Gtk.ResponseType.CANCEL);
-        dialog.add_button(acceptBtn, Gtk.ResponseType.ACCEPT);
+        Language.button(dialog, Language.msg('settings.cancel'), Gtk.ResponseType.CANCEL);
+        Language.button(dialog, acceptBtn, Gtk.ResponseType.ACCEPT);
 
         dialog.connect('response', (self, response) => {
             if (response === Gtk.ResponseType.ACCEPT) {
                 try {
                     acceptHandler(dialog.get_file().get_path());
                 } catch (e) {
-                    this._showError(e.message);
+                    this._showError(e.orbitzMessage || e.message);
                 }
             }
             dialog.destroy();

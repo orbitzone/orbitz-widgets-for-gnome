@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 const factories = {};
-for (const name of ['common', 'updates', 'temperatures', 'storage', 'resources', 'network', 'docker', 'firewall', 'currency']) {
+for (const name of ['common', 'updates', 'temperatures', 'storage', 'resources', 'network', 'docker', 'firewall', 'currency', 'weather']) {
     const context = vm.createContext({});
     vm.runInContext(fs.readFileSync(path.join(__dirname, '../extension/panels', name + '.js'), 'utf8'), context);
     factories[name] = context;
@@ -22,6 +22,10 @@ assert.equal(typeof host._buildCurrencyDialog, 'function');
 assert.equal(typeof host._refreshCurrencyDialog, 'function');
 assert.equal(typeof host._currencyProduct, 'function');
 assert.equal(typeof host._updateCurrencyCalculation, 'function');
-assert.equal(Object.getOwnPropertyNames(CommandLabel.prototype).length, 33);
+assert.equal(typeof host._buildWeatherDialog, 'function');
+assert.equal(typeof host._weatherSearchLocations, 'function');
+assert.equal(typeof host._weatherCommitPreferences, 'function');
+assert.equal(typeof host._cancelWeatherRequests, 'function');
+assert.equal(Object.getOwnPropertyNames(CommandLabel.prototype).length, 56);
 assert.throws(() => context.install(CommandLabel, {}), /Duplicate command panel method/);
 console.log('OK: panel composition preserves superclass, lifecycle, sibling dispatch and rejects collisions.');

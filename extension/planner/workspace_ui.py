@@ -1,37 +1,44 @@
 """Workspace navigation and today's read-only overview, independent of storage."""
+from ui_language import ui
 from datetime import date
 
-AREAS = [('today', 'Hoje'), ('events', 'Agenda'), ('tasks', 'Tarefas'), ('hours', 'Horas'), ('invoices', 'Invoices')]
+AREAS = [('today', ui.msg('workspace.live.area_today')), ('events', ui.msg('workspace.live.area_events')), ('tasks', ui.msg('workspace.live.area_tasks')), ('hours', ui.msg('workspace.live.area_hours')), ('invoices', ui.msg('workspace.live.area_invoices'))]
 
 
-def context_text(sheet):
+def context_message(sheet):
     context = sheet.get('context', {})
     values = [sheet['name']]
-    for key, title in [('client_name', 'Cliente'), ('project_contract', 'Projeto/contrato'),
-            ('department_costcenter', 'Departamento/centro de custo')]:
+    for key, title in [('client_name', ui.msg('workspace.live.context_client_name')), ('project_contract', ui.msg('workspace.live.context_project_contract')),
+            ('department_costcenter', ui.msg('workspace.live.context_department_costcenter'))]:
         if context.get(key):
             values.append(title + ': ' + context[key])
-    return ' · '.join(values)
+    return ui.join(' · ',values)
 
 
-def today_text(data, events=(), today=None):
+def context_text(sheet):return str(context_message(sheet))
+
+
+def today_message(data, events=(), today=None):
     today = today or date.today().isoformat()
     pending = [task for task in data.get('tasks', []) if not task.get('done')]
     due = [task for task in pending if task['date'] == today]
     overdue = sorted((task for task in pending if task['date'] < today), key=lambda task: task['date'])
-    lines = [f'Hoje · {date.fromisoformat(today):%d/%m/%Y}', '',
-        f'Compromissos na fonte selecionada (cache): {len(events)}']
+    lines = [ui.msg('workspace.live.today_heading', date=ui.date_text(today)), '',
+        ui.msg('workspace.live.today_events', count=len(events))]
     lines.extend('• ' + event.get('title', '') for event in events[:10])
-    lines += ['', f'Tarefas pendentes: {len(pending)} · Hoje: {len(due)}']
+    lines += ['', ui.msg('workspace.live.today_pending', pending=len(pending), due=len(due))]
     lines.extend('• ' + task['text'] for task in due[:10])
-    lines += ['', f'Tarefas atrasadas: {len(overdue)}']
-    lines.extend('• ' + task['date'] + ' · ' + task['text'] for task in overdue[:10])
+    lines += ['', ui.msg('workspace.live.today_overdue', count=len(overdue))]
+    lines.extend('• ' + ui.date_text(task['date']) + ' · ' + task['text'] for task in overdue[:10])
     active = [sheet for sheet in data.get('timesheets', []) if sheet.get('timesheet_active')]
-    lines += ['', f'Cronômetros em andamento: {len(active)}']
+    lines += ['', ui.msg('workspace.live.today_timers', count=len(active))]
     for sheet in active:
         timer = sheet['timesheet_active']
-        lines.append('• ' + sheet['name'] + ' · ' + timer['description'] + ' · desde ' + timer['started'])
-    return '\n'.join(lines)
+        lines.append(ui.msg('workspace.live.today_active', name=sheet['name'], description=timer['description'], started=ui.date_text(timer['started'],'datetime')))
+    return ui.join('\n',lines)
+
+
+def today_text(data,events=(),today=None):return str(today_message(data,events,today))
 
 
 class AgendaMount:
@@ -46,14 +53,14 @@ class AgendaMount:
 
 def add_navigation(container, window):
     from gi.repository import Gtk, Pango
-    title = Gtk.Label(label='Orbitz Workspace', xalign=0)
+    title = ui.widget(Gtk.Label,label=ui.msg('workspace.workspace_ui.orbitz_workspace'), xalign=0)
     title.get_style_context().add_class('title')
-    subtitle = Gtk.Label(label='Agenda, tarefas, horas e faturamento', xalign=0, wrap=True)
+    subtitle = ui.widget(Gtk.Label,label=ui.msg('workspace.workspace_ui.agenda_tarefas_horas_e_faturamento'), xalign=0, wrap=True)
     container.pack_start(title, False, False, 0)
     container.pack_start(subtitle, False, False, 0)
     stack = Gtk.Stack(transition_type=Gtk.StackTransitionType.NONE)
     switcher = Gtk.StackSwitcher(stack=stack, halign=Gtk.Align.START)
-    switcher.get_accessible().set_name('Áreas do Orbitz Workspace')
+    ui.call(switcher.get_accessible(),'set_name',ui.msg('workspace.workspace_ui.areas_do_orbitz_workspace'))
     nav_scroll = Gtk.ScrolledWindow()
     nav_scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.NEVER)
     nav_scroll.add(switcher)
@@ -92,18 +99,18 @@ def quiesce(window, remove_source):
 def open_preferences(window):
     from gi.repository import Gtk
     import ui_state
-    dialog = Gtk.Dialog(title='Preferências do Orbitz Workspace', transient_for=window, modal=True)
-    dialog.add_buttons('Cancelar', Gtk.ResponseType.CANCEL, 'Salvar', Gtk.ResponseType.OK)
+    dialog = ui.widget(Gtk.Dialog,title=ui.msg('workspace.workspace_ui.preferencias_do_orbitz_workspace'), transient_for=window, modal=True)
+    ui.buttons(dialog,ui.msg('workspace.workspace_ui.cancelar'), Gtk.ResponseType.CANCEL, ui.msg('workspace.workspace_ui.salvar'), Gtk.ResponseType.OK)
     box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10, margin=18)
     dialog.get_content_area().add(box)
-    box.add(Gtk.Label(label='Área inicial do Workspace', xalign=0))
+    box.add(ui.widget(Gtk.Label,label=ui.msg('workspace.workspace_ui.area_inicial_do_workspace'), xalign=0))
     choice = Gtk.ComboBoxText()
-    for key, title in AREAS:choice.append(key, title)
+    for key, title in AREAS:ui.combo_append(choice,key,title)
     choice.set_active_id(ui_state.get('workspace-start-area','today'))
     box.add(choice);dialog.show_all()
     try:
         if dialog.run() == Gtk.ResponseType.OK:
             ui_state.set('workspace-start-area',choice.get_active_id() or 'today')
-            window.status.set_text('Preferência de área inicial salva.')
-    except Exception as failure:window.status.set_text(str(failure))
+            ui.call(window.status,'set_text',ui.msg('workspace.workspace_ui.preferencia_de_area_inicial_salva'))
+    except Exception as failure:ui.call(window.status,'set_text',ui.error_message(failure))
     finally:dialog.destroy()

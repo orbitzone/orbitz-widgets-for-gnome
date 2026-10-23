@@ -1,8 +1,9 @@
 const ExtensionUtils = imports.misc.extensionUtils;
 const Me = ExtensionUtils.getCurrentExtension();
+const Language = Me.imports.uiLanguage.Language;
 const {Adw, Gdk, GLib, GObject, Gtk} = imports.gi;
 const Gettext = imports.gettext.domain(Me.metadata['gettext-domain']);
-const _ = Gettext.gettext;
+const _ = Language.tr;
 var GWeather = getGWeatherVersion();
 
 const MAX_LOCATIONS = 12;
@@ -27,29 +28,29 @@ var TimeZoneDialog = GObject.registerClass({
     },
 }, class AzClockTimeZoneDialog extends Adw.Window {
     _init(params) {
-        super._init({
+        super._init(Language.properties(this, {
             ...params,
             default_width: 400,
             default_height: 540,
-        });
+        }));
 
         this._locationsRows = [];
 
-        const mainBox = new Gtk.Box({
+        const mainBox = Language.widget(Gtk.Box, {
             orientation: Gtk.Orientation.VERTICAL,
             valign: Gtk.Align.FILL,
             vexpand: true,
         });
         this.set_content(mainBox);
 
-        const headerBar = new Adw.HeaderBar({
+        const headerBar = Language.widget(Adw.HeaderBar, {
             show_start_title_buttons: true,
             show_end_title_buttons: true,
         });
         mainBox.append(headerBar);
 
         const searchEntry = new Gtk.SearchEntry();
-        const searchBar = new Gtk.SearchBar({
+        const searchBar = Language.widget(Gtk.SearchBar, {
             search_mode_enabled: true,
             child: searchEntry,
         });
@@ -58,19 +59,19 @@ var TimeZoneDialog = GObject.registerClass({
         const stack = new Gtk.Stack();
         mainBox.append(stack);
 
-        const page = new Adw.PreferencesPage({
+        const page = Language.widget(Adw.PreferencesPage, {
             valign: Gtk.Align.FILL,
             vexpand: true,
         });
         stack.add_named(page, 'MainPage');
 
-        const statusPage = new Adw.StatusPage({
-            title: _('Search for a City'),
+        const statusPage = Language.widget(Adw.StatusPage, {
+            title: Language.msg('settings.search_for_a_city'),
             icon_name: 'system-search-symbolic',
         });
         stack.add_named(statusPage, 'StatusPage');
 
-        this._searchResultsGroup = new Adw.PreferencesGroup({
+        this._searchResultsGroup = Language.widget(Adw.PreferencesGroup, {
             valign: Gtk.Align.FILL,
         });
         page.add(this._searchResultsGroup);
@@ -85,7 +86,7 @@ var TimeZoneDialog = GObject.registerClass({
 
             if (searchEntry.text === '') {
                 // EMPTY SEARCH
-                statusPage.title = _('Search for a City');
+                Language.set(statusPage, 'title', Language.msg('settings.search_for_a_city'));
                 stack.set_visible_child_name('StatusPage');
                 return;
             }
@@ -98,7 +99,7 @@ var TimeZoneDialog = GObject.registerClass({
 
             if (this._locationsRows.length === 0) {
                 // NO RESULTS
-                statusPage.title = _('No results.');
+                Language.set(statusPage, 'title', Language.msg('settings.no_results'));
                 stack.set_visible_child_name('StatusPage');
                 return;
             }
@@ -170,7 +171,7 @@ var TimeZoneDialog = GObject.registerClass({
 
         const title = hasCountry ? `${location.get_name()}, ${location.get_country_name()}` : location.get_name();
 
-        const timeZoneRow = new Adw.ActionRow({
+        const timeZoneRow = Language.widget(Adw.ActionRow, {
             title,
             subtitle: `${location.get_timezone_str()} • ${abbreviation} (UTC ${offsetString})`,
             activatable: true,

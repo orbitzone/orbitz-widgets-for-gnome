@@ -1,5 +1,5 @@
 // Forward the user's launch context through collectors to the terminal window.
-var create = ({Gio, global}) => (argv, owner = null) => {
+var create = ({Gio, global, Language}) => (argv, owner = null) => {
     const hasModal = !!owner?._networkModalGrab;
     if (hasModal && (typeof owner._closeNetworkDialog !== 'function' || typeof owner._openNetworkDialog !== 'function'))
         throw new Error('Não foi possível preparar o painel modal para abrir o terminal.');
@@ -12,6 +12,11 @@ var create = ({Gio, global}) => (argv, owner = null) => {
     // The Shell activation token is interoperable between Wayland and X11.
     launcher.setenv('DESKTOP_STARTUP_ID', startupId, true);
     launcher.setenv('XDG_ACTIVATION_TOKEN', startupId, true);
+    if (Language) {
+        launcher.setenv('ORBITZ_LOCALE', Language.getLocale(), true);
+        const directory = Language.directory();
+        if (directory) launcher.setenv('ORBITZ_I18N_DIR', directory, true);
+    }
     // Dismiss the modal before the child can ask Tilix to open; otherwise the
     // Shell may keep the keyboard grab while Tilix is already being activated.
     if (hasModal) owner._closeNetworkDialog();

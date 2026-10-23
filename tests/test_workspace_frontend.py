@@ -13,7 +13,9 @@ PLANNER=Path(__file__).resolve().parents[1]/'extension/planner'
 sys.path.insert(0,str(PLANNER))
 import workspace_ui
 import workspace_backup_ui
-from day_activity import local_details
+import ui_language
+ui = ui_language.ui
+from day_activity import local_details,local_detail_messages
 from timesheet_context_ui import context_payload
 from invoice_ui import InvoiceSession, ReissueConfirmation
 from invoice_history_ui import HistorySession
@@ -32,6 +34,7 @@ class Actor:
         if event in self.events:return self.events[event](self,*args)
     def set_text(self,text):self.text=text
     def set_label(self,text):self.label=text
+    def set_property(self,name,value):setattr(self,name.replace('-','_'),value)
     def get_style_context(self):return SimpleNamespace(add_class=lambda *args:None)
     def get_accessible(self):return self
     def set_name(self,name):self.accessible_name=name
@@ -45,8 +48,9 @@ class Actor:
 
 
 class Stack(Actor):
-    def __init__(self,**props):super().__init__(**props);self.pages={};self.current=None
-    def add_titled(self,page,key,title):self.pages[key]=page;self.current=self.current or key
+    def __init__(self,**props):super().__init__(**props);self.pages={};self.current=None;self.titles={}
+    def add_titled(self,page,key,title):self.pages[key]=page;self.titles[key]=title;self.current=self.current or key
+    def child_set_property(self,page,key,value):self.titles[page.page_id]=value
     def get_visible_child_name(self):return self.current
     def set_visible_child_name(self,key):
         self.current=key;self.emit('notify::visible-child-name')
@@ -112,9 +116,10 @@ class WorkspaceTests(unittest.TestCase):
         namespace=dict(Gtk=gtk,Gio=SimpleNamespace(),GLib=SimpleNamespace(timeout_add_seconds=lambda *args:77,source_remove=Mock()),
             Pango=SimpleNamespace(WrapMode=SimpleNamespace(WORD_CHAR=0),EllipsizeMode=SimpleNamespace(END=0)),date=date,timedelta=timedelta,
             workspace_ui=workspace_ui,MonthCalendar=Calendar,ExternalCalendars=External,Timesheet=Page,
+            ui=ui,
             planner_menu=SimpleNamespace(add_header=header,update_archive_count=Mock()),
             store=SimpleNamespace(modify=lambda request:deepcopy(data)),ui_state=SimpleNamespace(set=Mock()),
-            local_details=local_details,
+            local_details=local_details,local_detail_messages=local_detail_messages,
             invoice_history_ui=SimpleNamespace(create_history_content=Mock(return_value=(history_content,refresh))),
             invoice_ui=SimpleNamespace(open_invoice=Mock()))
         tree=ast.parse((PLANNER/'calendar-app.py').read_text())
@@ -145,6 +150,18 @@ class WorkspaceTests(unittest.TestCase):
             self.assertEqual(window.workspace.current,'today')
             window.day_selected()  # A calendar action from Hoje leads to the selected-day agenda.
             self.assertEqual(window.workspace.current,'events')
+            current_page=window.workspace.current
+            pages=dict(window.workspace.pages)
+            before=deepcopy(window.data)
+            try:
+                ui.refresh('en-US')
+                self.assertEqual(window.workspace.titles['today'],'Today')
+                self.assertEqual(window.workspace.titles['tasks'],'Tasks')
+                self.assertEqual(window.workspace.current,current_page)
+                self.assertEqual(window.workspace.pages,pages)
+                self.assertEqual(window.data,before)
+                self.assertIn('Events in the selected source',window.today_label.text)
+            finally:ui.refresh('pt-BR')
             window.data={'tasks':[],'timesheets':[]}
             window.sync_sheets()
             self.assertEqual(window.tabs.get_n_pages(),0)

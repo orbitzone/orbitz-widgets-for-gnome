@@ -1,16 +1,16 @@
 """Explicit full Workspace backup and quiescent restore; no credential scope."""
+from ui_language import ui
 from datetime import date
 import importlib
 
-SCOPE_TEXT = ('Inclui tarefas/notas legadas, timesheets, contextos, cópias anteriores da agenda, perfis de invoice, PDFs e versões, '
-    'pagamentos manuais e estado de interface. Não inclui credenciais, calendários externos, Sticky Notes ou GSettings.')
+SCOPE_TEXT = (ui.msg('workspace.dialogs.workspace_backup_ui.scope'))
 
 
 def apply_restore(service, filename, preview, quiesce, confirmed=False):
     if not confirmed:
         return None
     if preview['current_active_timer']:
-        raise ValueError('Encerre os cronômetros antes de restaurar o Workspace.')
+        raise ui.exception(ValueError, 'workspace.workspace_backup_ui.encerre_os_cronometros_antes_de_restaurar_o_workspace')
     quiesce()
     return service.restore_backup(filename, confirmed=True, expected=preview['token'], quiescent=True)
 
@@ -19,17 +19,17 @@ def export_backup(window):
     from gi.repository import Gtk
     try:backend = importlib.import_module('workspace_backup')
     except ImportError:
-        window.status.set_text('O serviço de backup completo não está disponível nesta instalação.');return
-    confirm=Gtk.MessageDialog(transient_for=window,modal=True,message_type=Gtk.MessageType.INFO,
-        buttons=Gtk.ButtonsType.OK_CANCEL,text='Exportar backup completo do Workspace?')
+        ui.call(window.status,'set_text',ui.msg('workspace.workspace_backup_ui.o_servico_de_backup_completo_nao_esta_disponivel_nesta_instalacao'));return
+    confirm=ui.widget(Gtk.MessageDialog,transient_for=window,modal=True,message_type=Gtk.MessageType.INFO,
+        buttons=Gtk.ButtonsType.OK_CANCEL,text=ui.msg('workspace.workspace_backup_ui.exportar_backup_completo_do_workspace'))
     confirm.set_default_response(Gtk.ResponseType.CANCEL)
-    confirm.format_secondary_text(SCOPE_TEXT+'\nO arquivo contém dados privados. Encerre os cronômetros antes de exportar e guarde a cópia em local seguro.')
+    ui.call(confirm,'format_secondary_text',SCOPE_TEXT+ui.msg('workspace.dialogs.workspace_backup_ui.private'))
     accepted=confirm.run()==Gtk.ResponseType.OK;confirm.destroy()
     if not accepted:return
     if not window.flush_workspace_drafts():return
-    chooser = Gtk.FileChooserDialog(title='Exportar backup completo do Workspace', transient_for=window,
+    chooser = ui.widget(Gtk.FileChooserDialog,title=ui.msg('workspace.dialogs.workspace_backup_ui.export'), transient_for=window,
         modal=True, action=Gtk.FileChooserAction.SAVE)
-    chooser.add_buttons('Cancelar',Gtk.ResponseType.CANCEL,'Exportar backup',Gtk.ResponseType.ACCEPT)
+    ui.buttons(chooser,ui.msg('workspace.workspace_backup_ui.cancelar'),Gtk.ResponseType.CANCEL,ui.msg('workspace.workspace_backup_ui.exportar_backup'),Gtk.ResponseType.ACCEPT)
     chooser.set_current_name('orbitz-workspace-'+date.today().isoformat()+'.zip')
     chooser.set_do_overwrite_confirmation(True)
     confirmed=[None]
@@ -40,10 +40,10 @@ def export_backup(window):
     try:
         if chooser.run()!=Gtk.ResponseType.ACCEPT:return
         filename=chooser.get_filename()
-        if not filename or not filename.lower().endswith('.zip'):raise ValueError('Escolha um arquivo local .zip.')
+        if not filename or not filename.lower().endswith('.zip'):raise ui.exception(ValueError, 'workspace.workspace_backup_ui.escolha_um_arquivo_local_zip')
         backend.export_backup(filename,overwrite=filename==confirmed[0])
-        window.status.set_text('Backup completo do Workspace exportado. Guarde-o em local privado.')
-    except Exception as failure:window.status.set_text(str(failure))
+        ui.call(window.status,'set_text',ui.msg('workspace.workspace_backup_ui.backup_completo_do_workspace_exportado_guarde_o_em_local_privado'))
+    except Exception as failure:ui.call(window.status,'set_text',ui.error_message(failure))
     finally:chooser.destroy()
 
 
@@ -51,10 +51,10 @@ def restore_backup(window):
     from gi.repository import Gtk
     try:backend = importlib.import_module('workspace_backup')
     except ImportError:
-        window.status.set_text('O serviço de backup completo não está disponível nesta instalação.');return
-    chooser = Gtk.FileChooserDialog(title='Escolher backup completo do Workspace', transient_for=window,
+        ui.call(window.status,'set_text',ui.msg('workspace.workspace_backup_ui.o_servico_de_backup_completo_nao_esta_disponivel_nesta_instalacao'));return
+    chooser = ui.widget(Gtk.FileChooserDialog,title=ui.msg('workspace.workspace_backup_ui.escolher_backup_completo_do_workspace'), transient_for=window,
         modal=True, action=Gtk.FileChooserAction.OPEN)
-    chooser.add_buttons('Cancelar',Gtk.ResponseType.CANCEL,'Revisar backup',Gtk.ResponseType.ACCEPT)
+    ui.buttons(chooser,ui.msg('workspace.workspace_backup_ui.cancelar'),Gtk.ResponseType.CANCEL,ui.msg('workspace.workspace_backup_ui.revisar_backup'),Gtk.ResponseType.ACCEPT)
     try:
         if chooser.run()!=Gtk.ResponseType.ACCEPT:return
         filename=chooser.get_filename()
@@ -62,18 +62,16 @@ def restore_backup(window):
     quiesced=False
     app=None
     try:
-        if not filename:raise ValueError('Escolha um arquivo de backup local.')
+        if not filename:raise ui.exception(ValueError, 'workspace.workspace_backup_ui.escolha_um_arquivo_de_backup_local')
         if not window.flush_workspace_drafts():return
         preview=backend.inspect_backup(filename)
         if preview['current_active_timer']:
-            raise ValueError('Encerre os cronômetros antes de restaurar o Workspace.')
-        confirm=Gtk.MessageDialog(transient_for=window,modal=True,message_type=Gtk.MessageType.WARNING,
-            buttons=Gtk.ButtonsType.OK_CANCEL,text='Restaurar o backup completo e fechar o Workspace?')
+            raise ui.exception(ValueError, 'workspace.workspace_backup_ui.encerre_os_cronometros_antes_de_restaurar_o_workspace')
+        confirm=ui.widget(Gtk.MessageDialog,transient_for=window,modal=True,message_type=Gtk.MessageType.WARNING,
+            buttons=Gtk.ButtonsType.OK_CANCEL,text=ui.msg('workspace.workspace_backup_ui.restaurar_o_backup_completo_e_fechar_o_workspace'))
         confirm.set_default_response(Gtk.ResponseType.CANCEL)
-        confirm.format_secondary_text(SCOPE_TEXT + f"\n\n{preview['files']} arquivos · {preview['bytes']} bytes.\n" +
-            'Os dados locais incluídos serão substituídos. Um backup privado do estado atual será criado antes da restauração, '
-            'com recuperação em caso de falha. O Workspace será fechado; reabra-o depois para carregar o estado restaurado. '
-            'Feche outros editores do Workspace antes de continuar. Alterações concorrentes ou cronômetros ativos impedem a operação.')
+        ui.call(confirm,'format_secondary_text',SCOPE_TEXT + ui.msg('workspace.dialogs.workspace_backup_ui.size', files=preview['files'], bytes=preview['bytes']) +
+            ui.msg('workspace.dialogs.workspace_backup_ui.restore_notice'))
         accepted=confirm.run()==Gtk.ResponseType.OK;confirm.destroy()
         if not accepted:return
         app=window.get_application()
@@ -81,13 +79,13 @@ def restore_backup(window):
         message=''
         try:
             result=apply_restore(backend,filename,preview,window.quiesce_for_restore,confirmed=True)
-            message='Workspace restaurado. Backup anterior privado: '+str(result['previous_backup'])+'\nReabra o Orbitz Workspace.'
+            message=ui.msg('workspace.dialogs.workspace_backup_ui.restored', path=str(result['previous_backup']))
         except Exception as failure:
-            message='A restauração não foi concluída. '+str(failure)+'\nO Workspace será fechado; reabra para conferir o estado preservado.'
-        info=Gtk.MessageDialog(transient_for=window,modal=True,message_type=Gtk.MessageType.INFO,
+            message=ui.msg('workspace.dialogs.workspace_backup_ui.restore_failed', error=ui.error_message(failure))
+        info=ui.widget(Gtk.MessageDialog,transient_for=window,modal=True,message_type=Gtk.MessageType.INFO,
             buttons=Gtk.ButtonsType.CLOSE,text=message)
         info.run();info.destroy()
-    except Exception as failure:window.status.set_text(str(failure))
+    except Exception as failure:ui.call(window.status,'set_text',ui.error_message(failure))
     finally:
         if quiesced:
             window.destroy()

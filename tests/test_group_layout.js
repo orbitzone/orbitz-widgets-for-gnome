@@ -10,6 +10,7 @@ class Actor {
  set_position(){} setStyle(){} setElementsStyle(){} setPositionFromSettings(){} makeDraggable(){this._draggable={};} queue_relayout(){} _getStableWidth(){return 520;}
 }
 const background=new Actor();const context={PANEL_TITLE_STYLE:'shared title style',Me:{imports:{grouping:scope}},St:{BoxLayout:Actor,Label:Actor},Clutter:{Orientation:{VERTICAL:1}},Main:{layoutManager:{_backgroundGroup:background}},getData:()=>true,WIDGETDATA:[[{Widget_Id:'root',Box_IsGroup:'true',Group_Columns:'2',Box_Width:'520',Box_Padding:'16'}],[{Parent_Id:'root'}],[{Parent_Id:'root'}],[{Parent_Id:'root'}]]};
+context.Language=require('./helpers/ui_language').create(context,'pt-BR');
 vm.createContext(context);
 vm.runInContext('class Manager {'+source.slice(source.indexOf('    _detachWidgetGroups()'),source.indexOf('    _destroyWidgets()'))+'};this.Manager=Manager',context);
 const manager=new context.Manager();manager.widgets=Array.from({length:4},()=>new Actor());manager.widgets.forEach((widget,index)=>{widget.widgetIndex=index;background.add_child(widget);});

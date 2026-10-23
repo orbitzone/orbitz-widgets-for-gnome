@@ -2,7 +2,7 @@ const assert=require('assert'),fs=require('fs'),vm=require('vm');
 class Actor {constructor(props={}){Object.assign(this,props);this.children=[];this.clutter_text={set_ellipsize(){}};} add_child(actor){this.children.push(actor);} set_child(actor){this.children=[actor];} destroy_all_children(){this.children=[];} connect(){}}
 const context={St:{BoxLayout:Actor,Button:Actor,Label:Actor,PolicyType:{NEVER:0,AUTOMATIC:1}},Pango:{EllipsizeMode:{END:0}}};vm.createContext(context);
 context.render = require('./helpers/command_panels').load(context)._renderStorage;
-const tips=[];const host={_updatesHeading:{},_updatesNote:{},_networkRefreshButton:{},_updatesScroll:{set_policy(){}},_updatesActions:new Actor(),_updatesRows:new Actor(),_attachActionTooltip(actor,text){tips.push({actor,text});}};
+const tips=[];const host={_updatesHeading:{},_updatesNote:{},_networkRefreshButton:{},_updatesScroll:{set_policy(){}},_updatesActions:new Actor(),_updatesRows:new Actor(),_attachActionTooltip(actor,text){tips.push({actor,text:context.Language.text(text)});}};
 const data={text:'Armazenamento',error:'',omitted:0,unmounted:[],disks:[],items:[{files:[],content_error:'',more:false,mount:'/',device:'/dev/a1',disk:'/dev/a',total:1000000000,available:50000000,percent:95,inodes:10}]};
 context.render.call(host,data);
 const card=host._updatesRows.children[0].children[0];
