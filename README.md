@@ -24,7 +24,7 @@ O **Currency Converter** reúne conversões fiduciárias e cripto no mesmo widge
 
 O plano gratuito da CoinPaprika é para uso pessoal e exige atribuição. Exibir ou redistribuir os dados para clientes comerciais requer licença compatível; consulte os [planos](https://coinpaprika.com/api/pricing) e os [termos da API](https://coinpaprika.com/terms-api) antes desse uso.
 
-Controles de mídia e lançadores deixam suas ferramentas à mão. Gemini e btop permanecem disponíveis como atalhos; Sticky Notes e YouTube são mini apps independentes, com configurações, traduções e instalações próprias. As informações de hardware variam conforme o computador, os sensores e as permissões disponíveis.
+Controles de mídia e lançadores deixam suas ferramentas à mão. Gemini e btop permanecem disponíveis como atalhos; Sticky Notes e YouTube são mini apps independentes, acessados pelo menu de aplicativos e com configurações, traduções e instalações próprias. As informações de hardware variam conforme o computador, os sensores e as permissões disponíveis.
 
 O mini app [Sticky Notes - By Orbitz](https://github.com/orbitzone/orbitz-sticky-notes) é instalado e atualizado separadamente, sem exigir a extensão GNOME. Ele oferece notas com PIN, notas secretas, backups locais e idioma PT/EN nas configurações. Seus dados e preferências ficam separados dos widgets.
 

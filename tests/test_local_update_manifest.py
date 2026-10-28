@@ -5,8 +5,11 @@ import hashlib
 import importlib.util
 import json
 from pathlib import Path
+import sys
 import tempfile
 import unittest
+from contextlib import redirect_stdout
+from io import StringIO
 from unittest.mock import patch
 
 SPEC=importlib.util.spec_from_file_location('update_manifest',Path(__file__).resolve().parents[1]/'tools/update-local.py')
@@ -73,6 +76,62 @@ class RollbackManifestTests(unittest.TestCase):
             manifest=copy.deepcopy(self.manifest);manifest['files'][0][key]=value;bad.append(manifest)
         bad.append({**self.manifest,'files':self.manifest['files']*2})
         for manifest in bad:
+            with self.subTest(manifest=manifest):self.reject(manifest)
+
+    def test_allowlisted_legacy_youtube_removal_can_be_rolled_back(self):
+        target=self.ext/'youtube-widget'/'youtube-widget.py'
+        target.parent.mkdir(parents=True,exist_ok=True)
+        self.manifest['files']=[dict(target=str(target),source=None,backup='files/0',
+            old_hash=hashlib.sha256(b'old').hexdigest(),new_hash=None)]
+        self.write(self.manifest)
+        update.validate_rollback_manifest(self.manifest,self.backup)
+        state=['new-settings']
+        def settings(action,key,value=None):
+            if action=='get':return state[0]
+            state[0]=value
+        with patch.object(update,'settings',side_effect=settings):
+            update.restore(self.backup)
+        self.assertEqual(target.read_bytes(),b'old')
+        self.assertEqual(state[0],'old-settings')
+
+    def test_apply_records_and_removes_allowlisted_legacy_youtube_file(self):
+        target=self.ext/'youtube-widget'/'youtube-widget.py'
+        target.parent.mkdir(parents=True,exist_ok=True);target.write_bytes(b'legacy')
+        pyc=self.ext/'youtube-widget'/'__pycache__'/'youtube-widget.cpython-310.pyc'
+        pyc.parent.mkdir(parents=True,exist_ok=True);pyc.write_bytes(b'compiled legacy')
+        state=['old-settings']
+        def settings(action,key,value=None):
+            if action=='get':return state[0]
+            state[0]=value
+        with patch.object(update,'files',return_value=[(None,target),(None,pyc)]), \
+             patch.object(update,'settings',side_effect=settings), \
+             patch.object(update,'migrate',return_value=('new-settings',0)), \
+             patch.object(update,'preflight'), \
+             patch.object(update,'BACKUPS',self.root/'backups'), \
+             patch('sys.argv',['update-local.py','--apply']), redirect_stdout(StringIO()):
+            update.main()
+            self.assertFalse(target.exists());self.assertFalse(pyc.exists())
+        manifests=list((self.root/'backups').glob('*/manifest.json'))
+        self.assertEqual(len(manifests),1)
+        items=json.loads(manifests[0].read_text())['files']
+        self.assertEqual(len(items),2)
+        for item,expected in zip(items,(b'legacy',b'compiled legacy')):
+            self.assertIsNone(item['source']);self.assertIsNone(item['new_hash'])
+            self.assertEqual((manifests[0].parent/item['backup']).read_bytes(),expected)
+        self.assertEqual(state[0],'new-settings')
+        with patch.object(update,'settings',side_effect=settings):
+            update.restore(manifests[0].parent,preflight_check=False)
+        self.assertEqual(target.read_bytes(),b'legacy')
+        self.assertEqual(pyc.read_bytes(),b'compiled legacy')
+        self.assertEqual(state[0],'old-settings')
+
+    def test_legacy_youtube_removal_rejects_unlisted_files_or_missing_backup(self):
+        target=self.ext/'youtube-widget'/'youtube-widget.py'
+        cases=[]
+        unlisted=copy.deepcopy(self.manifest);unlisted['files']=[dict(target=str(self.ext/'other.py'),source=None,backup='files/0',old_hash=hashlib.sha256(b'old').hexdigest(),new_hash=None)];cases.append(unlisted)
+        no_backup=copy.deepcopy(self.manifest);no_backup['files']=[dict(target=str(target),source=None,backup=None,old_hash=None,new_hash=None)];cases.append(no_backup)
+        wrong_hash=copy.deepcopy(self.manifest);wrong_hash['files']=[dict(target=str(target),source=None,backup='files/0',old_hash=hashlib.sha256(b'old').hexdigest(),new_hash=hashlib.sha256(b'new').hexdigest())];cases.append(wrong_hash)
+        for manifest in cases:
             with self.subTest(manifest=manifest):self.reject(manifest)
 
     def test_cli_rejects_invalid_manifest_before_preflight(self):

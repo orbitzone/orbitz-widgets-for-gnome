@@ -23,6 +23,9 @@ vm.runInContext(`this.Launchers=class extends Actor {build(action){const clockDa
  assert(!source.includes("['youtube', 'gemini', 'btop', 'notes']"),'independent apps are not widget launchers');
  assert(!source.includes("'/usr/bin/flatpak', 'run', '--user', 'io.orbitz.Postits'"));
  assert(!source.includes("'/usr/bin/flatpak', 'run', '--user', 'io.orbitz.YouTubeDesktop'"));
+ assert(!fs.existsSync('extension/youtube-widget'),'legacy YouTube app source is removed from the widget repository');
+ assert(source.includes('io\\.orbitz\\.YouTubeDesktop'),'MPRIS recognizes the independent YouTube app');
+ assert(!source.includes('io\\.orbitz\\.YouTubeWidget'),'MPRIS no longer recognizes the legacy app identity');
  const gemini=new context.Launchers();gemini.build('gemini');await gemini.children[0].launch();
  assert.deepEqual(commands.at(-1).argv,['/usr/bin/google-chrome','--app=https://gemini.google.com/','--window-size=1100,900']);
  const btop=new context.Launchers();btop.build('btop');await btop.children[0].launch();

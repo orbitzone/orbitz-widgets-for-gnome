@@ -30,6 +30,26 @@ SCHEMA = 'org.gnome.shell.extensions.azclock'
 OLD_DIRS = [HOME / 'Documents/Codex' / p for p in (
     '2026-10-08/quan/outputs', '2026-10-09/pngrub-ae-in-f14-1e100-net/outputs',
     '2026-10-11/https-rdap-org-ip-2a06-3a98c1/outputs')]
+LEGACY_YOUTUBE_FILES = ('youtube-widget.py', 'youtube_api.py', 'youtube_server.py',
+                        'ui_language.py', 'index.html', 'youtube.svg')
+LEGACY_YOUTUBE_PYC = re.compile(
+    r'(youtube-widget|youtube_api|youtube_server|ui_language)\.cpython-\d+(?:\.opt-\d+)?\.pyc')
+
+def is_legacy_youtube_target(target):
+    root = EXT / 'youtube-widget'
+    target = Path(target)
+    return (target in tuple(root / name for name in LEGACY_YOUTUBE_FILES) or
+            (target.parent == root / '__pycache__' and LEGACY_YOUTUBE_PYC.fullmatch(target.name) is not None))
+
+def legacy_youtube_targets():
+    root = EXT / 'youtube-widget'
+    targets = [root / name for name in LEGACY_YOUTUBE_FILES]
+    cache = root / '__pycache__'
+    if cache.is_dir() and not cache.is_symlink():
+        for target in sorted(cache.iterdir()):
+            if target.is_file() and LEGACY_YOUTUBE_PYC.fullmatch(target.name):
+                targets.append(target)
+    return tuple(targets)
 
 
 def select_identity():
@@ -184,6 +204,10 @@ def files():
                 raise RuntimeError('Link simbólico inesperado: ' + str(target))
             if not target.exists() or digest(source) != digest(target):
                 result.append((source, target))
+    for target in legacy_youtube_targets():
+        validate_path(target)
+        if target.exists():
+            result.append((None, target))
     catalog_root = REPO / 'i18n'
     if catalog_root.exists():
         catalogs = []
@@ -402,17 +426,25 @@ def validate_rollback_manifest(manifest, folder):
     for item in manifest['files']:
         if not isinstance(item, dict) or not {'target','source','backup','old_hash','new_hash'} <= item.keys():
             raise RuntimeError('Entrada inválida no manifesto de rollback.')
-        target, source = rollback_path(item['target']), rollback_path(item['source'])
-        expected, schema = rollback_source(target)
-        staged_schema = (schema and source.parent.parent == Path(tempfile.gettempdir()) and
-                         re.fullmatch(r'orbitz-schema-[A-Za-z0-9_-]+', source.parent.name) and source.name == target.name)
-        if source != expected and not staged_schema:
-            raise RuntimeError('Fonte fora da lista permitida para rollback: ' + str(source))
+        target = rollback_path(item['target'])
+        if item['source'] is None:
+            source = None
+            if not is_legacy_youtube_target(target) or item['new_hash'] is not None or item['old_hash'] is None:
+                raise RuntimeError('Remoção fora da lista de arquivos YouTube legados ou sem backup.')
+        else:
+            source = rollback_path(item['source'])
+            expected, schema = rollback_source(target)
+            staged_schema = (schema and source.parent.parent == Path(tempfile.gettempdir()) and
+                             re.fullmatch(r'orbitz-schema-[A-Za-z0-9_-]+', source.parent.name) and source.name == target.name)
+            if source != expected and not staged_schema:
+                raise RuntimeError('Fonte fora da lista permitida para rollback: ' + str(source))
         if target in seen:
             raise RuntimeError('Destino duplicado no manifesto de rollback.')
         seen.add(target)
         for key in ('old_hash', 'new_hash'):
             value = item[key]
+            if key == 'new_hash' and source is None and value is None:
+                continue
             if not (key == 'old_hash' and value is None) and (not isinstance(value, str) or not re.fullmatch('[0-9a-f]{64}', value)):
                 raise RuntimeError('Hash inválido no manifesto de rollback.')
         if (item['backup'] is None) != (item['old_hash'] is None):
@@ -423,7 +455,8 @@ def validate_rollback_manifest(manifest, folder):
                 raise RuntimeError('Backup fora da pasta de rollback.')
     for item in manifest['files']:
         validate_path(Path(item['target']))
-        validate_path(Path(item['source']))
+        if item['source'] is not None:
+            validate_path(Path(item['source']))
         if item['backup'] and digest(folder / item['backup']) != item['old_hash']:
             raise RuntimeError('Backup inválido; rollback não iniciado.')
 
@@ -503,9 +536,9 @@ def main():
             atomic_copy(target, folder / backup)
             if digest(folder / backup) != old_hash:
                 raise RuntimeError('Destino mudou durante o backup; instalação não iniciada.')
-        manifest['files'].append({'target': str(target), 'source': str(source),
+        manifest['files'].append({'target': str(target), 'source': str(source) if source is not None else None,
             'backup': backup, 'old_hash': old_hash,
-            'new_hash': digest(source)})
+            'new_hash': digest(source) if source is not None else None})
     path = folder / 'manifest.json'
     atomic_write(json.dumps(manifest, ensure_ascii=False, indent=2).encode(), path)
     print('Backup privado:', folder)
@@ -513,24 +546,30 @@ def main():
     try:
         # Abort before mutation if a source changed while the backup was made.
         for item in manifest['files']:
-            if digest(Path(item['source'])) != item['new_hash']:
+            if item['source'] is not None and digest(Path(item['source'])) != item['new_hash']:
                 raise RuntimeError('Fonte mudou durante preparação.')
         if settings('get', 'widget-data') != old:
             raise RuntimeError('Configuração mudou durante a preparação.')
         for item in manifest['files']:
-            source, target = Path(item['source']), Path(item['target'])
+            source = Path(item['source']) if item['source'] is not None else None
+            target = Path(item['target'])
             current_hash = digest(target) if target.exists() else None
             if current_hash != item['old_hash']:
                 raise RuntimeError('Destino mudou durante preparação: ' + str(target))
             attempted.append(item)
-            atomic_copy(source, target)
+            if source is None:
+                secure_unlink(target)
+            else:
+                atomic_copy(source, target)
         if settings('get', 'widget-data') != old:
             raise RuntimeError('Configuração mudou durante a preparação.')
         settings('set', 'widget-data', new)
         if settings('get', 'widget-data') != new:
             raise RuntimeError('Falha verificando configuração gravada.')
         for item in manifest['files']:
-            if digest(Path(item['target'])) != item['new_hash']:
+            target = Path(item['target'])
+            actual = digest(target) if target.exists() else None
+            if actual != item['new_hash']:
                 raise RuntimeError('Hash instalado divergente: ' + item['target'])
         if any(Path(item['target']) == EXT / 'schemas/gschemas.compiled' for item in manifest['files']):
             validate_language_schema(EXT / 'schemas')

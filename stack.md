@@ -49,7 +49,6 @@ O conjunto combina uma extensão do GNOME Shell, aplicativos nativos GTK e colet
 | Python **3.10.12** | Runtime encontrado para os aplicativos e coletores. |
 | PyGObject (`gi`, pacote `python3-gi`) | Acesso do Python às bibliotecas GTK, Gio e demais APIs nativas. |
 | GObject Introspection / typelibs | Descrições das APIs nativas usadas por Python e GJS. |
-| WebKitGTK / WebKit2 **4.0** | Usado somente pela fonte legada do YouTube preservada em `extension/youtube-widget/`; não é requisito dos widgets ativos. |
 | libsecret / Secret Service | Armazena e recupera a senha específica de aplicativo do iCloud. |
 | GNOME Keyring ou cofre compatível | Implementação do serviço de senhas da sessão. |
 | D-Bus de sessão e do sistema | Comunicação com aplicativos, mídia e serviços do desktop. |
@@ -89,7 +88,7 @@ Estes módulos já acompanham o Python; não exigem instalação por pip.
 | `fcntl`, `contextlib` | Bloqueio de arquivos e limpeza controlada de recursos. |
 | `subprocess`, `signal`, `selectors`, `shlex`, `runpy` | Execução, supervisão e encerramento de processos. |
 | `threading`, `concurrent.futures` | Operações em segundo plano e consultas paralelas limitadas. |
-| `urllib.request`, `urllib.parse`, `urllib.error`, `http.server` | Clientes HTTP/HTTPS dos recursos do Orbitz e servidor local da fonte legada do YouTube. |
+| `urllib.request`, `urllib.parse`, `urllib.error` | Clientes HTTP/HTTPS dos coletores e integrações do Orbitz. |
 | `socket`, `ipaddress` | Resolução de nomes, endereços e validação de destinos. |
 | `hashlib`, `uuid`, `secrets`, `base64` | Identificadores, hashes, tokens locais e autenticação HTTP. |
 | `gzip`, `io`, `html`, `re` | Conteúdo comprimido, buffers, textos e validações. |
@@ -180,7 +179,6 @@ Os caminhos abaixo são relativos à pasta pessoal do usuário (`~`). As descri�
 │   │   ├── apple-calendar-requirements.txt
 │   │   └── vendor/                    # Bibliotecas Python empacotadas
 │   ├── notes-widget/                  # Ícone legado; não há mais atalho ativo
-│   ├── youtube-widget/                # Fonte legada preservada; mini app fica em repositório próprio
 │   ├── gemini-widget/                 # Ícone do lançador Gemini
 │   └── speedtest                      # Executável do teste de velocidade
 ├── orbitz-postits/
@@ -204,7 +202,7 @@ Os caminhos abaixo são relativos à pasta pessoal do usuário (`~`). As descri�
     ├── youtube.json                   # Chave histórica; o mini app usa configuração isolada
     └── update-actions.json            # Ações adicionais, quando configuradas
 
-~/.cache/orbitz-widgets/                # Caches dos coletores e da fonte legada do YouTube
+~/.cache/orbitz-widgets/                # Cache dos coletores de widgets
 ~/.local/share/applications/            # Atalhos .desktop dos aplicativos
 ```
 
@@ -259,7 +257,7 @@ O backend do checkout passou a separar `extension/planner/calendar_events.py` (i
 
 Este registro descreve fontes refatoradas, não a instalação ativa. Os quatro módulos novos devem acompanhar os chamadores ao preparar distribuição futura. Evidências específicas: `docs/audits/2026-10-18-backend-refactor.md`; auditoria integrada concluída, com limites no relatório.
 
-O frontend do checkout separa composição (`extension/commandPanels.js`) e oito módulos de painéis em `extension/panels/`: common, updates, temperatures, storage, resources, network, docker e firewall. A composição ocorre antes de `GObject.registerClass`. `settings/TimeZoneDialog.js`, `planner/task_timesheet_ui.py`, `sticky-notes/card.py` e `youtube-widget/{youtube_api,youtube_server}.py` isolam responsabilidades antes nos pontos de entrada. Esses 14 módulos frontend também são necessários na distribuição futura, sem novas dependências externas declaradas. Relatório: `docs/audits/2026-10-18-frontend-refactor.md`. Validações específicas não comprovam execução gráfica; captura Broadway foi bloqueada por permissões do ambiente.
+O frontend do checkout separa composição (`extension/commandPanels.js`) e oito módulos de painéis em `extension/panels/`: common, updates, temperatures, storage, resources, network, docker e firewall. A composição ocorre antes de `GObject.registerClass`. `settings/TimeZoneDialog.js`, `planner/task_timesheet_ui.py`, `sticky-notes/card.py` isola responsabilidades antes concentradas nos pontos de entrada. Esses 12 módulos também são necessários na distribuição futura, sem novas dependências externas declaradas. Relatório: `docs/audits/2026-10-18-frontend-refactor.md`. Validações específicas não comprovam execução gráfica; captura Broadway foi bloqueada por permissões do ambiente.
 
 Auditoria integrada RF-01 concluída: `docs/audits/2026-10-18-integrated-audit.md`; verificações locais/importações aprovadas, sem regressão impeditiva reproduzida no escopo revisado. A validação gráfica/interativa permanece pendente e nenhum ganho de desempenho foi medido.
 

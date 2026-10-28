@@ -188,7 +188,7 @@ Pedido confirmado: mini app independente chamado **Orbitz YouTube Desktop**, ini
 
 ## D-49 — Atalhos para os mini apps independentes (28/10/2026)
 
-Após instalar Sticky Notes e YouTube Desktop como Flatpaks do usuário, os atalhos Notes/YouTube da extensão chamam `flatpak run --user` com os app IDs independentes. A extensão não inicia nem encerra Sticky Notes junto com o ciclo dos widgets; isso evita que o `quit` legado com o app ID compartilhado feche o mini app. O launcher antigo foi arquivado reversivelmente, dados antigos foram preservados, e o usuário escolheu não importar notas. A chave YouTube anterior também não é migrada. A atualização da extensão instalada é local; a fonte foi alterada e testada no checkout, mas não publicada.
+O primeiro passo de RC-59 fez os atalhos Notes/YouTube da extensão chamarem os Flatpaks independentes, preservando dados antigos e sem migrar credenciais/notas. Em RC-57, a decisão final passou a remover esses atalhos do widget; a extensão não deve iniciar nem encerrar os mini apps. RC-62 remove também a implementação YouTube integrada e seus testes/catálogos. A chave antiga permanece no perfil local sem migração.
 
 ## D-50 — Token e allowlist nos bridges nativos do YouTube (28/10/2026)
 
@@ -201,3 +201,8 @@ Por pedido do usuário, `orbitzone/orbitz-youtube-desktop` passa a se chamar `or
 ## D-49 — Identidade, idioma e filtros dos mini apps (28/10/2026)
 
 Os nomes públicos e de janela passam a ser **Sticky Notes - By Orbitz** e **YouTube Wrapper - By Orbitz**. Cada repositório mantém seu próprio catálogo PT/EN e sua preferência persistida via GSettings, sem depender da extensão. A extensão deixa de renderizar atalhos para Sticky Notes e YouTube; elementos salvos antigos permanecem como rótulos de texto e Gemini/btop continuam como atalhos. O filtro Podcasts envia uma busca de relevância com o prefixo `podcast`, pois a YouTube Data API não oferece um filtro categórico de podcasts; a interface explicita que pode retornar outros vídeos. Fontes atualizadas nesta tarefa; instalar/reiniciar e publicar são etapas separadas.
+
+
+## D-52 — Remoção reversível do YouTube integrado (28/10/2026)
+
+YouTube é mantido somente como mini app independente em `orbitz-youtube-wrapper`. O checkout de widgets não conserva a WebView/servidor antigo nem apresenta um launcher para o mini app; a descoberta MPRIS reconhece o novo app ID. O atualizador local usa caminhos exatos para os seis arquivos e regex restrita aos bytecodes Python correspondentes, criando backup privado e entrada de rollback por arquivo. Nenhuma configuração/chave/cache de dados do usuário é migrada ou apagada.

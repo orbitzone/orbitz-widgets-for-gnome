@@ -1806,7 +1806,7 @@ Me.imports.commandPanels.install(class AzClockCommandLabel extends Label {
             this._mediaRow = row;
         }
         const spotify = /^org\.mpris\.MediaPlayer2\.spotify(?:\.|$)/.test(player);
-        const youtube = /^org\.mpris\.MediaPlayer2\.io\.orbitz\.YouTubeWidget(?:\.|$)/.test(player);
+        const youtube = /^org\.mpris\.MediaPlayer2\.io\.orbitz\.YouTubeDesktop(?:\.|$)/.test(player);
         const filename = spotify ? 'spotify.svg' : youtube ? 'youtube.svg' : 'chrome.svg';
         if (this._mediaIconFile !== filename) {
             this._mediaIcon.gicon = Gio.icon_new_for_string(GLib.build_filenamev([Me.path, 'media', 'players', filename]));
@@ -1875,7 +1875,7 @@ Me.imports.commandPanels.install(class AzClockCommandLabel extends Label {
             try {
                 const names = (await call('org.freedesktop.DBus', '/org/freedesktop/DBus',
                     'org.freedesktop.DBus', 'ListNames', null)).deep_unpack()[0];
-                const players = names.filter(name => /^org\.mpris\.MediaPlayer2\.(spotify|chromium|chrome|io\.orbitz\.YouTubeWidget)(\.|$)/.test(name))
+                const players = names.filter(name => /^org\.mpris\.MediaPlayer2\.(spotify|chromium|chrome|io\.orbitz\.YouTubeDesktop)(\.|$)/.test(name))
                     .sort((a, b) => Number(!a.includes('.spotify')) - Number(!b.includes('.spotify')));
                 for (const player of players) {
                     try {
