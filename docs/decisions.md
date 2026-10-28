@@ -177,3 +177,19 @@ O cabeçalho das Sticky Notes não inicia movimento customizado: o botão dropdo
 ## D-46 — Escopo de segurança para Secret Notes (22/10/2026)
 
 O usuário escolheu proteger a visualização somente pela interface; a primeira entrega não criptografa texto no SQLite nem nos backups. A UI deve tratar isso como bloqueio visual local e documentação/README devem explicar claramente que acesso direto aos arquivos continua revelando o conteúdo. PIN numérico de quatro dígitos é global às notas; sua troca exige o PIN atual. Para impedir bypass trivial pela própria UI, excluir ou remover o estado secreto também exige autenticação. Notas secretas iniciam bloqueadas, e o contador de 15 segundos começa no evento de saída do ponteiro, cancela quando retorna e bloqueia/oculta corpo e título ao terminar. Não persistir estado desbloqueado nem o PIN em texto claro; auditoria independente focada é requisito antes de aplicar a instalação.
+
+## D-47 — Distribuição independente das Sticky Notes (27/10/2026)
+
+Usuário confirmou distribuições Linux e criação de repositório GitHub. Adotado Flatpak em `orbitzone/orbitz-sticky-notes`, sem retirar as fontes/integração atuais nem mover dados históricos. Inicialmente x86_64 com X11/XWayland para conservar posicionamento/lixeira; compatibilidade com outras arquiteturas e desktops requer evidência própria. Traduções e schema passam a pertencer ao aplicativo independente. Dados do Flatpak são isolados e não recebem migração automática. Publicar fontes após revisão focada do instalador e disponibilizar bundle somente após build/smoke de CI. Não há publicação no Flathub nem ativação do novo aplicativo nesta entrega.
+
+## D-48 — Distribuição independente do YouTube Desktop (27/10/2026)
+
+Pedido confirmado: mini app independente chamado **Orbitz YouTube Desktop**, com repositório GitHub público `orbitzone/orbitz-youtube-desktop` e instalação Linux cross-distro via Flatpak. Primeiro alvo x86_64, runtime GNOME 49, X11/XWayland; sem afirmar compatibilidade universal, Windows/macOS, Flathub ou Wayland sem XWayland. Não importar API key/cache/preferências da instalação Orbitz integrada; guardar chave e cache em diretório próprio. API key serve à busca/comentários, não fornece fluxo de mídia nem remove anúncios; o player oficial incorporado pode exibi-los. Publicação de bundle fica condicionada a CI/build. Revisão de segurança restringe o bridge externo a hosts/caminhos exatos, com risco residual de abrir um desses destinos sem clique por conteúdo da WebView.
+
+## D-49 — Atalhos para os mini apps independentes (28/10/2026)
+
+Após instalar Sticky Notes e YouTube Desktop como Flatpaks do usuário, os atalhos Notes/YouTube da extensão chamam `flatpak run --user` com os app IDs independentes. A extensão não inicia nem encerra Sticky Notes junto com o ciclo dos widgets; isso evita que o `quit` legado com o app ID compartilhado feche o mini app. O launcher antigo foi arquivado reversivelmente, dados antigos foram preservados, e o usuário escolheu não importar notas. A chave YouTube anterior também não é migrada. A atualização da extensão instalada é local; a fonte foi alterada e testada no checkout, mas não publicada.
+
+## D-50 — Token e allowlist nos bridges nativos do YouTube (28/10/2026)
+
+Handlers WebKit são interfaces nativas acessíveis aos frames da WebView, portanto nenhum payload pode ser aceito apenas por ter vindo do `index.html`: cada ação valida o token aleatório da janela e rejeita mensagens acima de 4096 caracteres. O handler de abertura externa aceita somente URLs HTTPS dos destinos fixos da interface e IDs válidos de vídeo; popups solicitados diretamente pelo player seguem bloqueados. A troca de aba invalida operações pendentes de busca/recomendações. A auditoria focada encontrou e guiou a correção desses riscos; a reauditoria passou, sem bloqueios. Permanece risco baixo de carga por volume alto de mensagens inválidas curtas.

@@ -545,9 +545,9 @@ class AzClockDesktopWidget extends St.Widget {
                 button.set_child(new St.Icon({gicon: Gio.icon_new_for_string(GLib.build_filenamev([Me.path, notes ? 'notes-widget' : btop ? 'media' : gemini ? 'gemini-widget' : 'youtube-widget', notes ? 'notes.svg' : btop ? 'btop.png' : gemini ? 'gemini.svg' : 'youtube.svg'])), icon_size: 32}));
                 bindDesktopLauncher(button, async () => {
                     try {
-                        const argv = notes ? ['/usr/bin/env', 'GDK_BACKEND=x11', '/usr/bin/python3', GLib.build_filenamev([GLib.get_user_data_dir(), 'orbitz-postits', 'app', 'postits.py'])] : btop ? ['/usr/bin/tilix', '--action=app-new-window', '-e', '/usr/bin/btop'] : gemini
+                        const argv = notes ? ['/usr/bin/flatpak', 'run', '--user', 'io.orbitz.Postits'] : btop ? ['/usr/bin/tilix', '--action=app-new-window', '-e', '/usr/bin/btop'] : gemini
                             ? ['/usr/bin/google-chrome', '--app=https://gemini.google.com/', '--window-size=1100,900']
-                            : ['/usr/bin/python3', GLib.build_filenamev([Me.path, 'youtube-widget', 'youtube-widget.py'])];
+                            : ['/usr/bin/flatpak', 'run', '--user', 'io.orbitz.YouTubeDesktop'];
                         const proc = btop ? launchTerminalAction(argv, this) : Language.spawn(argv, Gio.SubprocessFlags.NONE);
                         await proc.wait_async(null);
                         if (!proc.get_successful()) throw new Error('O aplicativo encerrou com erro.');
@@ -2232,9 +2232,6 @@ class AzClock {
             Me.imports.settings.SettingsImport.validateWidgets(WIDGETDATA);
             widgetsEnabled = true;
             this._running = true;
-            // Sticky Notes are a separate desktop app. Start them before
-            // constructing widgets so a bad widget cannot suppress notes.
-            this._openPostits();
             this._createWidgets();
             this._startClockTimer();
             this._setControllerState(true);
@@ -2243,46 +2240,13 @@ class AzClock {
 
     _startupFailed(error) {
         logError(error, 'Falha ao iniciar widgets');
-        // Roll back only the widget layer. Notes were launched independently
-        // and should remain available after a widget startup failure.
-        this._stopWidgets(false);
+        // Independent desktop apps are outside the widget lifecycle.
+        this._stopWidgets();
         Main.notifyError(Language.tr('panels.shell.widgets_stopped'), String(error.message || error).slice(0, 300));
     }
 
-    _openPostits() {
-        try {
-            const process = Language.spawn(['/usr/bin/env', 'GDK_BACKEND=x11', '/usr/bin/python3',
-                GLib.build_filenamev([GLib.get_user_data_dir(), 'orbitz-postits', 'app', 'postits.py'])],
-                Gio.SubprocessFlags.NONE);
-            // Catch asynchronous startup/runtime failures without surfacing a
-            // notification for normal app shutdown.
-            process?.wait_check_async?.(null, (child, result) => {
-                try { child.wait_check_finish(result); }
-                catch (error) { logError(error, 'Sticky Notes encerrou com erro'); }
-            });
-        } catch (error) {
-            logError(error, 'Falha ao abrir Sticky Notes');
-            Main.notifyError('Sticky Notes', Language.tr('panels.shell.notes_error'));
-        }
-    }
-
-    _closePostits() {
-        // Do not activate the application when it is already closed.
-        Gio.DBus.session.call('io.orbitz.Postits', '/io/orbitz/Postits',
-            'org.gtk.Actions', 'Activate',
-            new GLib.Variant('(sava{sv})', ['quit', [], {}]), null,
-            Gio.DBusCallFlags.NO_AUTO_START, 3000, null, (connection, result) => {
-                try { connection.call_finish(result); } catch (error) {
-                    if (!error.matches(Gio.DBusError, Gio.DBusError.NAME_HAS_NO_OWNER) &&
-                        !error.matches(Gio.DBusError, Gio.DBusError.SERVICE_UNKNOWN))
-                        logError(error, 'Falha ao encerrar post-its');
-                }
-            });
-    }
-
-    _stopWidgets(closePostits = true) {
+    _stopWidgets() {
         if (this._stopping) return this._stopping;
-        if (closePostits) this._closePostits();
         this._running = false;
         widgetsEnabled = false;
         this._setControllerState(false, true);

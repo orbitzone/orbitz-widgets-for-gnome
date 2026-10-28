@@ -46,10 +46,21 @@ def make_handler(token):
                     self.reply(200,cached[1])
                 elif action=='search':
                     query=data.get('query')
-                    if not isinstance(query,str) or not 0<len(query.strip())<=300:raise ValueError('Busca inválida.')
-                    cache=self.server.cache.get(query)
+                    mode=data.get('mode','videos')
+                    if not isinstance(query,str) or not 0<len(query.strip())<=300 or any(ord(char)<32 for char in query):raise ValueError('Busca inválida.')
+                    if not isinstance(mode,str) or mode not in ('videos','shorts','live'):raise ValueError('Filtro de busca inválido.')
+                    query=query.strip()
+                    identity=(query,mode)
+                    cache=self.server.cache.get(identity)
                     if not cache or time.time()-cache[0]>300:
-                        cache=(time.time(),search(query));self.server.cache={k:v for k,v in self.server.cache.items() if k is None};self.server.cache[query]=cache
+                        cache=(time.time(),search(query,mode))
+                        # Bound the in-memory cache while keeping distinct results
+                        # for each query/mode pair and the recommendations entry.
+                        self.server.cache={k:v for k,v in self.server.cache.items()
+                            if k is None or (isinstance(k,tuple) and len(k)==2 and time.time()-v[0]<=300)}
+                        if len(self.server.cache)>=40:
+                            self.server.cache={k:v for k,v in self.server.cache.items() if k is None}
+                        self.server.cache[identity]=cache
                     self.reply(200,{'items':cache[1]})
                 else:self.reply(404,{})
             except (ValueError,TypeError,OSError):

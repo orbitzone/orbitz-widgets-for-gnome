@@ -6,7 +6,8 @@ import sys
 import tempfile
 from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
+import urllib.parse
+from unittest.mock import MagicMock, patch
 
 YOUTUBE = Path(__file__).resolve().parents[1] / 'extension' / 'youtube-widget'
 sys.path.insert(0, str(YOUTUBE))
@@ -38,11 +39,50 @@ class YouTubeBoundaryTests(unittest.TestCase):
         with patch.object(server, 'search', return_value=items) as search:
             reply, handler = self.request('search', {'query': 'test'})
             self.assertEqual(reply, (200, {'items': items}))
-            self.assertEqual(handler.server.cache['test'][1], items)
-            search.assert_called_once_with('test')
+            self.assertEqual(handler.server.cache[('test', 'videos')][1], items)
+            search.assert_called_once_with('test', 'videos')
         with patch.object(server, 'search', side_effect=api.MissingAPIKey('Configure')):
             reply, _ = self.request('search', {'query': 'test'})
             self.assertEqual(reply, (400, {'error': 'Configure', 'code': 'key_required'}))
+
+    def test_search_modes_are_validated_and_cached_separately(self):
+        items = [{'id': 'abcdefghijk', 'title': 'Synthetic'}]
+        for mode in ('', None, [], {}, 'short', 'SHORT', 'livestream'):
+            self.assertEqual(self.request('search', {'query': 'test', 'mode': mode})[0][0], 400)
+        self.assertEqual(self.request('search', {'query': '   '})[0][0], 400)
+        self.assertEqual(self.request('search', {'query': 'bad\nquery'})[0][0], 400)
+        with patch.object(server, 'search', return_value=items) as search:
+            reply, handler = self.request('search', {'query': '  test  ', 'mode': 'shorts'})
+            self.assertEqual(reply, (200, {'items': items}))
+            self.assertIn(('test', 'shorts'), handler.server.cache)
+            search.assert_called_once_with('test', 'shorts')
+        with patch.object(server, 'search', return_value=items) as search:
+            reply, handler = self.request('search', {'query': 'live test', 'mode': 'live'})
+            self.assertEqual(reply, (200, {'items': items}))
+            self.assertIn(('live test', 'live'), handler.server.cache)
+            search.assert_called_once_with('live test', 'live')
+
+    def test_api_maps_search_modes_to_official_filters(self):
+        response = MagicMock()
+        response.read.return_value = b'{"items":[]}'
+        response.__enter__.return_value = response
+        with patch.object(api, 'read_key', return_value='synthetic-key'), patch.object(api.urllib.request, 'urlopen', return_value=response) as urlopen:
+            api.search('test', 'videos')
+            regular = urllib.parse.parse_qs(urllib.parse.urlparse(urlopen.call_args.args[0]).query)
+            api.search('test', 'shorts')
+            shorts = urllib.parse.parse_qs(urllib.parse.urlparse(urlopen.call_args.args[0]).query)
+            api.search('test', 'live')
+            live = urllib.parse.parse_qs(urllib.parse.urlparse(urlopen.call_args.args[0]).query)
+        self.assertNotIn('videoDuration', regular)
+        self.assertNotIn('eventType', regular)
+        self.assertEqual(shorts.get('videoDuration'), ['short'])
+        self.assertNotIn('eventType', shorts)
+        self.assertEqual(live.get('eventType'), ['live'])
+        self.assertNotIn('videoDuration', live)
+        for options in (regular, shorts, live):
+            self.assertEqual(options.get('videoEmbeddable'), ['true'])
+        with self.assertRaises(ValueError):
+            api.search('test', 'short')
 
     def test_invalid_requests_and_comment_cache(self):
         self.assertEqual(self.request('search', {'query': ''})[0][0], 400)

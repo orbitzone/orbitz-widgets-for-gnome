@@ -38,7 +38,11 @@ def save_key(key):
         json.dump({'key':key},stream)
 
 
-def search(query=None):
+def search(query=None, mode='videos'):
+    if not isinstance(mode,str) or mode not in ('videos','shorts','live'):
+        raise ValueError('Filtro de busca inválido.')
+    if query is not None and (not isinstance(query,str) or not 0<len(query.strip())<=300 or any(ord(char)<32 for char in query)):
+        raise ValueError('Busca inválida.')
     key=read_key()
     if not key: raise MissingAPIKey('Configure uma chave da API ou cole um link do YouTube.')
     options=dict(part='snippet',type='video',maxResults=8,videoEmbeddable='true',key=key)
@@ -47,6 +51,11 @@ def search(query=None):
             publishedAfter=(datetime.now(timezone.utc)-timedelta(days=7)).strftime('%Y-%m-%dT%H:%M:%SZ'))
     else:
         options['q']=query
+        # The API's `short` bucket means videos under four minutes. It is the
+        # closest official search filter; YouTube does not expose a Shorts-only
+        # search parameter, so some returned videos may not be classified as Shorts.
+        if mode=='shorts':options['videoDuration']='short'
+        elif mode=='live':options['eventType']='live'
     params=urllib.parse.urlencode(options)
     endpoint='search'
     try:

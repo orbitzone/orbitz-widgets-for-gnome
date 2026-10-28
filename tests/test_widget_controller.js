@@ -14,7 +14,6 @@ class Actor {
 }
 let postitCloses = 0;
 let postitsLaunched = 0;
-const postitsExitCallbacks = [];
 let created = 0, destroyed = 0, settingsRead = 0, stopped = 0, fail = -1, failValidation = false;
 const timers = new Map();
 const settings = {
@@ -34,17 +33,8 @@ const context = {
     Main: {panel: {height:28, addToStatusArea() {}}, layoutManager: {addChrome(actor, params) { actor.inputTracked = params; }, primaryMonitor: {x:0,y:0,width:1920,height:1080}, disconnectObject() {}, connectObject() {}, _backgroundGroup: {add_child() {}}}, notifyError() {}},
     PanelMenu: {Button: Actor}, St: {Button: Actor, Label: Actor, Icon: Actor}, Clutter: {ActorAlign: {CENTER:0}},
     Gio: {icon_new_for_string: value => value, SubprocessFlags: {NONE: 0},
-        Subprocess: {new(argv, flags) {
-            assert.equal(flags, 0); assert(argv.includes('/user-data/orbitz-postits/app/postits.py'));
-            postitsLaunched++;
-            return {wait_check_async(_cancellable, callback) { postitsExitCallbacks.push(callback); },
-                wait_check_finish(result) { if (result.error) throw result.error; return true; }};
-        }},
-        DBusCallFlags: {NO_AUTO_START: 1},
-        DBus: {session: {call(name, object, iface, method, params, resultType, flags, timeout, cancel, callback) {
-            assert.equal(name, 'io.orbitz.Postits'); assert.equal(method, 'Activate');
-            assert.equal(flags, 1); postitCloses++; callback({call_finish() {}}, {});
-        }}}},
+        Subprocess: {new() {postitsLaunched++;throw Error('widget lifecycle must not launch any desktop app');}},
+        DBus: {session: {call() {postitCloses++;throw Error('widget lifecycle must not send application quit actions');}}}},
     GLib: {build_filenamev: parts => parts.join('/'), get_user_data_dir: () => '/user-data', Variant: class {}, PRIORITY_DEFAULT:0, SOURCE_CONTINUE: true, SOURCE_REMOVE:false,
         timeout_add(priority, delay, fn) { const id = timers.size + 1; timers.set(id,fn); return id; },
         source_remove(id) { timers.delete(id); }},
@@ -98,7 +88,7 @@ vm.runInContext(source.slice(source.indexOf('class AzClock {')) + 'this.Controll
     settings.get_value=originalGet; controller._positionController();
     controller._controller.events.clicked();
     assert.equal(created, 3); assert.equal(controller.widgets.length, 3); assert(timers.size > 0);
-    assert.equal(postitsLaunched, 1, 'notes launch as part of the same start action');
+    assert.equal(postitsLaunched, 0, 'starting widgets leaves independent apps alone');
     assert.equal(controller._controllerIcon.gicon, '/extension/media/controls/widgets-white.svg');
     const run = {}; context.activeCommandRuns.add(run);
     let release; const pending = new Promise(resolve => { release = resolve; }); context.pendingStops.add(pending);
@@ -110,28 +100,26 @@ vm.runInContext(source.slice(source.indexOf('class AzClock {')) + 'this.Controll
     assert.equal(context.widgetsEnabled, false); assert.equal(context.WIDGETDATA, null); assert.equal(timers.size, 0);
     assert.equal(controller._controllerIcon.gicon, '/extension/media/controls/widgets-white.svg');
     controller._startWidgets(); assert.equal(created, 6);
-    assert.equal(postitsLaunched, 2);
+    assert.equal(postitsLaunched, 0);
     await controller._stopWidgets(); assert.equal(destroyed, 6);
     controller._startWidgets();
     controller.widgets[0]._onInitializationError(Error('delayed initialization'));
     await controller._stopping; assert.equal(created, 9); assert.equal(destroyed, 9);
-    assert.equal(postitsLaunched, 3, 'notes start before asynchronous widget initialization');
-    assert.equal(postitCloses, 2, 'widget rollback leaves independently launched notes open');
+    assert.equal(postitsLaunched, 0, 'asynchronous initialization never launches notes');
+    assert.equal(postitCloses, 0, 'asynchronous rollback does not close independent apps');
     fail = 1;
     controller._startWidgets();
     await controller._stopping;
     assert.equal(created, 10); assert.equal(destroyed, 10); assert.equal(controller.widgets.length, 0);
     assert.equal(controller._running, false);
-    assert.equal(postitsLaunched, 4, 'notes are launched even when widget construction throws');
-    assert.equal(postitCloses, 2, 'synchronous widget rollback does not close notes');
+    assert.equal(postitsLaunched, 0, 'synchronous initialization never launches notes');
+    assert.equal(postitCloses, 0, 'synchronous rollback does not close independent apps');
     fail = -1; failValidation = true;
     controller._startWidgets(); await controller._stopping; assert.equal(created, 10);
-    assert.equal(postitsLaunched, 4, 'invalid configuration is rejected before starting notes');
-    const logsBeforeChildFailure = loggedErrors.length;
-    postitsExitCallbacks.at(-1)(null, {error: Error('child exited unsuccessfully')});
-    assert.equal(loggedErrors.length, logsBeforeChildFailure + 1, 'non-zero child exit is logged for diagnosis');
+    assert.equal(postitsLaunched, 0, 'invalid configuration does not launch independent apps');
     controller.disable(); await controller._stopping;
     assert.equal(controller._controllerButton, null);
-    assert(stopped > 0); assert(postitCloses > 0);
-    console.log('OK: startup/stop lifecycle, notes launch survives widget rollback, child failure diagnostics, monitor selection, and widget construction rollback.');
+    assert(stopped > 0); assert.equal(postitCloses, 0);assert.equal(postitsLaunched,0);
+    assert.equal(typeof controller._openPostits,'undefined');assert.equal(typeof controller._closePostits,'undefined');
+    console.log('OK: startup/stop lifecycle, independent apps untouched across success, rollback and disable, monitor selection, and widget construction rollback.');
 })().catch(error => { console.error(error); process.exitCode = 1; });
