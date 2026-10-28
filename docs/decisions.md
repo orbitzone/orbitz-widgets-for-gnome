@@ -184,7 +184,7 @@ Usuário confirmou distribuições Linux e criação de repositório GitHub. Ado
 
 ## D-48 — Distribuição independente do YouTube Desktop (27/10/2026)
 
-Pedido confirmado: mini app independente chamado **Orbitz YouTube Desktop**, com repositório GitHub público `orbitzone/orbitz-youtube-desktop` e instalação Linux cross-distro via Flatpak. Primeiro alvo x86_64, runtime GNOME 49, X11/XWayland; sem afirmar compatibilidade universal, Windows/macOS, Flathub ou Wayland sem XWayland. Não importar API key/cache/preferências da instalação Orbitz integrada; guardar chave e cache em diretório próprio. API key serve à busca/comentários, não fornece fluxo de mídia nem remove anúncios; o player oficial incorporado pode exibi-los. Publicação de bundle fica condicionada a CI/build. Revisão de segurança restringe o bridge externo a hosts/caminhos exatos, com risco residual de abrir um desses destinos sem clique por conteúdo da WebView.
+Pedido confirmado: mini app independente chamado **Orbitz YouTube Desktop**, inicialmente com repositório GitHub `orbitz-youtube-desktop`, renomeado depois para `orbitz-youtube-wrapper` por decisão D-51. Primeiro alvo x86_64, runtime GNOME 49, X11/XWayland; sem afirmar compatibilidade universal, Windows/macOS, Flathub ou Wayland sem XWayland. Não importar API key/cache/preferências da instalação Orbitz integrada; guardar chave e cache em diretório próprio. API key serve à busca/comentários, não fornece fluxo de mídia nem remove anúncios; o player oficial incorporado pode exibi-los. Publicação de bundle fica condicionada a CI/build. Revisão de segurança restringe o bridge externo a hosts/caminhos exatos, com risco residual de abrir um desses destinos sem clique por conteúdo da WebView.
 
 ## D-49 — Atalhos para os mini apps independentes (28/10/2026)
 
@@ -193,6 +193,10 @@ Após instalar Sticky Notes e YouTube Desktop como Flatpaks do usuário, os atal
 ## D-50 — Token e allowlist nos bridges nativos do YouTube (28/10/2026)
 
 Handlers WebKit são interfaces nativas acessíveis aos frames da WebView, portanto nenhum payload pode ser aceito apenas por ter vindo do `index.html`: cada ação valida o token aleatório da janela e rejeita mensagens acima de 4096 caracteres. O handler de abertura externa aceita somente URLs HTTPS dos destinos fixos da interface e IDs válidos de vídeo; popups solicitados diretamente pelo player seguem bloqueados. A troca de aba invalida operações pendentes de busca/recomendações. A auditoria focada encontrou e guiou a correção desses riscos; a reauditoria passou, sem bloqueios. Permanece risco baixo de carga por volume alto de mensagens inválidas curtas.
+
+## D-51 — Slug do repositório YouTube Wrapper (28/10/2026)
+
+Por pedido do usuário, `orbitzone/orbitz-youtube-desktop` passa a se chamar `orbitzone/orbitz-youtube-wrapper`. O slug também nomeia o executável, diretório de instalação/configuração/cache e artefatos gerados pelo CI. O ID Flatpak/GSettings `io.orbitz.YouTubeDesktop` permanece estável para não criar uma segunda identidade de app nem ocultar preferências salvas. A leitura da chave mantém fallback somente de leitura no caminho de configuração legado; novas gravações usam o diretório com o nome atual. O bundle da release v0.1.0 mantém seu nome de arquivo publicado.
 
 ## D-49 — Identidade, idioma e filtros dos mini apps (28/10/2026)
 

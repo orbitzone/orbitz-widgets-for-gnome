@@ -1,6 +1,6 @@
 # Revisão focada — autenticação dos bridges WebKit
 
-Data: 27/10/2026. Alvo: `/home/felipe/Documents/Codex/projects/orbitz-youtube-desktop`.
+Data: 27/10/2026. Alvo: `/home/felipe/Documents/Codex/projects/orbitz-youtube-wrapper`.
 
 ## Conclusão
 
@@ -14,4 +14,4 @@ O limite de tamanho remove o vetor prático de payload enorme. Um iframe ainda p
 
 ## Acompanhamento do supervisor
 
-Após esta revisão, o [CI 40608208765](https://github.com/orbitzone/orbitz-youtube-desktop/actions/runs/40608208765), no commit de código `2f2f108`, passou com a autenticação por token, testes, importação WebKitGTK 4.1 e exportação do bundle x86_64. A prévia v0.1.0 foi publicada e seu SHA-256 conferido após download. Um commit posterior altera somente README/registro de validação. Este resultado fecha a pendência de build desta revisão; não valida GUI, reprodução com conta real ou compatibilidade visual de várias distribuições.
+Após esta revisão, o [CI 40608208765](https://github.com/orbitzone/orbitz-youtube-wrapper/actions/runs/40608208765), no commit de código `2f2f108`, passou com a autenticação por token, testes, importação WebKitGTK 4.1 e exportação do bundle x86_64. A prévia v0.1.0 foi publicada e seu SHA-256 conferido após download. Um commit posterior altera somente README/registro de validação. Este resultado fecha a pendência de build desta revisão; não valida GUI, reprodução com conta real ou compatibilidade visual de várias distribuições.

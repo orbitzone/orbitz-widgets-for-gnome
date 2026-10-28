@@ -28,7 +28,7 @@ Controles de mídia e lançadores deixam suas ferramentas à mão. Gemini e btop
 
 O mini app [Sticky Notes - By Orbitz](https://github.com/orbitzone/orbitz-sticky-notes) é instalado e atualizado separadamente, sem exigir a extensão GNOME. Ele oferece notas com PIN, notas secretas, backups locais e idioma PT/EN nas configurações. Seus dados e preferências ficam separados dos widgets.
 
-O mini app [YouTube Wrapper - By Orbitz](https://github.com/orbitzone/orbitz-youtube-desktop) busca vídeos, Shorts, transmissões ao vivo, podcasts e comentários. A busca de podcasts acrescenta o termo “podcast” à consulta e pode retornar outros vídeos. A busca e os comentários usam uma chave própria da YouTube Data API; a reprodução continua no player incorporado oficial e segue as regras do YouTube. O idioma PT/EN é selecionado nas configurações do app. Consulte o repositório para pacotes e compatibilidade.
+O mini app [YouTube Wrapper - By Orbitz](https://github.com/orbitzone/orbitz-youtube-wrapper) busca vídeos, Shorts, transmissões ao vivo, podcasts e comentários. A busca de podcasts acrescenta o termo “podcast” à consulta e pode retornar outros vídeos. A busca e os comentários usam uma chave própria da YouTube Data API; a reprodução continua no player incorporado oficial e segue as regras do YouTube. O idioma PT/EN é selecionado nas configurações do app. Consulte o repositório para pacotes e compatibilidade.
 
 ## Capturas de tela
 
