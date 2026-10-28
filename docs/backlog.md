@@ -365,3 +365,7 @@ Concluído por validação manual do usuário em 22/10/2026: notas voltaram a ab
 ## RC-45 — Smoke visual do placeholder de Sticky Notes (22/10/2026)
 
 A implementação fonte deve manter `STICKY NOTE` visível em título vazio mesmo com foco, removendo-o ao digitar. Testes sintéticos passaram; conferir na sessão GTK que aparece ao abrir/criar, persiste enquanto vazio e desaparece ao digitar. Aplicação e smoke visual pendentes.
+
+## RC-57 — Mini apps independentes (28/10/2026)
+
+Implementado nas fontes locais: títulos Sticky Notes - By Orbitz e YouTube Wrapper - By Orbitz; seletor PT/EN persistido em cada app; aba Podcasts com prefixo de busca aproximada e aviso de limite da API; atalhos removidos da extensão e ações antigas preservadas como texto sem apagar configurações. Suítes Sticky 90 (2 skips GTK), YouTube 20 Python + 4 JS, widgets 443 Python (4 skips) e scripts Node passaram. Build em diretórios temporários confirmou instalação e persistência GSettings nos dois apps. Pendentes: smoke GTK/GNOME, atualização dos Flatpaks instalados e revisão independente média no fechamento da sprint; sem publicação desta mudança.

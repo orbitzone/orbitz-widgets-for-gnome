@@ -193,3 +193,7 @@ Após instalar Sticky Notes e YouTube Desktop como Flatpaks do usuário, os atal
 ## D-50 — Token e allowlist nos bridges nativos do YouTube (28/10/2026)
 
 Handlers WebKit são interfaces nativas acessíveis aos frames da WebView, portanto nenhum payload pode ser aceito apenas por ter vindo do `index.html`: cada ação valida o token aleatório da janela e rejeita mensagens acima de 4096 caracteres. O handler de abertura externa aceita somente URLs HTTPS dos destinos fixos da interface e IDs válidos de vídeo; popups solicitados diretamente pelo player seguem bloqueados. A troca de aba invalida operações pendentes de busca/recomendações. A auditoria focada encontrou e guiou a correção desses riscos; a reauditoria passou, sem bloqueios. Permanece risco baixo de carga por volume alto de mensagens inválidas curtas.
+
+## D-49 — Identidade, idioma e filtros dos mini apps (28/10/2026)
+
+Os nomes públicos e de janela passam a ser **Sticky Notes - By Orbitz** e **YouTube Wrapper - By Orbitz**. Cada repositório mantém seu próprio catálogo PT/EN e sua preferência persistida via GSettings, sem depender da extensão. A extensão deixa de renderizar atalhos para Sticky Notes e YouTube; elementos salvos antigos permanecem como rótulos de texto e Gemini/btop continuam como atalhos. O filtro Podcasts envia uma busca de relevância com o prefixo `podcast`, pois a YouTube Data API não oferece um filtro categórico de podcasts; a interface explicita que pode retornar outros vídeos. Fontes atualizadas nesta tarefa; instalar/reiniciar e publicar são etapas separadas.

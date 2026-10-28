@@ -133,11 +133,11 @@ class YouTubeWindowSizingTests(unittest.TestCase):
         self.assertIn("$('runner').hidden=true", html)
         self.assertIn('youtube.runner_help', html)
 
-    def test_standalone_widget_requests_centered_initial_placement(self):
+    def test_preserved_legacy_youtube_window_requests_centered_placement_without_app_launcher(self):
         source = (YOUTUBE_DIR / 'youtube-widget.py').read_text()
         self.assertIn('window.set_position(Gtk.WindowPosition.CENTER)', source)
         launcher = (ROOT / 'extension' / 'extension.js').read_text()
-        self.assertIn("['/usr/bin/flatpak', 'run', '--user', 'io.orbitz.YouTubeDesktop']", launcher)
+        self.assertNotIn("'/usr/bin/flatpak', 'run', '--user', 'io.orbitz.YouTubeDesktop'", launcher)
 
 
 if __name__ == '__main__':

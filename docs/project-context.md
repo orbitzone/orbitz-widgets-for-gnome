@@ -25,7 +25,7 @@ Atualizado em 22/10/2026. Índice operacional, não histórico completo nem prom
 | Agenda UI/domínio | `extension/planner/calendar-app.py`, `*_ui.py`, `store.py`, `timesheet.py`, `ui_state.py` |
 | Fontes externas e alertas | `external_store.py`, `apple_client.py`, `ics_client.py`, `calendar.js`, `reminders.js` |
 | Invoice e histórico | `invoice.py`, `invoice_pdf.py`, `invoice_profiles.py`, `invoice_history.py`, `invoice_signatures.py` e respectivos UI |
-| Coletores/notas/YouTube | `widgets/`, `sticky-notes/`, `extension/youtube-widget/` |
+| Widgets e coletores | `widgets/`; Sticky Notes e YouTube são mini apps independentes em repositórios próprios |
 
 ## Lote atual
 
@@ -49,7 +49,7 @@ WSP-01 implementado e auditado: [parecer integrado](audits/2026-10-19-workspace-
 
 FX-01/RC-40 conversor único Fiat/Crypto: Fiat usa Frankfurter latest, BRL↔moeda selecionada; cripto usa CoinPaprika tickers, USD↔ativo selecionado (BTC padrão). Ambos atualizam automaticamente a cada 4h e permitem atualização manual pela modal; não há histórico, previsão nem fallback. O widget mostra somente a conversão. Fiat e cripto→USD exibem duas casas pt-BR; USD→cripto mantém a precisão recebida para não apresentar ativos pequenos como `0,00`. CoinPaprika mostra atribuição na modal; plano Free é pessoal e uso comercial voltado a clientes exige licença compatível. Revisão 21/10 corrigiu: JSON aninhado, expoentes inválidos e inteiros longos que escapavam como erro técnico, quantização Decimal em valores extremos, gravação das preferências após renomear, resposta Fiat obsoleta após mudar para Crypto e arredondamento da unidade cripto a zero. Testes dirigidos FX 24/24; instalação/GNOME visual desta revisão seguem pendentes. WID-02 relógio mundial permanece não resolvido conforme relato do usuário; manter em backlog.
 
-I18N-01: código integrado para PT-BR/EN-US em Settings, Workspace, widgets/painéis, Sticky Notes, YouTube e mensagens; os dois catálogos têm 1.742 chaves idênticas após RC-50. GSettings persiste a escolha, PT-BR é padrão/fallback e telas abertas atualizam texto vinculado; erros Orbitz mantêm origem explícita para re-renderização. Validação anterior integrada: suíte Python 428 casos passaram e 4 skips ambientais; os 36 scripts Node passaram, além dos testes dirigidos dos filtros Shorts/Live e do painel modal/dropdown. Em 22/10, o usuário informou que aplicou a atualização e que aparentemente tudo funciona; registra smoke manual positivo, enquanto instalação e inspeção gráfica desta revisão continuam separadas.
+I18N-01: código integrado para PT-BR/EN-US em Settings, Workspace, widgets/painéis e mensagens Orbitz; os mini apps Sticky Notes e YouTube usam agora catálogos e preferências independentes nos respectivos repositórios. GSettings persiste a escolha nos apps, PT-BR é padrão/fallback e telas abertas atualizam texto vinculado. Validação anterior da extensão: suíte Python 428 casos passaram e 4 skips ambientais; 36 scripts Node passaram. As evidências anteriores de Sticky/YouTube pertencem à integração histórica e não validam os mini apps atuais.
 
 ## Último estado verificado das fontes
 

@@ -535,25 +535,22 @@ class AzClockDesktopWidget extends St.Widget {
                 const analogClock = new AnalogClock(this._widgetIndex, i, clockData[i]);
                 this.add_child(analogClock);
                 this._analogClocks.push(analogClock);
-            } else if (clockType === TEXT_LABEL && ['youtube', 'gemini', 'btop', 'notes'].includes(clockData[i].Launcher_Action)) {
-                const notes = clockData[i].Launcher_Action === 'notes';
-                const gemini = clockData[i].Launcher_Action === 'gemini';
+            } else if (clockType === TEXT_LABEL && ['gemini', 'btop'].includes(clockData[i].Launcher_Action)) {
                 const btop = clockData[i].Launcher_Action === 'btop';
-                const name = notes ? 'Post-its Orbitz' : btop ? 'Monitor do sistema' : gemini ? 'Gemini' : 'YouTube';
-                const button = Language.widget(St.Button, {reactive: true, can_focus: true, accessible_name: Language.msg('panels.shell.open_app', {name: notes ? Language.msg('panels.shell.notes_name') : btop ? Language.msg('panels.shell.monitor_name') : name}),
+                const name = btop ? 'Monitor do sistema' : 'Gemini';
+                const button = Language.widget(St.Button, {reactive: true, can_focus: true, accessible_name: Language.msg('panels.shell.open_app', {name: btop ? Language.msg('panels.shell.monitor_name') : name}),
                     style: 'padding: 4px; border-radius: 8px;'});
-                button.set_child(new St.Icon({gicon: Gio.icon_new_for_string(GLib.build_filenamev([Me.path, notes ? 'notes-widget' : btop ? 'media' : gemini ? 'gemini-widget' : 'youtube-widget', notes ? 'notes.svg' : btop ? 'btop.png' : gemini ? 'gemini.svg' : 'youtube.svg'])), icon_size: 32}));
+                button.set_child(new St.Icon({gicon: Gio.icon_new_for_string(GLib.build_filenamev([Me.path, btop ? 'media' : 'gemini-widget', btop ? 'btop.png' : 'gemini.svg'])), icon_size: 32}));
                 bindDesktopLauncher(button, async () => {
                     try {
-                        const argv = notes ? ['/usr/bin/flatpak', 'run', '--user', 'io.orbitz.Postits'] : btop ? ['/usr/bin/tilix', '--action=app-new-window', '-e', '/usr/bin/btop'] : gemini
-                            ? ['/usr/bin/google-chrome', '--app=https://gemini.google.com/', '--window-size=1100,900']
-                            : ['/usr/bin/flatpak', 'run', '--user', 'io.orbitz.YouTubeDesktop'];
+                        const argv = btop ? ['/usr/bin/tilix', '--action=app-new-window', '-e', '/usr/bin/btop']
+                            : ['/usr/bin/google-chrome', '--app=https://gemini.google.com/', '--window-size=1100,900'];
                         const proc = btop ? launchTerminalAction(argv, this) : Language.spawn(argv, Gio.SubprocessFlags.NONE);
                         await proc.wait_async(null);
                         if (!proc.get_successful()) throw new Error('O aplicativo encerrou com erro.');
                     } catch (error) {
                         logError(error, `Lançador ${name}`);
-                        Main.notify(notes ? Language.tr('panels.shell.notes_name') : btop ? Language.tr('panels.shell.monitor_name') : name, Language.tr('panels.shell.app_error'));
+                        Main.notify(btop ? Language.tr('panels.shell.monitor_name') : name, Language.tr('panels.shell.app_error'));
                     }
                 });
                 this.add_child(button);

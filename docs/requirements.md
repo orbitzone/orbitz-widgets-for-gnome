@@ -9,6 +9,12 @@ Registro inicial em 17/10/2026, sobre o checkout `2a24e0d` e a documentação lo
 - **Proposto:** critério ou evolução sugerida, pendente de decisão quando afetar escopo.
 - **Validado:** reservado a evidência de execução identificada. Nenhum comportamento do desktop recebeu esse estado nesta auditoria.
 
+## RC-57 — Identidade, filtros e idioma dos mini apps (28/10/2026)
+
+Pedido confirmado: os títulos visíveis devem ser **Sticky Notes - By Orbitz** e **YouTube Wrapper - By Orbitz**. O mini app YouTube deve oferecer um filtro Podcasts, e ambos os apps devem permitir escolher PT/EN em seus próprios Settings. Cada mini app mantém seus catálogos de tradução independentes dos widgets. Como ambos deixaram de ser componentes dos widgets, seus atalhos visuais devem sair da extensão; configurações antigas precisam continuar sendo lidas sem remover dados históricos.
+
+Critérios de aceite: títulos iguais nos menus e janelas; idioma persistido separadamente em cada app e aplicado ao vivo; busca Podcasts identificada como aproximada se a API não expuser filtro categórico; Sticky Notes/YouTube não aparecem como atalhos na extensão, enquanto Gemini/btop continuam funcionando; catálogos e builds dos mini apps não dependem do catálogo dos widgets. Implementado nas três fontes locais. Suítes Sticky (90, 2 skips GTK), YouTube (20 Python + 4 JS) e widgets (443 Python, 4 skips; scripts Node aprovados) passaram; build instalado em stage confirmou persistência GSettings ao reabrir cada app. Revisão visual GTK/GNOME, atualização dos Flatpaks instalados e revisão independente média permanecem pendentes.
+
 ## Requisitos confirmados desta missão
 
 | ID | Requisito | Critério de aceite | Situação |

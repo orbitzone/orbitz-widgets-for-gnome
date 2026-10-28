@@ -15,11 +15,11 @@ O conjunto combina uma extensão do GNOME Shell, aplicativos nativos GTK e colet
 | Widgets da área de trabalho | JavaScript/GJS, GNOME Shell, St e Clutter; relógio, métricas, atalhos, controlador e cartões de alerta. |
 | Configurações dos widgets | JavaScript/GJS, GTK 4 e libadwaita; edição de elementos, aparência, posições e grupos. |
 | Calendário, tarefas e timesheets | Python 3, PyGObject e GTK 3; interface nativa, tabelas, histórico, rascunhos e backups. |
-| Sticky Notes | Python 3, GTK 3 e SQLite; notas independentes da extensão, com salvamento e recuperação. |
+| Sticky Notes | Mini app independente, distribuído no repositório `orbitz-sticky-notes`; não faz parte dos atalhos ou preferências dos widgets. |
 | Coletores do sistema | Python 3, `/proc`, `/sys` e ferramentas Linux; CPU, RAM, processos, rede, sensores, serviços, atualizações, firewall e Docker. `widgets/clima-widget.py` consulta a Open-Meteo para resumo atual e previsão de sete dias, com cache por local/unidade; a modal pesquisa cidades via Open-Meteo Geocoding, mostra até dez matches Cidade · Região · País com dados GeoNames e atribuição. Preferências privadas de local/unidade ficam no XDG, com gravação atômica e CAS. O conversor unificado usa `widgets/fx_rates.py` e `currency-widget.py`: modo Fiat consulta Frankfurter v2 (referência diária em dias úteis) e modo Crypto consulta tickers CoinPaprika, preservando precisão suficiente para valores cripto pequenos. Ambos usam atualização automática a cada quatro horas; a modal oferece atualização manual, inversão persistida e calculadora. Atribuição CoinPaprika aparece na modal; uso comercial dos dados requer licença compatível. WX-01 passou testes sintéticos locais; consulta online e inspeção visual/instalação GNOME ainda não foram verificadas. |
 | Calendários externos | Python, HTTPS, CalDAV e iCalendar; consulta ao iCloud e assinaturas ICS, com conversão explícita de eventos em tarefas. |
-| YouTube | Python, GTK 3, WebKitGTK e HTML/CSS/JavaScript; janela com player incorporado e servidor HTTP local. |
-| Lançadores | Atalhos para Sticky Notes, YouTube, Gemini e btop; abertura dos respectivos aplicativos. |
+| YouTube | Mini app independente, distribuído no repositório `orbitz-youtube-desktop`; busca e preferências são próprias do aplicativo. |
+| Lançadores | Atalhos para Gemini e btop; Sticky Notes e YouTube são iniciados pelo menu de aplicativos do ambiente. |
 | Caffeine Indicator | Aplicativo externo, configurado para iniciar automaticamente com a sessão. |
 
 ### Comunicação entre componentes
@@ -44,16 +44,16 @@ O conjunto combina uma extensão do GNOME Shell, aplicativos nativos GTK e colet
 | GLib, Gio e GObject | Laço de eventos, sinais, arquivos, processos e comunicação D-Bus. |
 | Pango | Renderização, formatação e quebra de texto. |
 | GSettings / dconf | Persistência das configurações dos widgets. |
-| GTK 3 e GDK | Interface da agenda, Sticky Notes e YouTube. |
+| GTK 3 e GDK | Interface GTK da agenda. Os mini apps têm dependências próprias documentadas em seus repositórios. |
 | GTK 4 e libadwaita | Interface de preferências da extensão. |
 | Python **3.10.12** | Runtime encontrado para os aplicativos e coletores. |
 | PyGObject (`gi`, pacote `python3-gi`) | Acesso do Python às bibliotecas GTK, Gio e demais APIs nativas. |
 | GObject Introspection / typelibs | Descrições das APIs nativas usadas por Python e GJS. |
-| WebKitGTK / WebKit2 **4.0** | Motor web da janela do YouTube. |
+| WebKitGTK / WebKit2 **4.0** | Usado somente pela fonte legada do YouTube preservada em `extension/youtube-widget/`; não é requisito dos widgets ativos. |
 | libsecret / Secret Service | Armazena e recupera a senha específica de aplicativo do iCloud. |
 | GNOME Keyring ou cofre compatível | Implementação do serviço de senhas da sessão. |
 | D-Bus de sessão e do sistema | Comunicação com aplicativos, mídia e serviços do desktop. |
-| SQLite | Banco local dos Sticky Notes, acessado pela biblioteca padrão do Python. |
+| SQLite | Usado pelas fontes legadas de Sticky Notes preservadas neste repositório; o mini app independente mantém seu próprio banco e empacotamento. |
 | libcanberra / `canberra-gtk-play` | Reprodução do som de alarme do sistema. |
 | Tema de sons freedesktop | Disponibiliza o evento sonoro `alarm-clock-elapsed`. |
 | X11 / XWayland | Backend explicitamente solicitado pelos aplicativos GTK lançados pela extensão. |
@@ -89,7 +89,7 @@ Estes módulos já acompanham o Python; não exigem instalação por pip.
 | `fcntl`, `contextlib` | Bloqueio de arquivos e limpeza controlada de recursos. |
 | `subprocess`, `signal`, `selectors`, `shlex`, `runpy` | Execução, supervisão e encerramento de processos. |
 | `threading`, `concurrent.futures` | Operações em segundo plano e consultas paralelas limitadas. |
-| `urllib.request`, `urllib.parse`, `urllib.error`, `http.server` | Clientes HTTP/HTTPS e servidor local do YouTube. |
+| `urllib.request`, `urllib.parse`, `urllib.error`, `http.server` | Clientes HTTP/HTTPS dos recursos do Orbitz e servidor local da fonte legada do YouTube. |
 | `socket`, `ipaddress` | Resolução de nomes, endereços e validação de destinos. |
 | `hashlib`, `uuid`, `secrets`, `base64` | Identificadores, hashes, tokens locais e autenticação HTTP. |
 | `gzip`, `io`, `html`, `re` | Conteúdo comprimido, buffers, textos e validações. |
@@ -117,7 +117,7 @@ Estes módulos já acompanham o Python; não exigem instalação por pip.
 | Tilix | Dependência para abrir ações interativas no terminal; todas as ações do Orbitz usam este terminal. |
 | btop, opcional | Monitor de sistema usado pelo lançador quando instalado. |
 | Google Chrome | Lançador do Gemini em janela de aplicativo. |
-| Player compatível com MPRIS | Controles de mídia para os players reconhecidos, incluindo Spotify, Chrome/Chromium e YouTube Widget. |
+| Player compatível com MPRIS | Controles de mídia para players reconhecidos, incluindo Spotify e Chrome/Chromium. |
 | Caffeine Indicator | Indicador externo mantido na inicialização automática. |
 | Speedtest CLI da Ookla, opcional | Binário incluído na extensão para o teste de velocidade. |
 
@@ -129,8 +129,6 @@ Estes módulos já acompanham o Python; não exigem instalação por pip.
 | Apple iCloud / CalDAV | Consulta dos calendários da conta com senha específica de aplicativo. |
 | ICS / iCalendar por HTTPS | Assinaturas públicas ou privadas por link, sem modificar os eventos de origem. |
 | Calendário público brasileiro do Google | Fonte separada de feriados e datas comemorativas; dispensa conta Google. |
-| YouTube Data API v3 | Pesquisa, sugestões e comentários; essas consultas exigem chave configurada localmente. |
-| YouTube IFrame Player API | Reprodução incorporada dos vídeos. |
 | Gemini na web | Serviço aberto pelo lançador no Chrome. |
 | WHOIS / RDAP na web | Consulta externa de endereços a partir dos detalhes de conexões. |
 
@@ -181,8 +179,8 @@ Os caminhos abaixo são relativos à pasta pessoal do usuário (`~`). As descri�
 │   │   ├── planner.js / editor.py     # Componentes legados preservados
 │   │   ├── apple-calendar-requirements.txt
 │   │   └── vendor/                    # Bibliotecas Python empacotadas
-│   ├── notes-widget/                  # Lançador e ícone dos Sticky Notes
-│   ├── youtube-widget/                # Aplicativo Python, HTML e ícone
+│   ├── notes-widget/                  # Ícone legado; não há mais atalho ativo
+│   ├── youtube-widget/                # Fonte legada preservada; mini app fica em repositório próprio
 │   ├── gemini-widget/                 # Ícone do lançador Gemini
 │   └── speedtest                      # Executável do teste de velocidade
 ├── orbitz-postits/
@@ -203,10 +201,10 @@ Os caminhos abaixo são relativos à pasta pessoal do usuário (`~`). As descri�
 │   ├── caffeine-indicator.desktop     # Inicialização do indicador Caffeine
 │   └── orbitz-postits.desktop         # Inicialização automática desativada
 └── orbitz-widgets/
-    ├── youtube.json                   # Chave da API do YouTube
+    ├── youtube.json                   # Chave histórica; o mini app usa configuração isolada
     └── update-actions.json            # Ações adicionais, quando configuradas
 
-~/.cache/orbitz-widgets/                # Caches dos coletores e do YouTube
+~/.cache/orbitz-widgets/                # Caches dos coletores e da fonte legada do YouTube
 ~/.local/share/applications/            # Atalhos .desktop dos aplicativos
 ```
 
